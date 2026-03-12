@@ -24,7 +24,7 @@ const defaultSteps: Step[] = [
 export function Stepper({ currentStep, steps = defaultSteps }: StepperProps) {
   return (
     <div className="w-full">
-      <div className="flex items-start justify-center">
+      <div className="flex items-start justify-center gap-4">
         {steps.map((step) => {
           const isCompleted = step.id < currentStep
           const isCurrent = step.id === currentStep
@@ -32,12 +32,12 @@ export function Stepper({ currentStep, steps = defaultSteps }: StepperProps) {
 
           return (
             <React.Fragment key={step.id}>
-              {/* Step column */}
-              <div className="flex flex-col items-center px-4">
+              {/* Step row */}
+              <div className="flex items-center">
                 {/* Step indicator circle */}
                 <div
                   className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium transition-colors",
+                    "flex h-6 w-6 items-center justify-center rounded-full border-2 text-sm font-medium transition-colors",
                     isCompleted &&
                       "border-primary bg-primary text-primary-foreground",
                     isCurrent &&
@@ -47,13 +47,13 @@ export function Stepper({ currentStep, steps = defaultSteps }: StepperProps) {
                       "border-muted bg-muted text-muted-foreground"
                   )}
                 >
-                  {isCompleted ? <Check className="h-5 w-5" /> : stepNumber}
+                  {isCompleted ? <Check className="h-4 w-4" /> : stepNumber}
                 </div>
 
                 {/* Step label */}
                 <span
                   className={cn(
-                    "mt-2 text-xs font-medium",
+                    "ml-2 text-sm font-medium",
                     isCurrent && "text-primary",
                     !isCurrent && "text-muted-foreground"
                   )}
