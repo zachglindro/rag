@@ -1,3 +1,6 @@
+"use client"
+
+import { useState } from "react"
 import { Sprout, Send } from "lucide-react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
@@ -12,6 +15,8 @@ const suggestions = [
 ]
 
 export default function Page() {
+  const [showExamples, setShowExamples] = useState(false)
+
   return (
     <>
       <AppSidebar />
@@ -27,17 +32,30 @@ export default function Page() {
               <h1 className="text-xl font-medium">Cereals Inventory Search</h1>
             </div>
 
-            {/* Suggestion cards */}
-            <div className="grid w-full max-w-2xl grid-cols-2 gap-3">
-              {suggestions.map((suggestion, i) => (
+            {/* Examples button and suggestion cards */}
+            <div className="flex w-full max-w-2xl flex-col items-center gap-3">
+              {!showExamples && (
                 <Button
-                  key={i}
                   variant="outline"
-                  className="h-auto min-h-[80px] w-full justify-start px-4 py-3 text-left text-sm leading-relaxed break-words whitespace-pre-wrap normal-case hover:bg-accent"
+                  onClick={() => setShowExamples(true)}
+                  className="text-sm"
                 >
-                  {suggestion}
+                  Examples
                 </Button>
-              ))}
+              )}
+              {showExamples && (
+                <div className="grid w-full grid-cols-2 gap-3">
+                  {suggestions.map((suggestion, i) => (
+                    <Button
+                      key={i}
+                      variant="outline"
+                      className="h-auto min-h-[80px] w-full justify-start px-4 py-3 text-left text-sm leading-relaxed break-words whitespace-pre-wrap normal-case hover:bg-accent"
+                    >
+                      {suggestion}
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
