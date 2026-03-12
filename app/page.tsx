@@ -16,6 +16,7 @@ const suggestions = [
 
 export default function Page() {
   const [showExamples, setShowExamples] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
 
   return (
     <>
@@ -50,6 +51,7 @@ export default function Page() {
                       key={i}
                       variant="outline"
                       className="h-auto min-h-[80px] w-full justify-start px-4 py-3 text-left text-sm leading-relaxed break-words whitespace-pre-wrap normal-case hover:bg-accent"
+                      onClick={() => setSearchQuery(suggestion)}
                     >
                       {suggestion}
                     </Button>
@@ -65,6 +67,8 @@ export default function Page() {
               <Input
                 className="flex-1 border-0 bg-transparent px-4 text-base focus-visible:ring-0"
                 placeholder="Describe what you are looking for..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
               <Button size="icon" className="shrink-0">
                 <Send className="h-4 w-4" />
