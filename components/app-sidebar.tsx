@@ -17,9 +17,9 @@ import {
 
 const navItems = [
   { title: "Home", icon: Home, href: "/" },
-  { title: "Compare", icon: BarChart2, href: "/compare" },
-  { title: "Data", icon: Database, href: "/data" },
   { title: "Add", icon: PlusCircle, href: "/add" },
+  { title: "Data", icon: Database, href: "/data" },
+  { title: "Compare", icon: BarChart2, href: "/compare" },
 ]
 
 function SidebarHeaderContent() {
