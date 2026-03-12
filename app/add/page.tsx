@@ -83,11 +83,6 @@ export default function AddPage() {
       <AppSidebar />
       <SidebarInset>
         <div className="flex min-h-svh flex-col">
-          {/* Header with title */}
-          <div className="border-b p-6">
-            <h1 className="text-2xl font-semibold">Add New Accession</h1>
-          </div>
-
           {/* Main content */}
           <div className="flex flex-1 flex-col gap-6 p-6">
             {/* Stepper */}
