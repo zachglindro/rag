@@ -24,8 +24,8 @@ const defaultSteps: Step[] = [
 export function Stepper({ currentStep, steps = defaultSteps }: StepperProps) {
   return (
     <div className="w-full">
-      <div className="flex items-start">
-        {steps.map((step, index) => {
+      <div className="flex items-start justify-center">
+        {steps.map((step) => {
           const isCompleted = step.id < currentStep
           const isCurrent = step.id === currentStep
           const stepNumber = step.id
@@ -33,7 +33,7 @@ export function Stepper({ currentStep, steps = defaultSteps }: StepperProps) {
           return (
             <React.Fragment key={step.id}>
               {/* Step column */}
-              <div className="flex flex-col items-center">
+              <div className="flex flex-col items-center px-4">
                 {/* Step indicator circle */}
                 <div
                   className={cn(
@@ -61,16 +61,6 @@ export function Stepper({ currentStep, steps = defaultSteps }: StepperProps) {
                   {step.title}
                 </span>
               </div>
-
-              {/* Connector line between neighboring steps */}
-              {index < steps.length - 1 && (
-                <div
-                  className={cn(
-                    "mt-5 h-0.5 flex-1 transition-colors",
-                    isCompleted ? "bg-primary" : "bg-muted"
-                  )}
-                />
-              )}
             </React.Fragment>
           )
         })}
