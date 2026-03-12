@@ -53,7 +53,7 @@ export function Stepper({ currentStep, steps = defaultSteps }: StepperProps) {
                 {/* Step label */}
                 <span
                   className={cn(
-                    "ml-2 text-sm font-medium",
+                    "ml-2 hidden text-sm font-medium [@media(min-width:520px)]:inline",
                     isCurrent && "text-primary",
                     !isCurrent && "text-muted-foreground"
                   )}
