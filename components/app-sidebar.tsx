@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Home, BarChart2, Database, PlusCircle, Sprout } from "lucide-react"
 
 import {
@@ -45,10 +46,10 @@ export function AppSidebar() {
             {navItems.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild tooltip={item.title}>
-                  <a href={item.href} className="flex items-center gap-2">
+                  <Link href={item.href} className="flex items-center gap-2">
                     <item.icon className="h-4 w-4 shrink-0" />
                     <span>{item.title}</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
