@@ -1,0 +1,297 @@
+\documentclass[journal]{./IEEE/IEEEtran}
+\usepackage{amsmath,cite,graphicx,microtype, tikz}
+
+\newcommand{\SPTITLE}{Enhancing Cereal Crops Phenotypic Trait Searchability and Parental Line Selection Using Retrieval-Augmented Semantic Search}
+\newcommand{\ADVISEE}{Zach Dwayne M. Glindro}
+\newcommand{\ADVISER}{Mylah Rystie U. Anacleto}
+
+\newcommand{\BSCS}{Bachelor of Science in Computer Science}
+\newcommand{\ICS}{Institute of Computer Science}
+\newcommand{\UPLB}{University of the Philippines Los Ba\~{n}os}
+\newcommand{\REMARK}{\thanks{Presented to the Faculty of the \ICS, \UPLB\
+                             in partial fulfillment of the requirements
+                             for the Degree of \BSCS}}
+        
+\markboth{CMSC 190 Special Problem, \ICS}{}
+\title{\SPTITLE}
+\author{
+  \ADVISEE,~%
+  \ADVISER,~%
+  Mark Anthony~L.~Parducho,~%
+  Ayn Kristina~M.~Beltran,~%
+  and~Maria Alma~B.~Sanchez%
+  \REMARK
+}
+% \pubid{\copyright~2006~ICS \UPLB}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+% TITLE
+\maketitle
+
+% ABSTRACT
+\begin{abstract}
+Efficient parental line selection is fundamental to crop improvement but is often impeded by the limitations of keyword-based search within spreadsheet applications. This reliance on exact string matching causes researchers to overlook valuable phenotypic data due to terminology inconsistencies. This study proposes the development of a semantic search system utilizing Retrieval-Augmented Generation to enhance trait searchability in maize breeding. By transforming textual descriptions into dense vector embeddings, the system allows researchers to query databases using natural language, retrieving records based on conceptual similarity rather than lexical overlap. The proposed architecture integrates a vector database for indexing and a large language model for generating context-aware summaries within a web-based interface. System performance will be assessed against a traditional keyword search baseline using precision and recall metrics, alongside usability testing with researchers. This research aims to demonstrate how natural language processing can streamline the selection of parental lines.
+\end{abstract}
+
+% INDEX TERMS
+\begin{keywords}
+retrieval-augmented generation, semantic search, plant breeding, phenotypic traits, large language models, vector database, natural language processing
+\end{keywords}
+
+% INTRODUCTION
+\section{Introduction}
+
+\subsection{Background of the Study}
+In plant breeding, the goal is to develop new and improved crop varieties by selecting ``parental lines'' that possess desirable characteristics. To make these selections, researchers rely on large amounts of phenotypic trait data, which are often recorded and managed using general-purpose spreadsheets like Microsoft Excel or Google Sheets. This common practice requires researchers to manually search through rows and columns of data to find the information they need.
+
+The main problem with using spreadsheets is their reliance on simple keyword-based search, such as using the "Find" or "Search" function. This type of search is literal; it only finds data that exactly matches the typed words. This approach is rooted in older information retrieval methods that represent text as a collection of keywords, using techniques like Term Frequency-Inverse Document Frequency (TF-IDF) to determine relevance~\cite{zhao_dense_2024}. This creates a ``semantic gap'', where if a researcher searches for ``lodging resistance,'' the system will not find entries that use synonyms or related phrases like ``strong stems'' or ``resists stem breakage.'' This forces researchers to remember the exact terminology used during data entry, which can vary among different personnel and over time. As a result, search results are often incomplete, and valuable parental lines can be missed, making the data search process inefficient~\cite{garcia_improving_2025}.
+
+To overcome these limitations, modern information retrieval has shifted towards semantic search. Semantic search focuses on understanding the meaning behind a query rather than just matching keywords. This approach is made possible by pre-trained language models (PLMs), which can transform text into dense vector representations called "embeddings"~\cite{mandikal_sparse_2024,zhao_dense_2024}. Models like Sentence-BERT are specifically designed to create embeddings where similar concepts are located close to each other in vector space, allowing for effective similarity comparisons using metrics like cosine similarity~\cite{reimers_sentence-bert_2019}. This turns the search problem into a nearest neighbor search, which can be efficiently handled by specialized vector databases~\cite{zhao_chat2data_2024}.
+
+This study will apply these techniques using a framework called Retrieval-Augmented Generation (RAG). A RAG system has two main parts: a "retriever" that uses semantic search to find the most relevant pieces of information from a knowledge base, and a "generator," which is a large language model (LLM) that takes this retrieved information as context to provide a clear and accurate answer~\cite{lewis_retrieval-augmented_2021}. This approach has been successful in other specialized fields, such as agriculture and biomedicine, because it grounds the LLM's responses in factual data, which helps to avoid errors and "hallucinations"~\cite{balaguer_rag_2024,garcia_improving_2025,hier_simplified_2025, soong_improving_2024}. By building a RAG-based semantic search system, this study aims to provide plant breeders with a more intuitive and effective way to analyze phenotypic trait data, ultimately improving the efficiency of parental line selection.
+
+\subsection{Statement of the Problem}
+Traditional methods for analyzing phenotypic trait data in plant breeding often rely on general-purpose spreadsheets like Microsoft Excel and Google Sheets. The primary mechanism for data retrieval in these applications is keyword-based lexical search, which is fundamentally limited by its reliance on exact string matching. This rigidity creates a barrier to data , placing a burden on the user's recall of specific terminology and data entry standards, which can vary between researchers and over time. Consequently, this leads to incomplete search results, risking the omission of parental lines from consideration.
+
+Recent advancements in natural language processing, particularly in dense embeddings and retrieval-augmented generation (RAG) offer a solution to this challenge. The study aims to bridge this semantic gap by designing and evaluating a system that leverages these technologies. By doing so, the proposed system will empower researchers to find data based on conceptual meaning, thereby improving the efficiency of parental line selection.
+
+\subsection{Significance of the Study}
+This study aims to demonstrate a practical framework to transition from keyword-based data retrieval in spreadsheets to a flexible semantic search system for phenotypic trait data. This shift alleviates the burden on researchers to recall exact terminology and adhere to strict data standards, which hinder effective data . The proposed system will allow users with varying levels of technical expertise, from researchers to lab technicians, to query the database using natural, descriptive language and receive conceptually relevant results. By providing a practical case study on applying retrieval-augmented generation and large language models to a specialized scientific domain, this study aims to improve the efficiency of parental line selection and offer a model for integrating semantic search into other research fields grappling with similar data accessibility challenges.
+
+\subsection{Objectives of the Study}
+The general objective of the study is to design, implement, and evaluate a retrieval-augmented semantic search system to improve the efficiency and accuracy of phenotypic trait searchability. The specific objectives are the following:
+
+\begin{enumerate}
+    \item To develop a Retrieval-Augmented Generation (RAG) pipeline using a sentence embedding model and a vector database for indexing and searching phenotypic trait descriptions
+    \item To integrate the semantic search pipeline into a web application to provide a natural language interface for researchers
+    \item To evaluate the performance of the semantic search system against a traditional keyword-based search baseline, using standard information retrieval metrics such as Precision@k, Recall@k, and Mean Average Precision (MAP); and
+    \item To assess the web application's effectiveness and usability in facilitating parental line selection.
+\end{enumerate}
+
+\subsection{Scope and Limitations of the Study}
+This study focuses on the design, implementation, and evaluation of a web application that leverages a retrieval-augmented generation (RAG) pipeline for semantic search on phenotypic trait data. The system is specifically tailored to the Cereal Crops Section at the Institute of Plant Breeding to facilitate more efficient parental line selection. The study will not address challenges related to large-scale, enterprise-level performance, such as handling high user concurrency. The application is designed for a small group of researchers in a self-hosted environment. Furthermore, the system's development and evaluation will be confined to the provided trait data, and its applicability to other crop types will not be formally assessed.
+
+\section{Review of Related Literature}
+
+\subsection{Lexical and Semantic Search}
+Information Retrieval (IR) has been characterized by a fundamental progression from matching literal words to understanding conceptual meaning. Early IR systems are built upon the principle of lexical search, where documents and queries are represented as high-dimensional, sparse vectors under the "bag-of-words" assumption~\cite{zhao_dense_2024}. In this vector-space model, each dimension corresponds to a specific term in the vocabulary, and the relevance of a document is determined by the presence and frequency of query terms. Techniques such as Term Frequency-Inverse Document Frequency (TF-IDF) and the probabilistic BM25 algorithm became the standard for weighting the importance of terms and scoring documents~\cite{zhao_dense_2024}. The primary strength of this sparse-vector approach is in its efficiency and precision for queries that depend on exact keyword matching. However, it fails to retrieve semantically relevant documents that use synonyms, related concepts, or descriptive language instead of the exact query terms.
+
+To address the limitations of lexical search, a shift toward semantic search has occurred, driven by the capabilities of pre-trained language models (PLMs). This approach moves beyond keyword matching to interpret the conceptual meaning behind a user's query. PLMs like BERT and its specialized derivatives for scientific text, such as SciBERT and SPECTER2, are now used to encode the contextual meaning of text into low-dimensional, dense vectors called embeddings~\cite{mandikal_sparse_2024}. In this paradigm, both queries and documents are mapped into a shared latent semantic space. Relevance is then measured not by keyword overlap but by the proximity of their respective vectors, typically calculated using cosine similarity or inner product~\cite{zhao_dense_2024}. This process transforms the retrieval task into a nearest neighbor search problem, which can be accelerated through specialized dense vector databases that use indexing techniques~\cite{monir_vectorsearch_2024,zhao_chat2data_2024}. This dense retrieval mechanism forms the core of modern systems like Retrieval-Augmented Generation (RAG), where a retriever, such as the Dense Passage Retriever (DPR), is trained to fetch relevant documents to provide as context for a generator model, grounding its responses in factual, external knowledge~\cite{lewis_retrieval-augmented_2021}.
+
+While dense retrieval models excel at understanding semantic nuance, recent studies indicate that they are not a replacement for sparse methods. Dense models can sometimes struggle with queries that contain rare keywords, specific identifiers, or technical terms where the precision of lexical matching is prioritized~\cite{sawarkar_blended_2024}. This has led to the emergence of hybrid or "blended" retrieval as the new state-of-the-art. Mandikal \& Mooney~\cite{mandikal_sparse_2024} demonstrated on a scientific document benchmark that a dense retriever performed only comparably to a traditional sparse model, but a simple hybrid approach that combined the scores of both significantly outperformed either method in isolation. More sophisticated systems, termed "Blended RAG," take this further by using multiple indices, such as sparse BM25, dense vector, and sparse encoder indices, along with hybrid query strategies to synthesize the strengths of each~\cite{sawarkar_blended_2024}. This consensus suggests that combining the keyword-matching precision of sparse retrieval with the conceptual understanding of dense retrieval provides a more robust and accurate solution, which is crucial for industry-specific applications like agriculture where both general and specific terminology must be handled effectively~\cite{balaguer_rag_2024}.
+
+\subsection{Dense Embeddings and Pre-Trained Language Models}
+The development of Pre-Trained Language Models (PLMs), founded on the Transformer architecture, has been central to the shift toward semantic search. These models follow a "pretrain, then fine-tune" paradigm, learning to encode the contextual meaning of text into low-dimensional, dense vectors, or embeddings~\cite{zhao_dense_2024}. However, standard PLMs like BERT were not originally designed for semantic similarity search. Because they require both sentences to be fed into the network simultaneously, finding the most similar pair in a large collection involves a massive computational overhead, making them impractical for first-stage retrieval~\cite{reimers_sentence-bert_2019}. To solve this, two main architectures have emerged: the accurate but computationally expensive cross-encoder, which processes query-document pairs together for re-ranking, and the efficient bi-encoder, which creates independent embeddings for queries and documents, making it ideal for initial retrieval~\cite{zhao_dense_2024}. The Sentence-BERT model was a key innovation in this area, using a siamese bi-encoder structure to generate semantically meaningful embeddings that could be efficiently compared using cosine similarity, making PLMs practical for large-scale semantic search~\cite{reimers_sentence-bert_2019}.
+
+While powerful, general-purpose PLMs often lack the specialized vocabulary and domain knowledge required for technical fields. This has led to the development of models that undergo pre-training on domain-specific corpora. In the scientific and clinical domains, models such as BioBERT, ClinicalBERT, and PhenoBCBERT have been fine-tuned on biomedical literature and clinical notes to improve performance on tasks like phenotype recognition~\cite{yang_enhancing_2024}. Similarly, models like SciBERT and SPECTER2 are adapted for scientific literature to better represent the nuances of research documents~\cite{mandikal_sparse_2024}. A more fundamental challenge arises when applying PLMs to structured data. Early models like TaBERT addressed this by learning joint representations for natural language and tables, linearizing rows and using relevant "context snapshots" to encode the table's structure~\cite{yin_tabert_2020}. This principle has evolved in modern text-to-SQL systems, which use RAG to provide database schema and diverse examples as context, enabling LLMs to generate accurate queries from natural language questions, complete with error-correction loops for validation~\cite{thorpe_dubo-sql_2024}.
+
+A more recent paradigm shifts the focus from resource-intensive pre-training on raw data to taking advantage of the vast knowledge contained within scientific literature via large, general-purpose Large Language Models (LLMs) like the GPT series. The GenePT model exemplifies this approach by generating gene and cell embeddings directly from their textual descriptions in curated databases like NCBI, using a powerful off-the-shelf embedding model from ChatGPT~\cite{chen_genept_2023}. This method composes representations for complex entities, such as a single cell, by either creating a weighted average of the embeddings of its constituent genes or by forming a sentence-like sequence of gene names ordered by expression level to be embedded as a whole. This approach offers an effective path for creating biological foundation models, as it bypasses the need for extensive data curation and pre-training while capturing a high-level, human-curated knowledge source that often results in comparable or superior performance on domain-specific tasks~\cite{chen_genept_2023}.
+
+\subsection{Vector Databases}
+Semantic search requires specific infrastructure for managing the dense vector embeddings that represent conceptual meaning. Traditional relational databases, designed for structured data and exact matching, are not suited for the high-dimensional similarity search required by these embeddings~\cite{ma_comprehensive_2025}. This has led to the emergence of vector databases (VDBs), which are purpose-built systems for the efficient storage and retrieval of large-scale vector collections~\cite{monir_vectorsearch_2024}. A core principle of VDBs is the shift from Nearest Neighbor Search (NNS), which is computationally infeasible for large datasets, to Approximate Nearest Neighbor Search (ANNS). ANNS algorithms compromise a small degree of accuracy for gains in search speed and reductions in memory usage~\cite{ma_comprehensive_2025, douze_faiss_2025}.
+
+VDBs rely on ANNS indexing strategies that effectively prune the search space. One of the most prominent strategies is the graph-based method, exemplified by the Hierarchical Navigable Small World (HNSW) algorithm. HNSW constructs a multi-layered graph where connections are separated by distance-scale; long-range links in the upper layers allow for rapid traversal across the vector space, while short-range links in the lower layers enable precise local search, resulting in logarithmic search complexity~\cite{malkov_efficient_2020}. Another strategy is quantization, which compresses vectors to reduce their memory footprint and accelerate distance calculations. Product Quantizations (PQ) is a widely used technique that achieves this by splitting a vector into sub-vectors and encoding each one separately, enabling distance comparisons to be performed quickly in the compressed domain through either Asymmetric or Symmetric Distance Computation~\cite{douze_faiss_2025}. These techniques are often combined into hybrid architectures, such as the Inverted File system with Product Quantization (IVFPQ), which first partitions the data into clusters using a coarse quantizer and then applies PQ to the residual vectors within each cluster, narrowing the search to only the most promising partitions~\cite{ma_comprehensive_2025, douze_faiss_2025}.
+
+The practical implementation of the ANNS algorithms is largely-driven by open-sources libraries that have become industry standards. Faiss, for instance, provides a toolkit offering a wide variety of indexing and compression methods, including PQ, IVF, and HNSW, allowing practitioners to build customized indexing pipelines~\cite{douze_faiss_2025}. The selection of an appropriate index and the tuning of its hyperparameters, such as nprobe for IVF or efConstruction for HNSW, are design decisions that depend on dataset size, memory constraints, and the desired accuracy-speed trade-off~\cite{monir_vectorsearch_2024}. Within RAG systems, VDBs serve as the foundational retrieval component. They store the embeddings of external knowledge sources and, upon receiving a query, rapidly fetch the most semantically relevant documents to provide as context for a large language model~\cite{zhao_chat2data_2024}. This grounds the model's responses in factual data and enables functionalities like real-time semantic caching, which reduces latency and the computational cost of frequent LLMS interactions~\cite{zhao_chat2data_2024}.
+
+\subsection{NLP for Automated Phenotyping}
+The need to analyze large volumes of phenotypic data is a challenge shared across scientific disciplines, from clinical medicine to agriculture. In both fields, the goal is to overcome the time-consuming nature of manual analysis by developing automated methods~\cite{garcia_improving_2025, hier_simplified_2025}. A key step in this process is mapping descriptive, human-readable trait observations to standardized, machine-readable terms within a controlled vocabulary. While the biomedical field has a well-established standard in the Human Phenotype Ontology (HPO), agriculture uses its own specific trait dictionaries and ontologies. Early NLP approaches to this task, such as the dictionary-based tools ClinPhen and Doc2HPO used in clinical settings, relied on concept recognition through lexical matching. These systems function by comparing text segments against a predefined vocabulary, but their rigidity makes them inflexible to linguistic variation like synonyms or paraphrasing and unable to interpret nuanced contexts, leading to incomplete data extraction and a high rate of false positives that require manual review~\cite{garcia_improving_2025, yang_enhancing_2024}.
+
+The limitations of lexical matching prompted a shift toward more sophisticated models capable of contextual understanding. This began with Transformer-based models like BERT and its domain-specific variants, which offered improved performance over rule-based systems~\cite{yang_enhancing_2024}. While the application of general-purpose LLMs from the GPT series showed greater promise, a significant weakness emerged, primarily their propensity for errors and "hallucinations" when tasked with generating precise, factually correct identifiers from an ontology~\cite{garcia_improving_2025, soong_improving_2024}. This unreliability poses a major barrier to adoption in scientific research. To address this, Retrieval-Augmented Generation (RAG) has become the state-of-the-art solution. The RAG framework grounds LLM responses in a reliable, external knowledge source, in this case a database of standardized traits. A "retriever" component first finds relevant candidate terms from the ontology via semantic similarity, and these candidates are then provided as context within the LLM's prompt. This constrains the "generator" to select the most appropriate term from a factually accurate list. The success of this approach in the biomedical domain, where studies have shown RAG can boost normalization accuracy from 62\% to 85\%~\cite{hier_simplified_2025} while drastically reducing hallucinations~\cite{garcia_improving_2025}, provides a precedent for applying the same principles to agricultural trait .
+
+\subsection{Evaluation}
+Evaluating the quality of system outputs has shifted from relying on manual human evaluation to incorporating automated methods for efficiency and scalability, especially for offline evaluation where live A/B testing is impractical. A prominent approach is the "LLM-as-a-Judge" paradigm, which leverages a powerful language model like GPT-4 to act as a proxy for human evaluators~\cite{zheng_judging_2023}. This concept has been implemented in practice through automated pipelines that use carefully engineered prompts and custom metrics, such as "on-topic rate," to measure semantic relevance in search results, reporting consistency rates with human annotators of over 81\%~\cite{zheng_semantic_2024}. While this automated judgment focuses on task-specific criteria like relevance and groundedness~\cite{balaguer_rag_2024}, LLM judges have been shown to exhibit inherent biases toward position and verbosity, underscoring the role of human evaluation as the "gold standard" for assessment~\cite{zheng_judging_2023}.
+
+Alongside qualitative judgments, system performance is quantitatively assessed through a combination of standard NLP, information retrieval (IR), and efficiency metrics. To measure the quality of generated text against reference answers, n-gram-based overlap metrics such as ROUGE, BLEU, and METEOR are commonly employed~\cite{radeva_web_2024}. Beyond lexical similarity, the conceptual closeness between generated and reference texts is measured using cosine similarity on their vector space representations. The model's predictive certainty is further evaluated using perplexity, where a lower score indicates higher confidence~\cite{radeva_web_2024}. For the retrieval component of the system, effectiveness is measured with standard IR metrics, including Precision, Recall, and F1-Score, which assess the accuracy of the search results~\cite{radeva_web_2024}. In systems that generate executable outputs, such as SQL queries, Execution Accuracy (EX) is used to verify that the output runs correctly and yields the expected results~\cite{hong_next-generation_2025}. Finally, the practical efficiency of the system is benchmarked by its speed and throughput, using metrics like total evaluation time and tokens per second~\cite{radeva_web_2024}.
+
+% MATERIALS AND METHODS
+\section{Materials and Methods}
+
+\subsection{System Architecture}
+The proposed system is designed as a client-server web application that integrates a Retrieval-Augmented Generation (RAG) pipeline to provide semantic search capabilities over phenotypic trait data. The architecture, illustrated in Figure \ref{fig:architecture}, is composed of a frontend user interface, a backend server with a REST API, a relational database for storing original data, and a vector database for enabling semantic search.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{images/system_arch.png}
+    \caption{System Architecture of the RAG-based application.}
+    \label{fig:architecture}
+\end{figure}
+
+The user interaction flow is as follows:
+\begin{itemize}
+    \item A researcher inputs a natural language query (e.g., "varieties that resist lodging and have purple tassels") into the web interface.
+    \item The frontend transmits the query to the backend API.
+    \item The backend server uses a pre-trained sentence-transformer model to convert the text query into a dense vector embedding.
+    \item This query vector is used to perform an Approximate Nearest Neighbor (ANN) search against the vector database to retrieve the top-k most semantically similar data entries.
+    \item The unique identifiers from search results are used to fetch the full, original data records from a corresponding SQL database.
+    \item The retrieved data is formatted as context and passed to a local Large Language Model (LLM), which generates a summary of the findings.
+    \item The backend returns both the generated summary and the structured data of the retrieved rows to the frontend.
+    \item The interface displays the summary for a quick overview and the detailed records for analysis.
+\end{itemize}
+
+\subsection{Data Acquisition and Preprocessing}
+Due to the confidential nature of the source data, a synthetic dataset will be generated to mirror the structure of the current sheets being used in the Cereal Crops Section. The schema will be based on the column structure provided by the Cereal Crops Section, which includes fields such as Local Name and Plant height (cm), among others. A domain expert from the Cereal Crops Section will review a sample of the synthetic dataset to certify that the synthetic dataset realistically reflects actual datasets.
+
+The synthesis process will involve generating approximately 500 records. For categorical columns (e.g., Kernel type, Silk color), data will be sampled from a predefined list of plausible values. For numerical columns (e.g., Plant height, Ear length), values will be randomly generated within realistic ranges. Free-text columns (e.g., Others) will be populated with varied, descriptive phrases to simulate researcher notes. This process will ensure the dataset contains the semantic diversity required to test the system robustly.
+
+\begin{figure*}[htbp]
+\centering
+\resizebox{\textwidth}{!}{
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    % Define styles for the boxes
+    databox/.style={rectangle, draw=black, thick, align=left, minimum width=2.5cm, minimum height=1.5cm, font=\footnotesize},
+    process/.style={rectangle, draw=black, thick, rounded corners, minimum width=2cm, minimum height=1cm, align=center, font=\footnotesize\bfseries},
+    arrow/.style={->, >=stealth, thick}
+]
+
+\node (table) [databox, label=above:\textbf{Structured Data}] {
+    \begin{tabular}{l|l}
+    \textbf{Field} & \textbf{Value} \\ \hline
+    Name & IPB-99 \\
+    Type & Flint \\
+    Husk & Tight \\
+    \end{tabular}
+};
+
+\node (template) [process, right of=table, xshift=2.5cm] {Template\\Serialization};
+
+\node (text) [databox, right of=template, xshift=3.0cm, label=above:\textbf{Natural Language}] {
+    ``Variety X is\\
+    a Flint type with\\
+    tight husks...''
+};
+
+\node (model) [process, right of=text, xshift=2.5cm] {Embedding Model\\(Qwen3)};
+
+\node (vector) [rectangle, draw=black, thick, right of=model, xshift=2.5cm, align=center, label=above:\textbf{Vector}] {
+    $[0.12]$ \\ $[-0.5]$ \\ $[0.88]$ \\ $\vdots$
+};
+
+\draw [arrow] (table) -- (template);
+\draw [arrow] (template) -- (text);
+\draw [arrow] (text) -- (model);
+\draw [arrow] (model) -- (vector);
+
+\end{tikzpicture}
+}
+\caption{The data preprocessing pipeline.}
+\label{fig:pipeline}
+\end{figure*}
+
+To prepare this structured data for semantic search, a preprocessing pipeline (Fig. \ref{fig:pipeline}) will be implemented. The core step will involve transforming each row of structured data into a descriptive paragraph. This will be achieved using a template-based approach to construct a natural language description for each parental line, allowing for the embedding model to capture its semantic meaning. An example of a generated description is as follows:
+
+% TODO: format correctly?
+"Variety [Local name] is a [Kernel type] type with [Tassel color] tassels and a plant height of [Plant height] cm. Observations noted [\# plants lodged] lodged plants and the presence of [Plant disease observed]."
+
+The original synthetic data will be stored in a SQLite database to allow for retrieval of complete records. Each entry will be assigned a unique ID, which will serve as a foreign key to its corresponding vector representation in the vector database.
+
+\subsection{Implementation of the RAG-based Semantic Search System}
+The system will be developed using a modern technology stack selected for its efficiency and suitability for a self-hosted environment.
+
+\begin{itemize}
+    \item \textbf{Backend Framework:} The backend will be built using FastAPI (Python). This framework was chosen for its high performance, ease of use, and automatic generation of interactive API documentation.
+    \item \textbf{Frontend Framework:} The user interface will be developed using Next.js, a popular React framework. The component library shadcn/ui, built on top of Radix UI and styled with Tailwind CSS, will be used for UI construction. This stack was selected for several reasons: Next.js provides server-side rendering (SSR) and static site generation (SSG) capabilities, which improve initial page load times and overall performance. Shadcn/ui offers a collection of beautifully designed, accessible, and unstyled components that can be easily customized, making the development of a professional and intuitive interface accessible to the researcher. The utility-first approach of Tailwind CSS allows for rapid styling and ensures a consistent design system.
+    \item \textbf{Embedding Model:} The Qwen3-Embedding-0.6B model will be used to generate dense vector representations of both the phenotypic trait descriptions and the user's natural language queries. It is a multilingual model, capable of understanding domain-specific terminology and local names that may appear in the dataset. It is also instruction-aware, allowing it to better capture the user's intent from the query.
+    \item \textbf{Vector Database:} ChromaDB will be the vector store for the indexed trait embeddings. It is an open-source, AI-native database designed for simplicity and developer productivity. Its ability to run in-memory or be persisted to disk makes it apt for a small-scale, self-hosted application.
+    \item \textbf{Large Language Model:} For the generation component of the RAG pipeline, the Qwen3-4B model will be used. This specific variant was chosen as it balances accuracy in responses and compactness. It is an instruction-tuned model designed for high performance on consumer-grade hardware. Its small size makes it ideal for local deployment. Using an LLM from the same Qwen series as the embedding model may also provide better synergy and understanding between the retrieved context and the generation task.
+\end{itemize}
+
+\subsection{Development of the Baseline System}
+To evaluate the performance of the proposed system, a baseline system implementing traditional keyword-based search will be developed. This baseline will be integrated into the same web application, allowing for a direct comparison. It will be implemented using a standard SQL query with the LIKE operator to search against the text columns in the SQLite database. A user's query will be split into individual keywords, and the system will retrieve all rows where any of the keywords are present as substrings in one or more of the designated search columns.
+
+\subsection{Evaluation Methodology}
+Evaluation will be conducted to assess the system's retrieval accuracy as well as its usefulness for the target users. The evaluation will consist of two parts: a quantitative retrieval analysis and a qualitative usability assessment.
+
+\subsubsection{Retrieval Performance Evaluation}
+To measure search accuracy, a test dataset will be created from the synthetic data to serve as ground truth. This will be accomplished during the data generation phase. While creating the synthetic records, specific semantic clusters will be intentionally designed.
+
+The process will be as follows:
+\begin{itemize}
+    \item A set of 20 representative queries will be authored by the researcher. These queries will range from simple keyword-based searches to complex, conceptual searches.
+    \item For each query, the researcher will manually identify and list the unique IDs of all relevant records from the synthetic dataset. This mapping will provide an internally consistent ground truth for evaluation.
+\end{itemize}
+
+Both the semantic search system and the keyword-based baseline will be evaluated against this dataset using standard information retrieval metrics, as summarized in Table \ref{tab:metrics}.
+
+\begin{table}[htbp]
+\caption{Summary of IR Evaluation Metrics}
+\label{tab:metrics}
+\centering
+\begin{tabular}{|p{0.3\linewidth}|p{0.6\linewidth}|}
+\hline
+\textbf{Metric} & \textbf{Description} \\
+\hline
+\textbf{Precision@k} & 
+The proportion of retrieved records in the top-$k$ results that are relevant to the user's query.\\
+\hline
+\textbf{Recall@k} & 
+The proportion of \textit{all} relevant records in the dataset that are successfully retrieved within the top-$k$ results.\\
+\hline
+\textbf{Mean Average Precision (MAP)} & 
+The mean of the Average Precision (AP) scores across all test queries. This metric evaluates the quality of the ranking order, penalizing the system if relevant parental lines appear lower down in the search results. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Usability and Task-Based Evaluation}
+The application's effectiveness and usability will be assessed with the target users, including researchers and lab technicians. Participants will be informed that they will be interacting with a representative but synthetic dataset. Each participant will be asked to perform a series of predefined tasks using both the baseline keyword search and the new semantic search application. The following data will be collected.
+
+\begin{enumerate}
+\item \textbf{Participants:} A group of 5-8 target users, including researchers and lab technicians from the institute, will be recruited. Demographic data will be recorded for each participant. This profile will include \textbf{age range}, \textbf{highest educational attainment}, \textbf{current role} (e.g., Senior Researcher, University Researcher, Lab Technician), and \textbf{years of experience} in plant breeding.
+
+\item \textbf{Procedure:} Participants will be asked to complete a series of predefined parental line selection tasks (e.g., "Find two potential parental lines that are early maturing and have good husk fitting"). They will perform these tasks on both the baseline system and the new semantic search system.
+\item \textbf{Usability Metrics:} The following metrics will be collected to assess usability:
+\begin{itemize}
+\item \textbf{Task Success Rate:} A binary measure of whether a user could successfully complete the given task.
+\item \textbf{Time on Task:} The time taken to complete each task, measuring efficiency.
+\item \textbf{System Usability Scale (SUS):} A standardized 10-item questionnaire administered after the session to obtain a quantitative score of perceived usability.
+\item \textbf{Qualitative Feedback:} A post-session interview will be conducted to gather subjective feedback on the user experience and how intuitive the system is. The demographic factors collected in the participant profiles will be used to contextualize these findings, helping to identify if specific user groups (e.g., based on experience level or education) face unique challenges.
+\end{itemize}
+\end{enumerate}
+
+
+% APPENDICES
+\appendices
+
+\section{System Usability Scale (SUS) Questionnaire}
+The following 10 items will be used to assess the usability of the system. Participants will rate each item on a scale of 1 (Strongly Disagree) to 5 (Strongly Agree).
+
+\begin{enumerate}
+    \item I think that I would like to use this system frequently.
+    \item I found the system unnecessarily complex.
+    \item I thought the system was easy to use.
+    \item I think that I would need the support of a technical person to be able to use this system.
+    \item I found the various functions in this system were well integrated.
+    \item I thought there was too much inconsistency in this system.
+    \item I would imagine that most people would learn to use this system very quickly.
+    \item I found the system very cumbersome to use.
+    \item I felt very confident using the system.
+    \item I needed to learn a lot of things before I could get going with this system.
+\end{enumerate}
+
+% % ACKNOWLEDGMENT
+% \section*{Acknowledgment}
+% Many thanks to...
+
+% BIBLIOGRAPHY
+\bibliographystyle{./IEEE/IEEEtran}
+\bibliography{./glindro-cs190-ieee}
+
+% BIOGRAPHY
+\begin{biography}[{\includegraphics[width=1in, height=1.25in, clip, keepaspectratio]{./glindro.eps}}]{Zach Dwayne M. Glindro}
+Biography text here...
+\end{biography}
+
+
+\end{document}
+
+notes:
+title:
+- cereal crops sa maize
+- wag 
+
+- pag required, Sir Mark, Ate Ayn, Ate Alma
