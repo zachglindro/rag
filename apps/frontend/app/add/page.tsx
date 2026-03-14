@@ -21,6 +21,20 @@ export default function AddPage() {
     { origColumn: "Var_Name_Loc", mappedColumn: "local_name" },
     { origColumn: "hgt_cm", mappedColumn: "plant_height" },
     { origColumn: "p_tassel_color", mappedColumn: "tassel_color" },
+    { origColumn: "Region", mappedColumn: "region_code" },
+    { origColumn: "Kernel_Color", mappedColumn: "kernel_color" },
+    { origColumn: "Kernel_Type", mappedColumn: "kernel_type" },
+    { origColumn: "Province", mappedColumn: "province" },
+    { origColumn: "Town_Municipality", mappedColumn: "municipality" },
+    { origColumn: "Barangay", mappedColumn: "barangay" },
+    { origColumn: "Latitude", mappedColumn: "latitude" },
+    { origColumn: "Longitude", mappedColumn: "longitude" },
+    { origColumn: "Altitude", mappedColumn: "altitude" },
+    { origColumn: "Collector", mappedColumn: "collector_name" },
+    { origColumn: "Date_of_Collection", mappedColumn: "collection_date" },
+    { origColumn: "Remarks", mappedColumn: "remarks" },
+    { origColumn: "CGUARD_N", mappedColumn: "accession_number" },
+    { origColumn: "Institute", mappedColumn: "source_institute" },
   ])
   const [isIngestionComplete, setIsIngestionComplete] = useState(false)
 

@@ -78,7 +78,7 @@ export function UploadStep({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={cn(
-          "flex w-full max-w-md flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 transition-colors",
+          "flex w-full max-w-2xl flex-col items-center justify-center rounded-xl border-2 border-dashed p-16 transition-colors",
           isDragging && "border-primary bg-primary/5",
           !isDragging && "border-muted-foreground/25"
         )}
