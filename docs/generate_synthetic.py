@@ -2371,6 +2371,11 @@ def write_excel(df, path):
     print(f"Saved: {path}")
 
 
+def write_csv(df, path):
+    df.to_csv(path, index=False)
+    print(f"Saved: {path}")
+
+
 if __name__ == "__main__":
     print(f"Generating {N} synthetic records...")
     df = generate_dataset(N)
@@ -2426,3 +2431,7 @@ if __name__ == "__main__":
     out = "synthetic_data.xlsx"
     write_excel(df, out)
     print(f"\nDone. {N} records × {len(df.columns)} columns → {out}")
+
+    csv_out = "synthetic_data.csv"
+    write_csv(df, csv_out)
+    print(f"Done. {N} records × {len(df.columns)} columns → {csv_out}")
