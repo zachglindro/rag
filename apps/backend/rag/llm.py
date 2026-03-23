@@ -4,7 +4,7 @@ import torch
 
 class QwenLLM:
     def __init__(
-        self, model_path: str = "../models/qwen3-0.6b", enable_thinking: bool = False
+        self, model_path: str = "../../models/qwen3-0.6b", enable_thinking: bool = False
     ):
         config = AutoConfig.from_pretrained(model_path)
         config.tie_word_embeddings = False
@@ -19,7 +19,7 @@ class QwenLLM:
         self.enable_thinking = enable_thinking
 
     def generate_response(self, query: str, max_tokens: int = 1024) -> str:
-        system_prompt = "You are an expert in plant breeding. Use the provided information to answer accurately."
+        system_prompt = "You are an expert in plant breeding, an AI assistant for the Institute of Plant Breeding. Use the provided information to answer accurately."
         user_prompt = f"Query: {query}\n\nAnswer concisely."
 
         messages = [
@@ -66,5 +66,5 @@ class QwenLLM:
 
 
 llm = QwenLLM(enable_thinking=False)
-response = llm.generate_response("Why is the word nigger not good?")
+response = llm.generate_response("Hello, I'm Zach! Who are you?")
 print(response)
