@@ -1,7 +1,6 @@
 import sqlite3
 import pytest
-from pathlib import Path
-from db.init_db import create_tables, initialize_database
+from db.init_db import create_tables, initialize_database  # type: ignore
 
 
 @pytest.fixture
