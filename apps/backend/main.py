@@ -1,10 +1,12 @@
+import io
+import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from contextlib import asynccontextmanager
-from pydantic import BaseModel
-import sqlite3
+import pandas as pd
 from db.init_db import initialize_database
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 DB_PATH = Path(__file__).parent / "db.sqlite3"
 
@@ -70,6 +72,38 @@ async def add_column(request: ColumnRequest):
         conn.close()
 
 
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in ["csv", "xlsx"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Only CSV and XLSX are allowed.",
+        )
+
+    try:
+        content = await file.read()
+        columns = []
+
+        if ext == "csv":
+            df = pd.read_csv(io.BytesIO(content), nrows=0)
+            columns = df.columns.tolist()
+        elif ext == "xlsx":
+            df = pd.read_excel(io.BytesIO(content), nrows=0)
+            columns = df.columns.tolist()
+
+        return {"columns": columns}
+    except pd.errors.EmptyDataError:
+        raise HTTPException(
+            status_code=400, detail="File appears to be empty or has no valid data."
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
 @app.post("/reset-database")
 async def reset_database():
     conn = sqlite3.connect(DB_PATH)
@@ -78,11 +112,12 @@ async def reset_database():
         # Drop existing tables
         cursor.execute("DROP TABLE IF EXISTS records")
         cursor.execute("DROP TABLE IF EXISTS column_metadata")
-        
+
         # Recreate tables
         from db.init_db import create_tables
+
         create_tables(cursor)
-        
+
         conn.commit()
         return {"message": "Database reset successfully"}
     except Exception as e:
