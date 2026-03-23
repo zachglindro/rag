@@ -1,4 +1,5 @@
 import sqlite3
+
 import pytest
 from db.init_db import create_tables, initialize_database  # type: ignore
 
@@ -18,7 +19,9 @@ class TestCreateTables:
         create_tables(cursor)
 
         # Check if table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='records'")
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='records'"
+        )
         assert cursor.fetchone() is not None
 
         # Check table schema
@@ -26,11 +29,11 @@ class TestCreateTables:
         columns = cursor.fetchall()
 
         expected_columns = [
-            (0, 'id', 'INTEGER', 0, None, 1),  # id INTEGER PRIMARY KEY AUTOINCREMENT
-            (1, 'data', 'TEXT', 1, None, 0),   # data TEXT NOT NULL
-            (2, 'natural_language_description', 'TEXT', 0, None, 0),
-            (3, 'created_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0),
-            (4, 'updated_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+            (0, "id", "INTEGER", 0, None, 1),  # id INTEGER PRIMARY KEY AUTOINCREMENT
+            (1, "data", "TEXT", 1, None, 0),  # data TEXT NOT NULL
+            (2, "natural_language_description", "TEXT", 0, None, 0),
+            (3, "created_at", "TIMESTAMP", 0, "CURRENT_TIMESTAMP", 0),
+            (4, "updated_at", "TIMESTAMP", 0, "CURRENT_TIMESTAMP", 0),
         ]
 
         assert len(columns) == 5
@@ -47,7 +50,9 @@ class TestCreateTables:
         create_tables(cursor)
 
         # Check if table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='column_metadata'")
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='column_metadata'"
+        )
         assert cursor.fetchone() is not None
 
         # Check table schema
@@ -55,13 +60,13 @@ class TestCreateTables:
         columns = cursor.fetchall()
 
         expected_columns = [
-            (0, 'column_name', 'TEXT', 0, None, 1),  # column_name TEXT PRIMARY KEY
-            (1, 'display_name', 'TEXT', 1, None, 0),  # display_name TEXT NOT NULL
-            (2, 'data_type', 'TEXT', 1, None, 0),     # data_type TEXT NOT NULL
-            (3, 'is_required', 'BOOLEAN', 0, '0', 0), # is_required BOOLEAN DEFAULT 0
-            (4, 'default_value', 'TEXT', 0, None, 0), # default_value TEXT
-            (5, 'order', 'INTEGER', 0, None, 0),      # "order" INTEGER
-            (6, 'description', 'TEXT', 0, None, 0)    # description TEXT
+            (0, "column_name", "TEXT", 0, None, 1),  # column_name TEXT PRIMARY KEY
+            (1, "display_name", "TEXT", 1, None, 0),  # display_name TEXT NOT NULL
+            (2, "data_type", "TEXT", 1, None, 0),  # data_type TEXT NOT NULL
+            (3, "is_required", "BOOLEAN", 0, "0", 0),  # is_required BOOLEAN DEFAULT 0
+            (4, "default_value", "TEXT", 0, None, 0),  # default_value TEXT
+            (5, "order", "INTEGER", 0, None, 0),  # "order" INTEGER
+            (6, "description", "TEXT", 0, None, 0),  # description TEXT
         ]
 
         assert len(columns) == 7
@@ -80,7 +85,9 @@ class TestCreateTables:
         create_tables(cursor)  # Should not raise an error due to IF NOT EXISTS
 
         # Verify tables still exist
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('records', 'column_metadata')")
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('records', 'column_metadata')"
+        )
         tables = cursor.fetchall()
         assert len(tables) == 2
 
@@ -101,10 +108,14 @@ class TestInitializeDatabase:
         conn = sqlite3.connect(temp_db_path)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='records'")
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='records'"
+        )
         assert cursor.fetchone() is not None
 
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='column_metadata'")
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='column_metadata'"
+        )
         assert cursor.fetchone() is not None
 
         conn.close()
@@ -139,14 +150,20 @@ class TestInitializeDatabase:
         assert result == ("test data",)
 
         # Try to insert into column_metadata table
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO column_metadata 
             (column_name, display_name, data_type, is_required, default_value, "order", description) 
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, ["test_col", "Test Column", "string", False, "null", 1, "Test description"])
+        """,
+            ["test_col", "Test Column", "string", False, "null", 1, "Test description"],
+        )
         conn.commit()
 
-        cursor.execute("SELECT column_name, display_name FROM column_metadata WHERE column_name = ?", ["test_col"])
+        cursor.execute(
+            "SELECT column_name, display_name FROM column_metadata WHERE column_name = ?",
+            ["test_col"],
+        )
         result = cursor.fetchone()
         assert result == ("test_col", "Test Column")
 
