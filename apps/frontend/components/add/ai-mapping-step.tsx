@@ -49,13 +49,6 @@ interface AIMappingStepProps {
   onMappingsChange: (mappings: ColumnMapping[]) => void
 }
 
-// Display names for original columns
-const origColumnDisplayNames: Record<string, string> = {
-  Var_Name_Loc: "Var_Name_Loc",
-  hgt_cm: "hgt_cm",
-  p_tassel_color: "p_tassel_color",
-}
-
 export function AIMappingStep({
   onBack,
   onNext,
