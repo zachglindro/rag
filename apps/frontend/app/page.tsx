@@ -213,7 +213,7 @@ export default function Page() {
           </div>
 
           <div className="sticky bottom-0 border-t bg-background/95 px-4 py-4 backdrop-blur sm:px-8">
-            <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-2xl border bg-background p-2 shadow-sm">
+            <div className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-2xl border bg-background p-2 shadow-sm">
               <Textarea
                 className="max-h-36 min-h-[52px] resize-none border-0 bg-transparent text-sm focus-visible:ring-0"
                 placeholder="Ask about your cereals inventory..."
@@ -229,7 +229,7 @@ export default function Page() {
               />
               <Button
                 size="icon"
-                className="mb-1 shrink-0"
+                className="shrink-0"
                 onClick={() => void sendMessage()}
                 disabled={isLoading || !inputValue.trim()}
               >
