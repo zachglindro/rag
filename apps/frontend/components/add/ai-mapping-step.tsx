@@ -85,6 +85,14 @@ export function AIMappingStep({
     }))
   }
 
+  const sortedMappings = [...mappings].sort((a, b) => {
+    const aHasSuggestion = a.mappedColumn !== ""
+    const bHasSuggestion = b.mappedColumn !== ""
+    if (aHasSuggestion && !bHasSuggestion) return -1
+    if (!aHasSuggestion && bHasSuggestion) return 1
+    return 0
+  })
+
   return (
     <div className="flex flex-col gap-6 py-8">
       {/* Header */}
@@ -97,16 +105,14 @@ export function AIMappingStep({
 
       {/* Column mappings */}
       <div className="flex flex-col gap-4">
-        {mappings.map((mapping) => (
+        {sortedMappings.map((mapping) => (
           <div
             key={mapping.origColumn}
             className="flex items-center gap-4 rounded-lg border p-4"
           >
             {/* Original column name */}
             <div className="w-40 shrink-0">
-              <span className="text-sm font-medium">
-                {mapping.origColumn}
-              </span>
+              <span className="text-sm font-medium">{mapping.origColumn}</span>
             </div>
 
             {/* Arrow */}
