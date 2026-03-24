@@ -79,7 +79,8 @@ export default function Page() {
     }
 
     const userMessage = createMessage("user", nextContent)
-    const nextMessages = [...messages, userMessage]
+    const assistantMessage = createMessage("assistant", "")
+    const nextMessages = [...messages, userMessage, assistantMessage]
 
     setMessages(nextMessages)
     setInputValue("")
@@ -93,7 +94,7 @@ export default function Page() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          messages: nextMessages.map((message) => ({
+          messages: nextMessages.slice(0, -1).map((message) => ({
             role: message.role,
             content: message.content,
           })),
@@ -114,20 +115,64 @@ export default function Page() {
         throw new Error(detail)
       }
 
-      const data = (await response.json()) as { response?: string }
-      const assistantReply =
-        (data.response ?? "").trim() || "I could not generate a response."
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      let accumulatedContent = ""
 
-      setMessages((prev) => [
-        ...prev,
-        createMessage("assistant", assistantReply),
-      ])
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = chunk.split("\n")
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6)
+              if (data === "[DONE]") {
+                // Stream ended
+                break
+              } else if (data.startsWith("[ERROR]")) {
+                throw new Error(data.slice(8))
+              } else {
+                accumulatedContent += data
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessage.id
+                      ? { ...msg, content: accumulatedContent }
+                      : msg
+                  )
+                )
+              }
+            }
+          }
+        }
+      }
+
+      // Finalize the message
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessage.id
+            ? {
+                ...msg,
+                content:
+                  accumulatedContent.trim() ||
+                  "I could not generate a response.",
+              }
+            : msg
+        )
+      )
     } catch (err) {
       const message =
         err instanceof Error
           ? err.message
           : "Unexpected error while calling the model."
       setError(message)
+      // Remove the assistant message on error
+      setMessages((prev) =>
+        prev.filter((msg) => msg.id !== assistantMessage.id)
+      )
     } finally {
       setIsLoading(false)
     }
@@ -190,8 +235,13 @@ export default function Page() {
             <>
               <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
                 <div className="mx-auto w-full max-w-3xl space-y-6">
-                  {messages.map((message) => {
+                  {messages.map((message, index) => {
                     const isUser = message.role === "user"
+                    const isStreamingAssistantMessage =
+                      !isUser &&
+                      isLoading &&
+                      index === messages.length - 1 &&
+                      !message.content.trim()
 
                     return (
                       <div
@@ -211,7 +261,14 @@ export default function Page() {
                               : "border bg-background text-foreground"
                           }`}
                         >
-                          {message.content}
+                          {isStreamingAssistantMessage ? (
+                            <span className="inline-flex items-center gap-2 text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Thinking...
+                            </span>
+                          ) : (
+                            message.content
+                          )}
                         </div>
 
                         {isUser && (
@@ -222,18 +279,6 @@ export default function Page() {
                       </div>
                     )
                   })}
-
-                  {isLoading && (
-                    <div className="flex w-full justify-start gap-3">
-                      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <Bot className="h-4 w-4" />
-                      </div>
-                      <div className="flex items-center gap-2 rounded-2xl border bg-background px-4 py-3 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Thinking...
-                      </div>
-                    </div>
-                  )}
 
                   {error && (
                     <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -249,20 +294,6 @@ export default function Page() {
                 {renderComposer(false)}
               </div>
             </>
-          )}
-
-          {messages.length === 0 && isLoading && (
-            <div className="px-4 pb-4 sm:px-8">
-              <div className="mx-auto flex w-full max-w-3xl justify-start gap-3">
-                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Bot className="h-4 w-4" />
-                </div>
-                <div className="flex items-center gap-2 rounded-2xl border bg-background px-4 py-3 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Thinking...
-                </div>
-              </div>
-            </div>
           )}
         </div>
       </SidebarInset>

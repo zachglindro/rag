@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 from db.init_db import initialize_database
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from rag.llm import QwenLLM
 
@@ -204,12 +205,18 @@ def get_llm() -> QwenLLM:
     return llm
 
 
-@app.post("/generate", response_model=GenerateResponse)
+@app.post("/generate")
 async def generate_response_endpoint(
     request: GenerateRequest, llm_instance: QwenLLM = Depends(get_llm)
 ):
-    try:
-        response = llm_instance.generate_response(request.messages, request.max_tokens)
-        return GenerateResponse(response=response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    async def generate_stream():
+        try:
+            for token in llm_instance.generate_response(
+                request.messages, request.max_tokens, stream=True
+            ):
+                yield f"data: {token}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: [ERROR] {str(e)}\n\n"
+
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
