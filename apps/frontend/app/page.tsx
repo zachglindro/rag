@@ -283,7 +283,11 @@ export default function Page() {
             disabled={isLoading || !inputValue.trim()}
             aria-label="Send message"
           >
-            <Send className="h-4 w-4" />
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </div>
