@@ -9,14 +9,17 @@ interface UploadStepProps {
   onFileSelect: (file: File) => void
   onNext: () => void
   selectedFile: File | null
+  onColumnsSet: (columns: string[]) => void
 }
 
 export function UploadStep({
   onFileSelect,
   onNext,
   selectedFile,
+  onColumnsSet,
 }: UploadStepProps) {
   const [isDragging, setIsDragging] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -60,13 +63,35 @@ export function UploadStep({
     }
   }
 
+  const uploadFile = async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch('http://localhost:8000/upload', {
+      method: 'POST',
+      body: formData,
+    })
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`)
+    }
+    const data = await response.json()
+    return data.columns
+  }
+
   const handleBrowseClick = () => {
     fileInputRef.current?.click()
   }
 
-  const handleContinue = () => {
-    if (selectedFile) {
+  const handleContinue = async () => {
+    if (!selectedFile) return
+    setIsUploading(true)
+    try {
+      const columns = await uploadFile(selectedFile)
+      onColumnsSet(columns)
       onNext()
+    } catch (error) {
+      alert('Upload failed: ' + (error as Error).message)
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -121,8 +146,8 @@ export function UploadStep({
       )}
 
       {/* Continue button */}
-      <Button onClick={handleContinue} disabled={!selectedFile}>
-        Continue
+      <Button onClick={handleContinue} disabled={!selectedFile || isUploading}>
+        {isUploading ? 'Uploading...' : 'Continue'}
       </Button>
     </div>
   )

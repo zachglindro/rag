@@ -105,8 +105,7 @@ export function AIMappingStep({
             {/* Original column name */}
             <div className="w-40 shrink-0">
               <span className="text-sm font-medium">
-                {origColumnDisplayNames[mapping.origColumn] ||
-                  mapping.origColumn}
+                {mapping.origColumn}
               </span>
             </div>
 
