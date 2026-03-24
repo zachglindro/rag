@@ -6,15 +6,21 @@ from pathlib import Path
 
 import pandas as pd
 from db.init_db import initialize_database
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from rag.llm import QwenLLM
 
 DB_PATH = Path(__file__).parent / "db.sqlite3"
+
+
+llm = None  # Will be set in lifespan
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_database(DB_PATH)
+    global llm
+    llm = QwenLLM()
     yield
 
 
@@ -39,6 +45,15 @@ class MappingSuggestion(BaseModel):
     orig_column: str
     suggested_column: str
     confidence: float
+
+
+class GenerateRequest(BaseModel):
+    query: str
+    max_tokens: int = 1024
+
+
+class GenerateResponse(BaseModel):
+    response: str
 
 
 @app.post("/columns")
@@ -182,6 +197,19 @@ async def reset_database():
         conn.close()
 
 
-@app.get("/")
-async def read_root():
-    return {"Hello": "World"}
+def get_llm() -> QwenLLM:
+    if llm is None:
+        raise RuntimeError("LLM was not initialized during startup")
+
+    return llm
+
+
+@app.post("/generate", response_model=GenerateResponse)
+async def generate_response_endpoint(
+    request: GenerateRequest, llm_instance: QwenLLM = Depends(get_llm)
+):
+    try:
+        response = llm_instance.generate_response(request.query, request.max_tokens)
+        return GenerateResponse(response=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
