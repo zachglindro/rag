@@ -182,21 +182,40 @@ export default function Page() {
 
           for (const line of lines) {
             if (line.startsWith("data: ")) {
-              const data = line.slice(6)
-              if (data === "[DONE]") {
+              const dataStr = line.slice(6)
+              if (dataStr === "[DONE]") {
                 // Stream ended
                 break
-              } else if (data.startsWith("[ERROR]")) {
-                throw new Error(data.slice(8))
               } else {
-                accumulatedContent += data
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMessage.id
-                      ? { ...msg, content: accumulatedContent }
-                      : msg
-                  )
-                )
+                try {
+                  const parsed = JSON.parse(dataStr)
+                  if (parsed.error) {
+                    throw new Error(parsed.error)
+                  } else if (parsed.token) {
+                    accumulatedContent += parsed.token
+                    setMessages((prev) =>
+                      prev.map((msg) =>
+                        msg.id === assistantMessage.id
+                          ? { ...msg, content: accumulatedContent }
+                          : msg
+                      )
+                    )
+                  }
+                } catch {
+                  // If parsing fails, treat as plain text (fallback)
+                  if (!dataStr.startsWith("[ERROR]")) {
+                    accumulatedContent += dataStr
+                    setMessages((prev) =>
+                      prev.map((msg) =>
+                        msg.id === assistantMessage.id
+                          ? { ...msg, content: accumulatedContent }
+                          : msg
+                      )
+                    )
+                  } else {
+                    throw new Error(dataStr.slice(8))
+                  }
+                }
               }
             }
           }
