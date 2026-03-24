@@ -6,6 +6,7 @@ import { SidebarInset } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
 import { Bot, Loader2, Send, User } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import ReactMarkdown from "react-markdown"
 
 const GENERATE_URL = "http://localhost:8000/generate"
 
@@ -23,6 +24,58 @@ function createMessage(role: MessageRole, content: string): ChatMessage {
     role,
     content,
   }
+}
+
+const markdownComponents = {
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="mb-2 last:mb-0">{children}</p>
+  ),
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong className="font-semibold">{children}</strong>
+  ),
+  em: ({ children }: { children?: React.ReactNode }) => (
+    <em className="italic">{children}</em>
+  ),
+  code: ({
+    children,
+    className,
+  }: {
+    children?: React.ReactNode
+    className?: string
+  }) => {
+    const isInline = !className
+    return isInline ? (
+      <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+        {children}
+      </code>
+    ) : (
+      <pre className="overflow-x-auto rounded-md bg-muted p-3">
+        <code className="font-mono text-xs">{children}</code>
+      </pre>
+    )
+  },
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="mb-2 list-inside list-disc space-y-1">{children}</ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="mb-2 list-inside list-decimal space-y-1">{children}</ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
+  a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
+    <a
+      href={href}
+      className="text-primary underline"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }: { children?: React.ReactNode }) => (
+    <blockquote className="border-l-4 border-muted pl-4 italic">
+      {children}
+    </blockquote>
+  ),
 }
 
 export default function Page() {
@@ -255,9 +308,9 @@ export default function Page() {
                         )}
 
                         <div
-                          className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap shadow-sm ${
+                          className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                             isUser
-                              ? "bg-primary text-primary-foreground"
+                              ? "bg-primary whitespace-pre-wrap text-primary-foreground"
                               : "border bg-background text-foreground"
                           }`}
                         >
@@ -266,8 +319,12 @@ export default function Page() {
                               <Loader2 className="h-4 w-4 animate-spin" />
                               Thinking...
                             </span>
-                          ) : (
+                          ) : isUser ? (
                             message.content
+                          ) : (
+                            <ReactMarkdown components={markdownComponents}>
+                              {message.content}
+                            </ReactMarkdown>
                           )}
                         </div>
 
