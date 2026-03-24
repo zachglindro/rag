@@ -1,3 +1,4 @@
+import difflib
 import io
 import sqlite3
 from contextlib import asynccontextmanager
@@ -28,6 +29,16 @@ class ColumnRequest(BaseModel):
     default_value: str = "null"  # JSON string, e.g., "null" or '"default"'
     order: int = 0
     description: str = ""
+
+
+class SuggestMappingsRequest(BaseModel):
+    columns: list[str]
+
+
+class MappingSuggestion(BaseModel):
+    orig_column: str
+    suggested_column: str
+    confidence: float
 
 
 @app.post("/columns")
@@ -102,6 +113,47 @@ async def upload_file(file: UploadFile = File(...)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+@app.post("/suggest-mappings", response_model=list[MappingSuggestion])
+async def suggest_mappings(request: SuggestMappingsRequest):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT column_name, display_name FROM column_metadata")
+        system_columns = cursor.fetchall()
+
+        suggestions = []
+        for orig_column in request.columns:
+            best_match = ""
+            best_score = 0.0
+
+            for column_name, display_name in system_columns:
+                score_column = difflib.SequenceMatcher(
+                    None, orig_column.lower(), column_name.lower()
+                ).ratio()
+                score_display = difflib.SequenceMatcher(
+                    None, orig_column.lower(), display_name.lower()
+                ).ratio()
+
+                score = max(score_column, score_display)
+                if score > best_score:
+                    best_score = score
+                    best_match = column_name
+
+            if best_score > 0.3:
+                suggestions.append(
+                    MappingSuggestion(
+                        orig_column=orig_column,
+                        suggested_column=best_match,
+                        confidence=round(best_score, 3),
+                    )
+                )
+
+        return suggestions
+    finally:
+        conn.close()
 
 
 @app.post("/reset-database")
