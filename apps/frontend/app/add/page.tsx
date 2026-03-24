@@ -1,31 +1,45 @@
 "use client"
 
-import { useState } from "react"
+import { AIMappingStep } from "@/components/add/ai-mapping-step"
+import { IngestStep } from "@/components/add/ingest-step"
+import { Stepper } from "@/components/add/stepper"
+import { TemplatePreviewStep } from "@/components/add/template-preview-step"
+import { UploadStep } from "@/components/add/upload-step"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
-import { Stepper } from "@/components/add/stepper"
-import { UploadStep } from "@/components/add/upload-step"
-import { AIMappingStep } from "@/components/add/ai-mapping-step"
-import { TemplatePreviewStep } from "@/components/add/template-preview-step"
-import { IngestStep } from "@/components/add/ingest-step"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 interface ColumnMapping {
   origColumn: string
   mappedColumn: string
 }
 
+interface MappingSuggestion {
+  orig_column: string
+  suggested_column: string
+  confidence: number
+}
+
 export default function AddPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [mappings, setMappings] = useState<ColumnMapping[]>([
-    { origColumn: "Var_Name_Loc", mappedColumn: "local_name" },
-    { origColumn: "hgt_cm", mappedColumn: "plant_height" },
-    { origColumn: "p_tassel_color", mappedColumn: "tassel_color" },
-  ])
+  const [columns, setColumns] = useState<string[]>([])
+  const [mappings, setMappings] = useState<ColumnMapping[]>([])
   const [isIngestionComplete, setIsIngestionComplete] = useState(false)
+
+  const mappingsRef = useRef(mappings)
+
+  useEffect(() => {
+    mappingsRef.current = mappings
+  }, [mappings])
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file)
+  }
+
+  const handleColumnsSet = (cols: string[]) => {
+    setColumns(cols)
+    setMappings(cols.map((col) => ({ origColumn: col, mappedColumn: "" })))
   }
 
   const handleMappingsChange = (newMappings: ColumnMapping[]) => {
@@ -35,6 +49,35 @@ export default function AddPage() {
   const goToStep = (step: number) => {
     setCurrentStep(step)
   }
+
+  const suggestMappings = useCallback(async () => {
+    try {
+      const response = await fetch("http://localhost:8000/suggest-mappings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columns }),
+      })
+      if (!response.ok) throw new Error("Failed to get suggestions")
+      const suggestions = await response.json()
+      const newMappings = mappingsRef.current.map((mapping) => {
+        const suggestion = suggestions.find(
+          (s: MappingSuggestion) => s.orig_column === mapping.origColumn
+        )
+        return suggestion
+          ? { ...mapping, mappedColumn: suggestion.suggested_column }
+          : mapping
+      })
+      setMappings(newMappings)
+    } catch (error) {
+      console.error("Error suggesting mappings:", error)
+    }
+  }, [columns])
+
+  useEffect(() => {
+    if (currentStep === 2 && columns.length > 0) {
+      suggestMappings()
+    }
+  }, [currentStep, columns, suggestMappings])
 
   const handleIngestionComplete = () => {
     setIsIngestionComplete(true)
@@ -53,6 +96,7 @@ export default function AddPage() {
             onFileSelect={handleFileSelect}
             onNext={() => goToStep(2)}
             selectedFile={selectedFile}
+            onColumnsSet={handleColumnsSet}
           />
         )
       case 2:
