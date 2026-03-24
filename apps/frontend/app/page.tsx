@@ -4,7 +4,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
-import { Bot, Loader2, Mic, Plus, Send, User } from "lucide-react"
+import { Bot, Loader2, Send, User } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 const GENERATE_URL = "http://localhost:8000/generate"
@@ -136,16 +136,6 @@ export default function Page() {
   const renderComposer = (isCentered: boolean) => (
     <div className={`mx-auto w-full ${isCentered ? "max-w-4xl" : "max-w-3xl"}`}>
       <div className="flex items-end gap-2 rounded-[30px] border bg-background p-2.5 shadow-sm">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 shrink-0 rounded-full text-muted-foreground"
-          disabled={isLoading}
-          aria-label="Add attachment"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-
         <Textarea
           ref={textareaRef}
           style={{ maxHeight: `${textareaMaxHeight}px` }}
@@ -163,15 +153,6 @@ export default function Page() {
         />
 
         <div className="flex items-center gap-1 pb-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0 rounded-full text-muted-foreground"
-            disabled={isLoading}
-            aria-label="Voice input"
-          >
-            <Mic className="h-4 w-4" />
-          </Button>
           <Button
             size="icon"
             className="h-8 w-8 shrink-0 rounded-full"
