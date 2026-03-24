@@ -124,11 +124,8 @@ async def suggest_mappings(request: SuggestMappingsRequest):
         cursor.execute("SELECT column_name, display_name FROM column_metadata")
         system_columns = cursor.fetchall()
 
-        suggestions = []
+        possible_matches = []
         for orig_column in request.columns:
-            best_match = ""
-            best_score = 0.0
-
             for column_name, display_name in system_columns:
                 score_column = difflib.SequenceMatcher(
                     None, orig_column.lower(), column_name.lower()
@@ -138,16 +135,22 @@ async def suggest_mappings(request: SuggestMappingsRequest):
                 ).ratio()
 
                 score = max(score_column, score_display)
-                if score > best_score:
-                    best_score = score
-                    best_match = column_name
+                if score > 0.3:
+                    possible_matches.append((score, orig_column, column_name))
 
-            if best_score > 0.3:
+        # Sort by score descending
+        possible_matches.sort(reverse=True, key=lambda x: x[0])
+
+        assigned_systems = set()
+        suggestions = []
+        for score, orig_column, suggested_column in possible_matches:
+            if suggested_column not in assigned_systems:
+                assigned_systems.add(suggested_column)
                 suggestions.append(
                     MappingSuggestion(
                         orig_column=orig_column,
-                        suggested_column=best_match,
-                        confidence=round(best_score, 3),
+                        suggested_column=suggested_column,
+                        confidence=round(score, 3),
                     )
                 )
 
