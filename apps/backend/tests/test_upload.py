@@ -108,3 +108,96 @@ class TestUploadEndpoint:
         data = response.json()
         assert "columns" in data
         assert data["columns"] == ["name", "age"]
+
+
+class TestSuggestMappingsEndpoint:
+    def test_suggest_mappings_with_matches(self):
+        """Test suggesting mappings for columns that have good matches."""
+        # First, add some system columns
+        client.post(
+            "/columns",
+            json={
+                "column_name": "local_name",
+                "display_name": "Local Name",
+                "data_type": "string",
+            },
+        )
+        client.post(
+            "/columns",
+            json={
+                "column_name": "plant_height",
+                "display_name": "Plant Height (cm)",
+                "data_type": "number",
+            },
+        )
+        client.post(
+            "/columns",
+            json={
+                "column_name": "tassel_color",
+                "display_name": "Tassel Color",
+                "data_type": "string",
+            },
+        )
+
+        # Test the suggest mappings
+        response = client.post(
+            "/suggest-mappings",
+            json={"columns": ["Var_Name_Loc", "hgt_cm", "p_tassel_color"]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+        # Check that each suggestion has the required fields
+        for suggestion in data:
+            assert "orig_column" in suggestion
+            assert "suggested_column" in suggestion
+            assert "confidence" in suggestion
+            assert isinstance(suggestion["confidence"], float)
+            assert 0 <= suggestion["confidence"] <= 1
+
+    def test_suggest_mappings_no_matches(self):
+        """Test suggesting mappings for columns with no good matches."""
+        response = client.post(
+            "/suggest-mappings",
+            json={"columns": ["completely_unrelated_column", "xyz123"]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # Should return empty list if no matches above threshold
+        assert isinstance(data, list)
+        # Depending on threshold, might be empty or have low confidence matches
+
+    def test_suggest_mappings_empty_request(self):
+        """Test suggesting mappings with empty columns list."""
+        response = client.post("/suggest-mappings", json={"columns": []})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data == []
+
+    def test_suggest_mappings_exact_match(self):
+        """Test suggesting mappings with exact column name matches."""
+        # Add a column
+        client.post(
+            "/columns",
+            json={
+                "column_name": "exact_match_test",
+                "display_name": "Exact Match Test",
+                "data_type": "string",
+            },
+        )
+
+        response = client.post(
+            "/suggest-mappings", json={"columns": ["exact_match_test"]}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["orig_column"] == "exact_match_test"
+        assert data[0]["suggested_column"] == "exact_match_test"
+        assert data[0]["confidence"] == 1.0  # Exact match should be 1.0
