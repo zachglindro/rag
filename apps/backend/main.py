@@ -48,7 +48,7 @@ class MappingSuggestion(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    query: str
+    messages: list[dict[str, str]]
     max_tokens: int = 1024
 
 
@@ -209,7 +209,7 @@ async def generate_response_endpoint(
     request: GenerateRequest, llm_instance: QwenLLM = Depends(get_llm)
 ):
     try:
-        response = llm_instance.generate_response(request.query, request.max_tokens)
+        response = llm_instance.generate_response(request.messages, request.max_tokens)
         return GenerateResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
