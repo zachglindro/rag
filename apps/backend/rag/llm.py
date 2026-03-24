@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 import torch
 from transformers import (
@@ -10,11 +10,20 @@ from transformers import (
 
 
 class QwenLLM:
-    def __init__(
-        self, model_path: str = "../../models/qwen3-0.6b", enable_thinking: bool = False
-    ):
-        if not os.path.exists(model_path):
-            raise OSError(f"Model path not found: {model_path}")
+    def __init__(self, model_path: str | None = None, enable_thinking: bool = False):
+        default_model_path = (
+            Path(__file__).resolve().parents[3] / "models" / "qwen3-0.6b"
+        )
+        resolved_model_path = (
+            Path(model_path).expanduser().resolve()
+            if model_path
+            else default_model_path
+        )
+
+        if not resolved_model_path.exists():
+            raise OSError(f"Model path not found: {resolved_model_path}")
+
+        model_path = str(resolved_model_path)
 
         config = AutoConfig.from_pretrained(model_path)
         config.tie_word_embeddings = False
