@@ -23,14 +23,14 @@ class QwenLLM:
         )
         self.enable_thinking = enable_thinking
 
-    def generate_response(self, query: str, max_tokens: int = 1024) -> str:
+    def generate_response(
+        self, messages: list[dict[str, str]], max_tokens: int = 1024
+    ) -> str:
         system_prompt = "You are an expert in plant breeding, an AI assistant for the Institute of Plant Breeding. Use the provided information to answer accurately."
-        user_prompt = f"Query: {query}\n\nAnswer concisely."
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
+        # Prepend system message if not present
+        if not messages or messages[0].get("role") != "system":
+            messages = [{"role": "system", "content": system_prompt}] + messages
 
         text = self.tokenizer.apply_chat_template(
             messages,
@@ -72,5 +72,6 @@ class QwenLLM:
 
 if __name__ == "__main__":
     llm = QwenLLM(enable_thinking=False)
-    response = llm.generate_response("Hello, I'm Zach! Who are you?")
+    messages = [{"role": "user", "content": "Hello, I'm Zach! Who are you?"}]
+    response = llm.generate_response(messages)
     print(response)
