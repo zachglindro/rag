@@ -1,11 +1,16 @@
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+import os
+
 import torch
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 
 class QwenLLM:
     def __init__(
         self, model_path: str = "../../models/qwen3-0.6b", enable_thinking: bool = False
     ):
+        if not os.path.exists(model_path):
+            raise OSError(f"Model path not found: {model_path}")
+
         config = AutoConfig.from_pretrained(model_path)
         config.tie_word_embeddings = False
 
@@ -65,6 +70,7 @@ class QwenLLM:
         return full_output.strip()
 
 
-llm = QwenLLM(enable_thinking=False)
-response = llm.generate_response("Hello, I'm Zach! Who are you?")
-print(response)
+if __name__ == "__main__":
+    llm = QwenLLM(enable_thinking=False)
+    response = llm.generate_response("Hello, I'm Zach! Who are you?")
+    print(response)
