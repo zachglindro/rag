@@ -115,6 +115,12 @@ export default function Page() {
   }, [inputValue, updateTextareaHeight])
 
   useEffect(() => {
+    if (!isLoading) {
+      textareaRef.current?.focus()
+    }
+  }, [isLoading])
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return
     }
