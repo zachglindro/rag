@@ -132,5 +132,5 @@ if __name__ == "__main__":
     llm = QwenLLM(enable_thinking=False)
     messages = [{"role": "user", "content": "List 2 traits ideal to have in crops."}]
     response = llm.generate_response(messages, stream=True)
-    full_response = ''.join(response)
+    full_response = "".join(response)
     print(full_response)

@@ -214,9 +214,9 @@ async def generate_response_endpoint(
             for token in llm_instance.generate_response(
                 request.messages, request.max_tokens, stream=True
             ):
-                yield f"data: {token}\n\n"
+                yield f'data: {{"token": "{token.replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")}"}}\n\n'
             yield "data: [DONE]\n\n"
         except Exception as e:
-            yield f"data: [ERROR] {str(e)}\n\n"
+            yield f'data: {{"error": "{str(e).replace('"', '\\"')}"}}\n\n'
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
