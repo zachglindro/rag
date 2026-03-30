@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Check, ChevronsUpDown, ChevronRight, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Command,
   CommandEmpty,
@@ -60,6 +61,8 @@ export function AIMappingStep({
     mapped: false,
     unmapped: false,
   })
+  const [mappedSearch, setMappedSearch] = useState("")
+  const [unmappedSearch, setUnmappedSearch] = useState("")
 
   const handleMappingChange = (origColumn: string, newValue: string) => {
     const newMappings = mappings.map((mapping) =>
@@ -87,6 +90,13 @@ export function AIMappingStep({
   )
   const unmappedMappings = mappings.filter(
     (mapping) => mapping.mappedColumn === ""
+  )
+
+  const filteredMappedMappings = mappedMappings.filter((mapping) =>
+    mapping.origColumn.toLowerCase().includes(mappedSearch.toLowerCase())
+  )
+  const filteredUnmappedMappings = unmappedMappings.filter((mapping) =>
+    mapping.origColumn.toLowerCase().includes(unmappedSearch.toLowerCase())
   )
 
   const renderMappingRow = (mapping: ColumnMapping) => (
@@ -187,7 +197,13 @@ export function AIMappingStep({
           </Button>
           {sectionStates.mapped && (
             <div className="ml-6 flex flex-col gap-4">
-              {mappedMappings.map(renderMappingRow)}
+              <Input
+                placeholder="Search mapped columns..."
+                value={mappedSearch}
+                onChange={(e) => setMappedSearch(e.target.value)}
+                className="mb-2"
+              />
+              {filteredMappedMappings.map(renderMappingRow)}
             </div>
           )}
         </div>
@@ -214,7 +230,13 @@ export function AIMappingStep({
           </Button>
           {sectionStates.unmapped && (
             <div className="ml-6 flex flex-col gap-4">
-              {unmappedMappings.map(renderMappingRow)}
+              <Input
+                placeholder="Search unmapped columns..."
+                value={unmappedSearch}
+                onChange={(e) => setUnmappedSearch(e.target.value)}
+                className="mb-2"
+              />
+              {filteredUnmappedMappings.map(renderMappingRow)}
             </div>
           )}
         </div>
