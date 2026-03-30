@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   Table,
   TableBody,
@@ -9,6 +10,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface ColumnMapping {
   origColumn: string
@@ -28,8 +37,11 @@ export function TemplatePreviewStep({
   mappings,
   rawData,
 }: TemplatePreviewStepProps) {
+  const [visibleRows, setVisibleRows] = useState(10)
+  const [showAllDialogOpen, setShowAllDialogOpen] = useState(false)
+
   // Transform data using mappings, filtering unmapped columns
-  const transformedData = rawData.slice(0, 10).map((row) => {
+  const fullTransformedData = rawData.map((row) => {
     const mapped: Record<string, unknown> = {}
     mappings.forEach(({ origColumn, mappedColumn }) => {
       if (mappedColumn && row.hasOwnProperty(origColumn)) {
@@ -38,6 +50,8 @@ export function TemplatePreviewStep({
     })
     return mapped
   })
+
+  const transformedData = fullTransformedData.slice(0, visibleRows)
 
   const mappedColumns = mappings
     .filter((m) => m.mappedColumn !== "")
@@ -84,6 +98,25 @@ export function TemplatePreviewStep({
         </Table>
       </div>
 
+      {/* Row expansion buttons */}
+      {visibleRows < fullTransformedData.length && (
+        <div className="flex justify-center gap-2 pt-4">
+          <Button
+            variant="outline"
+            onClick={() =>
+              setVisibleRows((prev) =>
+                Math.min(prev + 10, fullTransformedData.length)
+              )
+            }
+          >
+            Show More
+          </Button>
+          <Button variant="outline" onClick={() => setShowAllDialogOpen(true)}>
+            Show All
+          </Button>
+        </div>
+      )}
+
       {/* Navigation buttons */}
       <div className="flex justify-between pt-4">
         <Button variant="outline" onClick={onBack}>
@@ -91,6 +124,34 @@ export function TemplatePreviewStep({
         </Button>
         <Button onClick={onNext}>Start Ingestion</Button>
       </div>
+
+      <Dialog open={showAllDialogOpen} onOpenChange={setShowAllDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Show All Rows</DialogTitle>
+            <DialogDescription>
+              This will display all {fullTransformedData.length} rows. This
+              action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowAllDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setVisibleRows(fullTransformedData.length)
+                setShowAllDialogOpen(false)
+              }}
+            >
+              Show All
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
