@@ -114,15 +114,22 @@ async def upload_file(file: UploadFile = File(...)):
     try:
         content = await file.read()
         columns = []
+        rows = []
 
         if ext == "csv":
-            df = pd.read_csv(io.BytesIO(content), nrows=0)
-            columns = df.columns.tolist()
+            df = pd.read_csv(io.BytesIO(content))
         elif ext == "xlsx":
-            df = pd.read_excel(io.BytesIO(content), nrows=0)
-            columns = df.columns.tolist()
+            df = pd.read_excel(io.BytesIO(content))
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported file type. Only CSV and XLSX are allowed.",
+            )
 
-        return {"columns": columns}
+        columns = df.columns.tolist()
+        rows = df.fillna("").to_dict("records")
+
+        return {"columns": columns, "rows": rows, "row_count": len(rows)}
     except pd.errors.EmptyDataError:
         raise HTTPException(
             status_code=400, detail="File appears to be empty or has no valid data."

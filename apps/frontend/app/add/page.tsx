@@ -24,6 +24,7 @@ export default function AddPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [columns, setColumns] = useState<string[]>([])
+  const [parsedData, setParsedData] = useState<Record<string, unknown>[]>([])
   const [mappings, setMappings] = useState<ColumnMapping[]>([])
   const [isIngestionComplete, setIsIngestionComplete] = useState(false)
 
@@ -37,8 +38,12 @@ export default function AddPage() {
     setSelectedFile(file)
   }
 
-  const handleColumnsSet = (cols: string[]) => {
+  const handleColumnsSet = (
+    cols: string[],
+    rows: Record<string, unknown>[]
+  ) => {
     setColumns(cols)
+    setParsedData(rows)
     setMappings(cols.map((col) => ({ origColumn: col, mappedColumn: "" })))
   }
 
@@ -113,6 +118,8 @@ export default function AddPage() {
           <TemplatePreviewStep
             onBack={() => goToStep(2)}
             onNext={() => goToStep(4)}
+            mappings={mappings}
+            rawData={parsedData}
           />
         )
       case 4:

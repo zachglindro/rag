@@ -10,44 +10,41 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 
+interface ColumnMapping {
+  origColumn: string
+  mappedColumn: string
+}
+
 interface TemplatePreviewStepProps {
   onBack: () => void
   onNext: () => void
+  mappings: ColumnMapping[]
+  rawData: Record<string, unknown>[]
 }
-
-// Hardcoded sample data for preview
-const sampleData = [
-  {
-    local_name: "Maize Line A",
-    plant_height: "185.3",
-    tassel_color: "Purple",
-  },
-  {
-    local_name: "Maize Line B",
-    plant_height: "172.8",
-    tassel_color: "Green",
-  },
-  {
-    local_name: "Maize Line C",
-    plant_height: "195.1",
-    tassel_color: "Purple",
-  },
-  {
-    local_name: "Maize Line D",
-    plant_height: "168.5",
-    tassel_color: "Yellow",
-  },
-  {
-    local_name: "Maize Line E",
-    plant_height: "178.9",
-    tassel_color: "Green",
-  },
-]
 
 export function TemplatePreviewStep({
   onBack,
   onNext,
+  mappings,
+  rawData,
 }: TemplatePreviewStepProps) {
+  // Transform data using mappings, filtering unmapped columns
+  const transformedData = rawData.slice(0, 10).map((row) => {
+    const mapped: Record<string, unknown> = {}
+    mappings.forEach(({ origColumn, mappedColumn }) => {
+      if (mappedColumn && row.hasOwnProperty(origColumn)) {
+        mapped[mappedColumn] = row[origColumn]
+      }
+    })
+    return mapped
+  })
+
+  const mappedColumns = mappings
+    .filter((m) => m.mappedColumn !== "")
+    .map((m) => m.mappedColumn)
+
+  const unmappedCount = mappings.filter((m) => m.mappedColumn === "").length
+
   return (
     <div className="flex flex-col gap-6 py-8">
       {/* Header */}
@@ -56,6 +53,11 @@ export function TemplatePreviewStep({
         <p className="mt-1 text-sm text-muted-foreground">
           Preview how your data will look
         </p>
+        {unmappedCount > 0 && (
+          <p className="mt-2 text-sm text-amber-600">
+            ⚠️ {unmappedCount} column(s) unmapped — will be discarded
+          </p>
+        )}
       </div>
 
       {/* Data table */}
@@ -63,17 +65,19 @@ export function TemplatePreviewStep({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[200px]">Local Name</TableHead>
-              <TableHead className="w-[150px]">Plant Height (cm)</TableHead>
-              <TableHead>Tassel Color</TableHead>
+              {mappedColumns.map((col) => (
+                <TableHead key={col}>{col}</TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sampleData.map((row, index) => (
-              <TableRow key={index}>
-                <TableCell className="font-medium">{row.local_name}</TableCell>
-                <TableCell>{row.plant_height}</TableCell>
-                <TableCell>{row.tassel_color}</TableCell>
+            {transformedData.map((row, idx) => (
+              <TableRow key={idx}>
+                {mappedColumns.map((col) => (
+                  <TableCell key={col}>
+                    {row[col] != null ? String(row[col]) : "—"}
+                  </TableCell>
+                ))}
               </TableRow>
             ))}
           </TableBody>

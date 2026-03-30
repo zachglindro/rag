@@ -21,7 +21,11 @@ class TestUploadEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert "columns" in data
+        assert "rows" in data
+        assert "row_count" in data
         assert data["columns"] == ["name", "age", "city"]
+        assert len(data["rows"]) == 2
+        assert data["row_count"] == 2
 
     def test_upload_xlsx_file(self):
         """Test uploading a valid XLSX file."""
@@ -57,7 +61,11 @@ class TestUploadEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert "columns" in data
+        assert "rows" in data
+        assert "row_count" in data
         assert data["columns"] == ["product", "price", "quantity"]
+        assert len(data["rows"]) == 3
+        assert data["row_count"] == 3
 
     def test_upload_unsupported_file_type(self):
         """Test uploading a file with unsupported extension."""
@@ -94,7 +102,7 @@ class TestUploadEndpoint:
 
     def test_upload_malformed_csv(self):
         """Test uploading a malformed CSV file."""
-        # CSV with inconsistent columns
+        # CSV with inconsistent columns - should fail
         csv_content = "name,age\nJohn,25\nJane\nBob,35,extra"
         csv_file = io.BytesIO(csv_content.encode("utf-8"))
         csv_file.name = "malformed.csv"
@@ -103,11 +111,10 @@ class TestUploadEndpoint:
             "/upload", files={"file": ("malformed.csv", csv_file, "text/csv")}
         )
 
-        # pandas should still read the columns from the first row
-        assert response.status_code == 200
+        # pandas cannot parse inconsistent columns
+        assert response.status_code == 500
         data = response.json()
-        assert "columns" in data
-        assert data["columns"] == ["name", "age"]
+        assert "Error processing file" in data["detail"]
 
 
 class TestSuggestMappingsEndpoint:
