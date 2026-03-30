@@ -140,7 +140,13 @@ export default function AddPage() {
             <Stepper currentStep={currentStep} />
 
             {/* Step content */}
-            <div className="mx-auto w-full max-w-2xl">{renderStep()}</div>
+            <div
+              className={
+                currentStep === 3 ? "w-full" : "mx-auto w-full max-w-2xl"
+              }
+            >
+              {renderStep()}
+            </div>
           </div>
         </div>
       </SidebarInset>
