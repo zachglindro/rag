@@ -75,7 +75,7 @@ export function TemplatePreviewStep({
       </div>
 
       {/* Data table */}
-      <div className="rounded-lg border">
+      <div className="w-full rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
