@@ -1,12 +1,14 @@
 import difflib
 import io
+import json
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from db.init_db import initialize_database
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from rag.llm import QwenLLM
@@ -55,6 +57,50 @@ class GenerateRequest(BaseModel):
 
 class GenerateResponse(BaseModel):
     response: str
+
+
+class RecordRow(BaseModel):
+    id: int
+    data: dict[str, Any]
+    natural_language_description: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class RecordListResponse(BaseModel):
+    records: list[RecordRow]
+    skip: int
+    limit: int
+
+
+class ColumnMetadataRow(BaseModel):
+    column_name: str
+    display_name: str
+    data_type: str
+    is_required: bool
+    default_value: str | None = None
+    order: int | None = None
+    description: str | None = None
+
+
+class RecordCountResponse(BaseModel):
+    count: int
+
+
+def parse_record_data(data_value: Any) -> dict[str, Any]:
+    if isinstance(data_value, dict):
+        return data_value
+
+    if isinstance(data_value, str):
+        try:
+            parsed = json.loads(data_value)
+            if isinstance(parsed, dict):
+                return parsed
+            return {"value": parsed}
+        except json.JSONDecodeError:
+            return {"_raw": data_value}
+
+    return {}
 
 
 @app.post("/columns")
@@ -178,6 +224,115 @@ async def suggest_mappings(request: SuggestMappingsRequest):
                 )
 
         return suggestions
+    finally:
+        conn.close()
+
+
+@app.get("/records", response_model=RecordListResponse)
+async def get_records(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT id, data, natural_language_description, created_at, updated_at
+            FROM records
+            ORDER BY id ASC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, skip),
+        )
+        rows = cursor.fetchall()
+
+        records = [
+            RecordRow(
+                id=row[0],
+                data=parse_record_data(row[1]),
+                natural_language_description=row[2],
+                created_at=row[3],
+                updated_at=row[4],
+            )
+            for row in rows
+        ]
+
+        return RecordListResponse(records=records, skip=skip, limit=limit)
+    finally:
+        conn.close()
+
+
+@app.get("/column-metadata", response_model=list[ColumnMetadataRow])
+async def get_column_metadata():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT column_name, display_name, data_type, is_required, default_value, "order", description
+            FROM column_metadata
+            ORDER BY "order" ASC, column_name ASC
+            """
+        )
+        rows = cursor.fetchall()
+
+        return [
+            ColumnMetadataRow(
+                column_name=row[0],
+                display_name=row[1],
+                data_type=row[2],
+                is_required=bool(row[3]),
+                default_value=row[4],
+                order=row[5],
+                description=row[6],
+            )
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+
+@app.get("/records/count", response_model=RecordCountResponse)
+async def get_record_count():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT COUNT(*) FROM records")
+        count = cursor.fetchone()[0]
+        return RecordCountResponse(count=count)
+    finally:
+        conn.close()
+
+
+@app.get("/records/{record_id}", response_model=RecordRow)
+async def get_record(record_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT id, data, natural_language_description, created_at, updated_at
+            FROM records
+            WHERE id = ?
+            """,
+            (record_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        return RecordRow(
+            id=row[0],
+            data=parse_record_data(row[1]),
+            natural_language_description=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+        )
     finally:
         conn.close()
 
