@@ -45,7 +45,7 @@ export function IngestStep({ onComplete, rows, mappings }: IngestStepProps) {
           throw new Error(errorData.detail || `HTTP ${response.status}`)
         }
 
-        const result = await response.json()
+        await response.json()
         setProgress(100)
 
         // Success
