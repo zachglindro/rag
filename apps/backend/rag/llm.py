@@ -71,7 +71,7 @@ Key guidelines:
             # For streaming, use TextIteratorStreamer to yield tokens
             streamer = TextIteratorStreamer(
                 self.tokenizer, skip_prompt=True, skip_special_tokens=True
-            )
+            )  # type: ignore
 
             generation_kwargs = {
                 **inputs,
