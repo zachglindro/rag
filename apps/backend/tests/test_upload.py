@@ -208,3 +208,133 @@ class TestSuggestMappingsEndpoint:
         assert data[0]["orig_column"] == "exact_match_test"
         assert data[0]["suggested_column"] == "exact_match_test"
         assert data[0]["confidence"] == 1.0  # Exact match should be 1.0
+
+
+class TestIngestEndpoint:
+    def test_ingest_valid_data(self):
+        """Test successful ingestion of valid mapped data."""
+        # First, add some system columns
+        client.post(
+            "/columns",
+            json={
+                "column_name": "local_name",
+                "display_name": "Local Name",
+                "data_type": "string",
+            },
+        )
+        client.post(
+            "/columns",
+            json={
+                "column_name": "plant_height",
+                "display_name": "Plant Height (cm)",
+                "data_type": "number",
+            },
+        )
+
+        # Test data with mappings
+        rows = [
+            {"orig_name": "Plant A", "height_cm": 150, "extra_col": "ignored"},
+            {"orig_name": "Plant B", "height_cm": 200, "extra_col": "ignored"},
+        ]
+        mappings = [
+            {"origColumn": "orig_name", "mappedColumn": "local_name"},
+            {"origColumn": "height_cm", "mappedColumn": "plant_height"},
+            {"origColumn": "extra_col", "mappedColumn": ""},  # Unmapped
+        ]
+
+        response = client.post("/ingest", json={"rows": rows, "mappings": mappings})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["inserted_count"] == 2
+        assert data["status"] == "success"
+
+        # Verify data was inserted
+        records_response = client.get("/records")
+        assert records_response.status_code == 200
+        records_data = records_response.json()
+        assert len(records_data["records"]) >= 2
+
+        # Check that the data is correctly transformed and stored
+        inserted_records = records_data["records"][-2:]  # Get last 2 records
+        for record in inserted_records:
+            record_data = record["data"]
+            assert "local_name" in record_data
+            assert "plant_height" in record_data
+            assert "extra_col" not in record_data  # Unmapped column should be excluded
+
+    def test_ingest_empty_rows(self):
+        """Test ingestion with empty rows list."""
+        mappings = [{"origColumn": "col1", "mappedColumn": "field1"}]
+        response = client.post("/ingest", json={"rows": [], "mappings": mappings})
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No rows provided" in data["detail"]
+
+    def test_ingest_no_mappings(self):
+        """Test ingestion with empty mappings list."""
+        rows = [{"col1": "value1"}]
+        response = client.post("/ingest", json={"rows": rows, "mappings": []})
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No mappings provided" in data["detail"]
+
+    def test_ingest_empty_mapped_columns(self):
+        """Test ingestion where all mappings have empty mappedColumn."""
+        rows = [{"col1": "value1"}]
+        mappings = [{"origColumn": "col1", "mappedColumn": ""}]
+        response = client.post("/ingest", json={"rows": rows, "mappings": mappings})
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No valid mappings provided" in data["detail"]
+
+    def test_ingest_no_transformable_rows(self):
+        """Test ingestion where no rows can be transformed due to missing orig columns."""
+        rows = [{"col1": "value1"}]
+        mappings = [{"origColumn": "missing_col", "mappedColumn": "field1"}]
+        response = client.post("/ingest", json={"rows": rows, "mappings": mappings})
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No rows could be transformed" in data["detail"]
+
+    def test_ingest_partial_mapping(self):
+        """Test ingestion where some rows have partial mappings."""
+        # Add system column
+        client.post(
+            "/columns",
+            json={
+                "column_name": "local_name",
+                "display_name": "Local Name",
+                "data_type": "string",
+            },
+        )
+
+        rows = [
+            {"name": "Plant A", "height": 150},  # Both fields present
+            {"name": "Plant B"},  # Missing height
+        ]
+        mappings = [
+            {"origColumn": "name", "mappedColumn": "local_name"},
+            {"origColumn": "height", "mappedColumn": "plant_height"},
+        ]
+
+        response = client.post("/ingest", json={"rows": rows, "mappings": mappings})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["inserted_count"] == 2
+
+        # Verify data - second record should have local_name but not plant_height
+        records_response = client.get("/records")
+        records_data = records_response.json()
+        inserted_records = records_data["records"][-2:]
+
+        assert inserted_records[0]["data"]["local_name"] == "Plant A"
+        assert "plant_height" in inserted_records[0]["data"]
+
+        assert inserted_records[1]["data"]["local_name"] == "Plant B"
+        assert "plant_height" not in inserted_records[1]["data"]  # Missing orig column

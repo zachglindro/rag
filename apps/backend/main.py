@@ -50,6 +50,21 @@ class SuggestMappingsRequest(BaseModel):
     columns: list[str]
 
 
+class ColumnMapping(BaseModel):
+    origColumn: str
+    mappedColumn: str
+
+
+class IngestRequest(BaseModel):
+    rows: list[dict[str, Any]]
+    mappings: list[ColumnMapping]
+
+
+class IngestResponse(BaseModel):
+    inserted_count: int
+    status: str
+
+
 class MappingSuggestion(BaseModel):
     orig_column: str
     suggested_column: str
@@ -230,6 +245,64 @@ async def suggest_mappings(request: SuggestMappingsRequest):
                 )
 
         return suggestions
+    finally:
+        conn.close()
+
+
+@app.post("/ingest", response_model=IngestResponse)
+async def ingest_records(request: IngestRequest):
+    # Validate request
+    if not request.rows:
+        raise HTTPException(status_code=400, detail="No rows provided for ingestion")
+
+    if not request.mappings:
+        raise HTTPException(status_code=400, detail="No mappings provided")
+
+    # Build mapping dict for quick lookup
+    mapping_dict = {
+        m.origColumn: m.mappedColumn for m in request.mappings if m.mappedColumn
+    }
+
+    if not mapping_dict:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid mappings provided (all mappedColumn are empty)",
+        )
+
+    # Transform rows: apply mappings and filter to only mapped columns
+    transformed_rows = []
+    for row in request.rows:
+        transformed = {}
+        for orig_col, mapped_col in mapping_dict.items():
+            if orig_col in row:
+                transformed[mapped_col] = row[orig_col]
+        if transformed:  # Only add if at least one field was mapped
+            transformed_rows.append(transformed)
+
+    if not transformed_rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No rows could be transformed with the provided mappings",
+        )
+
+    # Insert into database with transaction
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        conn.execute("BEGIN")
+
+        inserted_count = 0
+        for row_data in transformed_rows:
+            cursor.execute(
+                "INSERT INTO records (data) VALUES (?)", (json.dumps(row_data),)
+            )
+            inserted_count += 1
+
+        conn.commit()
+        return IngestResponse(inserted_count=inserted_count, status="success")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
     finally:
         conn.close()
 
