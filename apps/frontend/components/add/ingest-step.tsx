@@ -1,43 +1,84 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { Check, Loader2, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
 
 interface IngestStepProps {
   onComplete: () => void
+  rows?: Record<string, unknown>[]
+  mappings?: { origColumn: string; mappedColumn: string }[]
 }
 
-export function IngestStep({ onComplete }: IngestStepProps) {
+export function IngestStep({ onComplete, rows, mappings }: IngestStepProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Simulate ingestion progress
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(progressInterval)
-          return 100
-        }
-        return prev + 10
-      })
-    }, 300)
-
-    // Simulate total ingestion delay (3 seconds)
-    const timeout = setTimeout(() => {
+    // If no data provided, skip ingestion and complete immediately
+    if (!rows || !mappings) {
       setIsLoading(false)
       onComplete()
-    }, 3000)
-
-    return () => {
-      clearInterval(progressInterval)
-      clearTimeout(timeout)
+      return
     }
-  }, [onComplete])
+
+    const ingestData = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+        setProgress(10)
+
+        const response = await fetch("http://localhost:8000/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows, mappings }),
+        })
+
+        setProgress(50)
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.detail || `HTTP ${response.status}`)
+        }
+
+        const result = await response.json()
+        setProgress(100)
+
+        // Success
+        setIsLoading(false)
+        onComplete()
+      } catch (err) {
+        setIsLoading(false)
+        setError(err instanceof Error ? err.message : "Unknown error occurred")
+      }
+    }
+
+    ingestData()
+  }, [onComplete, rows, mappings])
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-6 py-12">
+        {/* Error icon */}
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900">
+          <X className="h-8 w-8 text-red-600 dark:text-red-400" />
+        </div>
+
+        {/* Error message */}
+        <div className="text-center">
+          <h3 className="text-lg font-medium">Ingestion Failed</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+        </div>
+
+        {/* Retry button */}
+        <Button onClick={() => window.location.reload()}>Try Again</Button>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (

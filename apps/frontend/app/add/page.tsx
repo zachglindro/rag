@@ -123,7 +123,13 @@ export default function AddPage() {
           />
         )
       case 4:
-        return <IngestStep onComplete={handleIngestionComplete} />
+        return (
+          <IngestStep
+            onComplete={handleIngestionComplete}
+            rows={parsedData}
+            mappings={mappings}
+          />
+        )
       default:
         return null
     }
