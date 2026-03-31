@@ -12,11 +12,13 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from rag.llm import QwenLLM
+from rag.vectordb import ChromaVectorDB
 
 DB_PATH = Path(__file__).parent / "db.sqlite3"
 
 
 llm = None  # Will be set in lifespan
+vectordb = None  # Will be set in lifespan
 
 
 @asynccontextmanager
@@ -24,6 +26,10 @@ async def lifespan(app: FastAPI):
     initialize_database(DB_PATH)
     global llm
     llm = QwenLLM()
+    global vectordb
+    vectordb = ChromaVectorDB()
+    print(f"ChromaDB initialized with persist directory: {vectordb.persist_directory}")
+    print("ChromaDB collection 'trait_embeddings' ready")
     yield
 
 
