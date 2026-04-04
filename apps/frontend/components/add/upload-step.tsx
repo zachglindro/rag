@@ -4,6 +4,7 @@ import { useState, useRef, DragEvent, ChangeEvent } from "react"
 import { Database, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 interface UploadStepProps {
   onFileSelect: (file: File) => void
@@ -59,7 +60,7 @@ export function UploadStep({
     if (hasValidExtension) {
       onFileSelect(file)
     } else {
-      alert("Please upload a .csv or .xlsx file")
+      toast.error("Please upload a .csv or .xlsx file")
     }
   }
 
@@ -89,7 +90,7 @@ export function UploadStep({
       onColumnsSet(columns, rows)
       onNext()
     } catch (error) {
-      alert("Upload failed: " + (error as Error).message)
+      toast.error("Upload failed: " + (error as Error).message)
     } finally {
       setIsUploading(false)
     }
