@@ -1,9 +1,22 @@
 import io
+from typing import TypedDict
 
 from fastapi.testclient import TestClient
+import main
 from main import app
+import pytest
 
 client = TestClient(app)
+
+
+class CapturedVectorDBCalls(TypedDict, total=False):
+    """Typed structure for mocked upsert_documents arguments."""
+
+    ids: list[str]
+    documents: list[str]
+    embeddings: list[list[float]] | list[list[int]]
+    metadatas: list[dict[str, int]] | None
+    deleted_ids: list[str]
 
 
 class TestUploadEndpoint:
@@ -211,6 +224,28 @@ class TestSuggestMappingsEndpoint:
 
 
 class TestIngestEndpoint:
+    @pytest.fixture(autouse=True)
+    def _mock_vector_dependencies(self, monkeypatch: pytest.MonkeyPatch):
+        class FakeEmbedder:
+            def embed_batch(self, texts: list[str]) -> list[list[float]]:
+                return [[0.1, 0.2, 0.3] for _ in texts]
+
+        class FakeVectorDB:
+            def upsert_documents(
+                self,
+                ids: list[str],
+                documents: list[str],
+                embeddings: list[list[float]] | list[list[int]],
+                metadatas: list[dict[str, int]] | None = None,
+            ) -> None:
+                return None
+
+            def delete_by_ids(self, ids: list[str]) -> None:
+                return None
+
+        monkeypatch.setattr(main, "get_embedder", lambda: FakeEmbedder())
+        monkeypatch.setattr(main, "get_vectordb", lambda: FakeVectorDB())
+
     def test_ingest_valid_data(self):
         """Test successful ingestion of valid mapped data."""
         # First, add some system columns
@@ -262,6 +297,7 @@ class TestIngestEndpoint:
             assert "local_name" in record_data
             assert "plant_height" in record_data
             assert "extra_col" not in record_data  # Unmapped column should be excluded
+            assert record["natural_language_description"]
 
         metadata_response = client.get("/column-metadata")
         assert metadata_response.status_code == 200
@@ -367,6 +403,72 @@ class TestIngestEndpoint:
 
         assert inserted_records[0]["data"]["local_name"] == "Plant A"
         assert "plant_height" in inserted_records[0]["data"]
+        assert inserted_records[0]["natural_language_description"]
 
         assert inserted_records[1]["data"]["local_name"] == "Plant B"
         assert "plant_height" not in inserted_records[1]["data"]  # Missing orig column
+        assert inserted_records[1]["natural_language_description"]
+
+    def test_ingest_upserts_vectors_with_matching_ids(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        captured: CapturedVectorDBCalls = {}
+
+        class FakeEmbedder:
+            def embed_batch(self, texts: list[str]) -> list[list[float]]:
+                return [[0.1, 0.2, 0.3] for _ in texts]
+
+        class FakeVectorDB:
+            def upsert_documents(
+                self,
+                ids: list[str],
+                documents: list[str],
+                embeddings: list[list[float]] | list[list[int]],
+                metadatas: list[dict[str, int]] | None = None,
+            ) -> None:
+                captured["ids"] = ids
+                captured["documents"] = documents
+                captured["embeddings"] = embeddings
+                captured["metadatas"] = metadatas
+
+            def delete_by_ids(self, ids: list[str]) -> None:
+                captured["deleted_ids"] = ids
+
+        monkeypatch.setattr(main, "get_embedder", lambda: FakeEmbedder())
+        monkeypatch.setattr(main, "get_vectordb", lambda: FakeVectorDB())
+
+        before_count = client.get("/records/count").json()["count"]
+
+        rows = [
+            {"orig_name": "IPB-A", "height_cm": 150},
+            {"orig_name": "IPB-B", "height_cm": 170},
+        ]
+        mappings = [
+            {"origColumn": "orig_name", "mappedColumn": "local_name"},
+            {"origColumn": "height_cm", "mappedColumn": "plant_height"},
+        ]
+
+        response = client.post("/ingest", json={"rows": rows, "mappings": mappings})
+        assert response.status_code == 200
+        inserted_count = response.json()["inserted_count"]
+        assert inserted_count == 2
+
+        after_count = client.get("/records/count").json()["count"]
+        assert after_count == before_count + inserted_count
+
+        new_records = client.get(
+            "/records", params={"skip": before_count, "limit": inserted_count}
+        ).json()["records"]
+        expected_ids = [str(record["id"]) for record in new_records]
+
+        assert "ids" in captured and captured["ids"] == expected_ids
+        assert "documents" in captured and len(captured["documents"]) == inserted_count
+        assert (
+            "embeddings" in captured and len(captured["embeddings"]) == inserted_count
+        )
+        assert (
+            "metadatas" in captured
+            and captured["metadatas"] is not None
+            and [str(meta["record_id"]) for meta in captured["metadatas"]]
+            == expected_ids
+        )
