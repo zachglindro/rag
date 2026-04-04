@@ -263,6 +263,38 @@ class TestIngestEndpoint:
             assert "plant_height" in record_data
             assert "extra_col" not in record_data  # Unmapped column should be excluded
 
+        metadata_response = client.get("/column-metadata")
+        assert metadata_response.status_code == 200
+        metadata_columns = {row["column_name"] for row in metadata_response.json()}
+        assert "local_name" in metadata_columns
+        assert "plant_height" in metadata_columns
+
+    def test_ingest_creates_metadata_for_new_columns(self):
+        """Test ingestion auto-creates metadata when mapped columns are not pre-defined."""
+        rows = [
+            {"hybrid_name": "H1", "yield_kg": 120.5},
+            {"hybrid_name": "H2", "yield_kg": 132.0},
+        ]
+        mappings = [
+            {"origColumn": "hybrid_name", "mappedColumn": "hybrid_name"},
+            {"origColumn": "yield_kg", "mappedColumn": "yield_kg"},
+        ]
+
+        response = client.post("/ingest", json={"rows": rows, "mappings": mappings})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["inserted_count"] == 2
+
+        metadata_response = client.get("/column-metadata")
+        assert metadata_response.status_code == 200
+        metadata = {row["column_name"]: row for row in metadata_response.json()}
+
+        assert "hybrid_name" in metadata
+        assert metadata["hybrid_name"]["data_type"] == "string"
+        assert "yield_kg" in metadata
+        assert metadata["yield_kg"]["data_type"] == "number"
+
     def test_ingest_empty_rows(self):
         """Test ingestion with empty rows list."""
         mappings = [{"origColumn": "col1", "mappedColumn": "field1"}]

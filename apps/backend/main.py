@@ -108,6 +108,33 @@ class RecordCountResponse(BaseModel):
     count: int
 
 
+def infer_column_data_type(values: list[Any]) -> str:
+    for value in values:
+        if value is None:
+            continue
+
+        if isinstance(value, bool):
+            return "boolean"
+
+        if isinstance(value, int | float):
+            return "number"
+
+        if isinstance(value, list):
+            return "array"
+
+        if isinstance(value, dict):
+            return "object"
+
+        if isinstance(value, str):
+            return "string"
+
+    return "string"
+
+
+def to_display_name(column_name: str) -> str:
+    return column_name.replace("_", " ").strip().title() or column_name
+
+
 def parse_record_data(data_value: Any) -> dict[str, Any]:
     if isinstance(data_value, dict):
         return data_value
@@ -290,6 +317,31 @@ async def ingest_records(request: IngestRequest):
     cursor = conn.cursor()
     try:
         conn.execute("BEGIN")
+
+        # Ensure mapped columns are represented in metadata for first-time ingestion.
+        unique_mapped_columns = list(dict.fromkeys(mapping_dict.values()))
+        for order, mapped_column in enumerate(unique_mapped_columns):
+            values_for_column = [
+                row[mapped_column]
+                for row in transformed_rows
+                if mapped_column in row and row[mapped_column] != ""
+            ]
+            inferred_type = infer_column_data_type(values_for_column)
+
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO column_metadata
+                (column_name, display_name, data_type, is_required, default_value, "order", description)
+                VALUES (?, ?, ?, 0, NULL, ?, ?)
+                """,
+                (
+                    mapped_column,
+                    to_display_name(mapped_column),
+                    inferred_type,
+                    order,
+                    "",
+                ),
+            )
 
         inserted_count = 0
         for row_data in transformed_rows:
