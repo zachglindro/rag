@@ -16,9 +16,8 @@ interface StepperProps {
 
 const defaultSteps: Step[] = [
   { id: 1, title: "Upload" },
-  { id: 2, title: "AI Mapping" },
-  { id: 3, title: "Template Preview" },
-  { id: 4, title: "Ingest" },
+  { id: 2, title: "Preview" },
+  { id: 3, title: "Ingest" },
 ]
 
 export function Stepper({ currentStep, steps = defaultSteps }: StepperProps) {

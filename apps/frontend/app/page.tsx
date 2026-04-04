@@ -4,7 +4,8 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
-import { Bot, Loader2, Send, User } from "lucide-react"
+import { Bot, Database, Loader2, Send, User } from "lucide-react"
+import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 
@@ -83,9 +84,29 @@ export default function Page() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasRecords, setHasRecords] = useState<boolean | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [textareaMaxHeight, setTextareaMaxHeight] = useState(220)
+
+  useEffect(() => {
+    const fetchRecordCount = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/records/count")
+        if (!response.ok) {
+          throw new Error("Failed to fetch record count")
+        }
+
+        const data: { count: number } = await response.json()
+        setHasRecords(data.count > 0)
+      } catch {
+        // If the API is unavailable, keep chat usable.
+        setHasRecords(true)
+      }
+    }
+
+    void fetchRecordCount()
+  }, [])
 
   const updateTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current
@@ -299,7 +320,32 @@ export default function Page() {
       <AppSidebar />
       <SidebarInset>
         <div className="flex min-h-svh flex-col bg-muted/30">
-          {messages.length === 0 ? (
+          {hasRecords === null ? (
+            <div className="flex flex-1 items-center justify-center px-4 sm:px-8">
+              <div className="w-full max-w-3xl rounded-lg border bg-background p-6 text-center text-sm text-muted-foreground">
+                Checking database status...
+              </div>
+            </div>
+          ) : !hasRecords ? (
+            <div className="flex flex-1 items-center justify-center px-4 sm:px-8">
+              <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-6 rounded-2xl border bg-background p-10 text-center shadow-sm">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                  <Database className="h-8 w-8 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                    There is currently no data in the database
+                  </h1>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Add data first to unlock inventory search.
+                  </p>
+                </div>
+                <Button asChild>
+                  <Link href="/add">Add Data</Link>
+                </Button>
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="flex flex-1 items-center px-4 sm:px-8">
               <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-8">
                 <h1 className="text-center text-3xl font-medium tracking-tight text-foreground sm:text-4xl">

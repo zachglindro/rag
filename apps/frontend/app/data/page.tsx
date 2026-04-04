@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 interface RecordRow {
@@ -173,8 +174,13 @@ export default function DataPage() {
           )}
 
           {!isLoading && !error && totalCount === 0 && (
-            <div className="rounded-lg border p-6 text-sm text-muted-foreground">
-              No records yet. Add data from the Add flow to populate this table.
+            <div className="rounded-lg border p-6">
+              <p className="text-sm text-muted-foreground">
+                There is currently no data in the database.
+              </p>
+              <Button className="mt-4" asChild>
+                <Link href="/add">Add Data</Link>
+              </Button>
             </div>
           )}
 
