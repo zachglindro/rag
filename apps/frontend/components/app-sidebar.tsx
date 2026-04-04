@@ -1,7 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { Home, BarChart2, Database, PlusCircle, Sprout } from "lucide-react"
+import {
+  Home,
+  BarChart2,
+  Database,
+  PlusCircle,
+  Settings,
+  Sprout,
+} from "lucide-react"
 
 import {
   Sidebar,
@@ -20,6 +27,7 @@ const navItems = [
   { title: "Add", icon: PlusCircle, href: "/add" },
   { title: "Data", icon: Database, href: "/data" },
   { title: "Compare", icon: BarChart2, href: "/compare" },
+  { title: "Settings", icon: Settings, href: "/settings" },
 ]
 
 function SidebarHeaderContent() {
