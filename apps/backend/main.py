@@ -10,7 +10,9 @@ import pandas as pd
 from db.init_db import initialize_database
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
+from preprocessing.description_builder import build_natural_language_description
 from pydantic import BaseModel
+from rag.embedding import QwenEmbeddingService
 from rag.llm import QwenLLM
 from rag.vectordb import ChromaVectorDB
 
@@ -19,6 +21,7 @@ DB_PATH = Path(__file__).parent / "db.sqlite3"
 
 llm = None  # Will be set in lifespan
 vectordb = None  # Will be set in lifespan
+embedder = None  # Will be set in lifespan
 
 
 @asynccontextmanager
@@ -28,8 +31,11 @@ async def lifespan(app: FastAPI):
     llm = QwenLLM()
     global vectordb
     vectordb = ChromaVectorDB()
+    global embedder
+    embedder = QwenEmbeddingService()
     print(f"ChromaDB initialized with persist directory: {vectordb.persist_directory}")
     print("ChromaDB collection 'trait_embeddings' ready")
+    print("Qwen embedding service initialized")
     yield
 
 
@@ -312,9 +318,17 @@ async def ingest_records(request: IngestRequest):
             detail="No rows could be transformed with the provided mappings",
         )
 
+    descriptions = [
+        build_natural_language_description(row_data) for row_data in transformed_rows
+    ]
+
+    embedder_instance = get_embedder()
+    vector_db = get_vectordb()
+
     # Insert into database with transaction
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    inserted_ids: list[int] = []
     try:
         conn.execute("BEGIN")
 
@@ -344,16 +358,39 @@ async def ingest_records(request: IngestRequest):
             )
 
         inserted_count = 0
-        for row_data in transformed_rows:
+        for row_data, description in zip(transformed_rows, descriptions, strict=True):
             cursor.execute(
-                "INSERT INTO records (data) VALUES (?)", (json.dumps(row_data),)
+                "INSERT INTO records (data, natural_language_description) VALUES (?, ?)",
+                (json.dumps(row_data), description),
             )
+            record_id = cursor.lastrowid
+            if record_id is None:
+                raise RuntimeError("Failed to retrieve inserted record ID")
+            inserted_ids.append(int(record_id))
             inserted_count += 1
+
+        embeddings = embedder_instance.embed_batch(descriptions)
+        if len(embeddings) != inserted_count:
+            raise RuntimeError("Embedding count does not match inserted record count")
+
+        vector_db.upsert_documents(
+            ids=[str(record_id) for record_id in inserted_ids],
+            documents=descriptions,
+            embeddings=embeddings,
+            metadatas=[{"record_id": record_id} for record_id in inserted_ids],
+        )
 
         conn.commit()
         return IngestResponse(inserted_count=inserted_count, status="success")
     except Exception as e:
         conn.rollback()
+
+        if inserted_ids:
+            try:
+                vector_db.delete_by_ids([str(record_id) for record_id in inserted_ids])
+            except Exception:
+                pass
+
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
     finally:
         conn.close()
@@ -496,6 +533,20 @@ def get_llm() -> QwenLLM:
         raise RuntimeError("LLM was not initialized during startup")
 
     return llm
+
+
+def get_vectordb() -> ChromaVectorDB:
+    if vectordb is None:
+        raise RuntimeError("Vector DB was not initialized during startup")
+
+    return vectordb
+
+
+def get_embedder() -> QwenEmbeddingService:
+    if embedder is None:
+        raise RuntimeError("Embedding service was not initialized during startup")
+
+    return embedder
 
 
 @app.post("/generate")
