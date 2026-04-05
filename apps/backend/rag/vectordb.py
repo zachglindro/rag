@@ -46,3 +46,9 @@ class ChromaVectorDB:
         if not ids:
             return
         self.collection.delete(ids=ids)
+
+    def reset_collection(self):
+        """Reset the collection by deleting and recreating it."""
+        collection_name = self.collection.name
+        self.client.delete_collection(collection_name)
+        self.collection = self.client.create_collection(name=collection_name)

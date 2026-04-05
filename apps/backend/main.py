@@ -520,7 +520,13 @@ async def reset_database():
         create_tables(cursor)
 
         conn.commit()
-        return {"message": "Database reset successfully"}
+
+        # Reset ChromaDB collection
+        global vectordb
+        if vectordb is not None:
+            vectordb.reset_collection()
+
+        return {"message": "Database and ChromaDB reset successfully"}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
