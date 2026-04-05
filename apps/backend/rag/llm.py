@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import torch
+from typing import Any
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
@@ -29,7 +30,7 @@ class QwenLLM:
         config.tie_word_embeddings = False
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.model = AutoModelForCausalLM.from_pretrained(
+        self.model: Any = AutoModelForCausalLM.from_pretrained(
             model_path,
             config=config,
             dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
