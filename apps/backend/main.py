@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from preprocessing.description_builder import build_natural_language_description
 from pydantic import BaseModel
-from rag.embedding import QwenEmbeddingService
+from rag.embedding import EmbeddingService
 from rag.llm import QwenLLM
 from rag.vectordb import ChromaVectorDB
 
@@ -32,10 +32,10 @@ async def lifespan(app: FastAPI):
     global vectordb
     vectordb = ChromaVectorDB()
     global embedder
-    embedder = QwenEmbeddingService()
+    embedder = EmbeddingService()
     print(f"ChromaDB initialized with persist directory: {vectordb.persist_directory}")
     print("ChromaDB collection 'trait_embeddings' ready")
-    print("Qwen embedding service initialized")
+    print("Embedding service initialized")
     yield
 
 
@@ -542,7 +542,7 @@ def get_vectordb() -> ChromaVectorDB:
     return vectordb
 
 
-def get_embedder() -> QwenEmbeddingService:
+def get_embedder() -> EmbeddingService:
     if embedder is None:
         raise RuntimeError("Embedding service was not initialized during startup")
 
