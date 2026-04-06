@@ -42,6 +42,22 @@ class ChromaVectorDB:
             metadatas=cast(Any, metadatas),
         )
 
+    def query_embeddings(
+        self,
+        query_embeddings: list[list[float]] | list[list[int]],
+        n_results: int = 10,
+        include: list[str] | None = None,
+    ) -> dict[str, Any]:
+        query_args: dict[str, Any] = {
+            "query_embeddings": cast(Any, query_embeddings),
+            "n_results": n_results,
+        }
+
+        if include is not None:
+            query_args["include"] = include
+
+        return cast(dict[str, Any], self.collection.query(**query_args))
+
     def delete_by_ids(self, ids: list[str]):
         if not ids:
             return
