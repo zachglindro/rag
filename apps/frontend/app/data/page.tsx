@@ -277,7 +277,6 @@ export default function DataPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-20">ID</TableHead>
-                      {hasDistanceValues && <TableHead className="w-32">Distance</TableHead>}
                       {visibleColumns.map((column) => (
                         <TableHead key={column.key}>{column.label}</TableHead>
                       ))}
@@ -287,13 +286,6 @@ export default function DataPage() {
                     {rows.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell className="font-medium">{row.id}</TableCell>
-                        {hasDistanceValues && (
-                          <TableCell>
-                            {row.distance !== null && row.distance !== undefined
-                              ? row.distance.toFixed(4)
-                              : "-"}
-                          </TableCell>
-                        )}
                         {visibleColumns.map((column) => (
                           <TableCell key={`${row.id}-${column.key}`}>
                             {stringifyValue(row.data?.[column.key])}
