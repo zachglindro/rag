@@ -1,6 +1,7 @@
 import sqlite3
 
 import pytest
+import main
 from fastapi.testclient import TestClient
 from main import DB_PATH, app
 
@@ -135,3 +136,99 @@ class TestColumnMetadataReadEndpoint:
         assert response.status_code == 200
         names_in_order = [row["column_name"] for row in response.json()]
         assert names_in_order == ["a_column", "b_column", "z_column"]
+
+
+class TestSemanticSearchEndpoint:
+    def test_semantic_search_returns_ranked_records(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO records (data, natural_language_description) VALUES (?, ?)",
+                ('{"name": "Alpha", "trait": "drought tolerance"}', "Alpha drought tolerant"),
+            )
+            first_id = cursor.lastrowid
+            cursor.execute(
+                "INSERT INTO records (data, natural_language_description) VALUES (?, ?)",
+                ('{"name": "Beta", "trait": "high yield"}', "Beta high yield"),
+            )
+            second_id = cursor.lastrowid
+            conn.commit()
+
+        class FakeEmbedder:
+            def embed(self, text: str) -> list[float]:
+                assert text == "high yielding plants"
+                return [0.1, 0.2, 0.3]
+
+        class FakeVectorDB:
+            def query_embeddings(
+                self,
+                query_embeddings: list[list[float]] | list[list[int]],
+                n_results: int = 10,
+                include: list[str] | None = None,
+            ):
+                assert len(query_embeddings) == 1
+                assert n_results == 20
+                assert include == ["distances"]
+                return {
+                    "ids": [[str(second_id), str(first_id)]],
+                    "distances": [[0.0123, 0.2456]],
+                }
+
+        class FakeReranker:
+            def rerank(self, query: str, candidates: list[dict[str, object]]):
+                assert query == "high yielding plants"
+                assert [candidate["id"] for candidate in candidates] == [
+                    str(second_id),
+                    str(first_id),
+                ]
+                return [
+                    {"id": str(first_id), "score": 0.93},
+                    {"id": str(second_id), "score": 0.74},
+                ]
+
+        monkeypatch.setattr(main, "get_embedder", lambda: FakeEmbedder())
+        monkeypatch.setattr(main, "get_vectordb", lambda: FakeVectorDB())
+        monkeypatch.setattr(main, "get_reranker", lambda: FakeReranker())
+
+        response = client.get(
+            "/semantic-search/records",
+            params={"query": "high yielding plants", "top_k": 5},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["query"] == "high yielding plants"
+        assert body["top_k"] == 5
+        assert [record["id"] for record in body["records"]] == [first_id, second_id]
+        assert body["records"][0]["distance"] == pytest.approx(0.2456)
+        assert body["records"][0]["rerank_score"] == pytest.approx(0.93)
+        assert body["records"][1]["distance"] == pytest.approx(0.0123)
+        assert body["records"][1]["rerank_score"] == pytest.approx(0.74)
+
+    def test_semantic_search_empty_results(self, monkeypatch: pytest.MonkeyPatch):
+        class FakeEmbedder:
+            def embed(self, _: str) -> list[float]:
+                return [0.4, 0.5]
+
+        class FakeVectorDB:
+            def query_embeddings(
+                self,
+                query_embeddings: list[list[float]] | list[list[int]],
+                n_results: int = 10,
+                include: list[str] | None = None,
+            ):
+                return {"ids": [[]], "distances": [[]]}
+
+        monkeypatch.setattr(main, "get_embedder", lambda: FakeEmbedder())
+        monkeypatch.setattr(main, "get_vectordb", lambda: FakeVectorDB())
+
+        response = client.get(
+            "/semantic-search/records",
+            params={"query": "unmatched query", "top_k": 5},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["records"] == []

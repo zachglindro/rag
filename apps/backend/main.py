@@ -15,6 +15,7 @@ from preprocessing.description_builder import build_natural_language_description
 from pydantic import BaseModel
 from rag.embedding import EmbeddingService
 from rag.llm import GemmaLLM
+from rag.reranker import FlashRankService
 from rag.vectordb import ChromaVectorDB
 
 DB_PATH = Path(__file__).parent / "db.sqlite3"
@@ -23,6 +24,7 @@ DB_PATH = Path(__file__).parent / "db.sqlite3"
 llm = None  # Will be set in lifespan
 vectordb = None  # Will be set in lifespan
 embedder = None  # Will be set in lifespan
+reranker = None  # Will be set in lifespan
 
 
 @asynccontextmanager
@@ -34,9 +36,12 @@ async def lifespan(app: FastAPI):
     vectordb = ChromaVectorDB()
     global embedder
     embedder = EmbeddingService()
+    global reranker
+    reranker = FlashRankService()
     print(f"ChromaDB initialized with persist directory: {vectordb.persist_directory}")
     print("ChromaDB collection 'trait_embeddings' ready")
     print("Embedding service initialized")
+    print("FlashRank reranker initialized")
     yield
 
 
@@ -113,6 +118,17 @@ class ColumnMetadataRow(BaseModel):
 
 class RecordCountResponse(BaseModel):
     count: int
+
+
+class RetrievedRecordRow(RecordRow):
+    distance: float | None = None
+    rerank_score: float | None = None
+
+
+class RecordSearchResponse(BaseModel):
+    query: str
+    top_k: int
+    records: list[RetrievedRecordRow]
 
 
 def infer_column_data_type(values: list[Any]) -> str:
@@ -506,6 +522,145 @@ async def get_record(record_id: int):
         conn.close()
 
 
+@app.get("/semantic-search/records", response_model=RecordSearchResponse)
+async def search_records(
+    query: str = Query(..., min_length=1),
+    top_k: int = Query(default=10, ge=1, le=100),
+):
+    cleaned_query = query.strip()
+    if not cleaned_query:
+        raise HTTPException(status_code=400, detail="Query must not be empty")
+
+    embedder_instance = get_embedder()
+    vector_db = get_vectordb()
+
+    query_embedding = embedder_instance.embed(cleaned_query)
+    if not query_embedding:
+        raise HTTPException(status_code=500, detail="Failed to embed query")
+
+    rerank_candidate_count = 20
+
+    try:
+        retrieval = vector_db.query_embeddings(
+            query_embeddings=[query_embedding],
+            n_results=rerank_candidate_count,
+            include=["distances"],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
+
+    raw_ids = retrieval.get("ids", [[]])
+    raw_distances = retrieval.get("distances", [[]])
+    ranked_ids = raw_ids[0] if raw_ids else []
+    ranked_distances = raw_distances[0] if raw_distances else []
+
+    if not ranked_ids:
+        return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=[])
+
+    ordered_record_ids: list[int] = []
+    distance_by_record_id: dict[int, float | None] = {}
+    for idx, raw_record_id in enumerate(ranked_ids):
+        try:
+            record_id = int(raw_record_id)
+        except (TypeError, ValueError):
+            continue
+
+        if record_id in distance_by_record_id:
+            continue
+
+        distance_value = None
+        if idx < len(ranked_distances):
+            raw_distance = ranked_distances[idx]
+            if isinstance(raw_distance, int | float):
+                distance_value = float(raw_distance)
+
+        ordered_record_ids.append(record_id)
+        distance_by_record_id[record_id] = distance_value
+
+    if not ordered_record_ids:
+        return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=[])
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        placeholders = ",".join("?" for _ in ordered_record_ids)
+        cursor.execute(
+            f"""
+            SELECT id, data, natural_language_description, created_at, updated_at
+            FROM records
+            WHERE id IN ({placeholders})
+            """,
+            ordered_record_ids,
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    rows_by_id = {
+        row[0]: RetrievedRecordRow(
+            id=row[0],
+            data=parse_record_data(row[1]),
+            natural_language_description=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            distance=distance_by_record_id.get(row[0]),
+        )
+        for row in rows
+    }
+
+    # Build rerank candidates from the top vector-retrieved records only.
+    rerank_candidates: list[dict[str, Any]] = []
+    for record_id in ordered_record_ids:
+        if record_id not in rows_by_id:
+            continue
+
+        record = rows_by_id[record_id]
+        candidate_text = (
+            record.natural_language_description
+            if record.natural_language_description
+            else json.dumps(record.data)
+        )
+        rerank_candidates.append({"id": str(record_id), "text": candidate_text})
+
+    reranker_instance = get_reranker()
+    try:
+        reranked = reranker_instance.rerank(cleaned_query, rerank_candidates)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Reranking failed: {str(e)}")
+
+    reranked_ids: list[int] = []
+    rerank_score_by_record_id: dict[int, float | None] = {}
+    for item in reranked:
+        raw_id = item.get("id")
+        if not isinstance(raw_id, str | int):
+            continue
+        try:
+            record_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+
+        if record_id not in rows_by_id or record_id in rerank_score_by_record_id:
+            continue
+
+        raw_score = item.get("score")
+        score_value = float(raw_score) if isinstance(raw_score, int | float) else None
+
+        reranked_ids.append(record_id)
+        rerank_score_by_record_id[record_id] = score_value
+
+    if not reranked_ids:
+        reranked_ids = [record_id for record_id in ordered_record_ids if record_id in rows_by_id]
+
+    limited_ids = reranked_ids[:top_k]
+    ordered_rows = []
+    for record_id in limited_ids:
+        row = rows_by_id[record_id]
+        row.rerank_score = rerank_score_by_record_id.get(record_id)
+        ordered_rows.append(row)
+
+    return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=ordered_rows)
+
+
 @app.post("/reset-database")
 async def reset_database():
     conn = sqlite3.connect(DB_PATH)
@@ -554,6 +709,13 @@ def get_embedder() -> EmbeddingService:
         raise RuntimeError("Embedding service was not initialized during startup")
 
     return embedder
+
+
+def get_reranker() -> FlashRankService:
+    if reranker is None:
+        raise RuntimeError("Reranker was not initialized during startup")
+
+    return reranker
 
 
 @app.post("/generate")
