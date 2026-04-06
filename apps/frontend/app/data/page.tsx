@@ -215,7 +215,7 @@ export default function DataPage() {
                     applySearch()
                   }
                 }}
-                placeholder="Semantic search (uses Chroma embeddings retrieval)"
+                placeholder="Search"
                 aria-label="Semantic search query"
               />
               <div className="flex gap-2">
