@@ -2,6 +2,7 @@ import difflib
 import io
 import json
 import sqlite3
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -559,14 +560,34 @@ def get_embedder() -> EmbeddingService:
 async def generate_response_endpoint(
     request: GenerateRequest, llm_instance: GemmaLLM = Depends(get_llm)
 ):
+    end_of_stream = object()
+
+    def next_token_or_end(token_iterator):
+        try:
+            return next(token_iterator)
+        except StopIteration:
+            return end_of_stream
+
     async def generate_stream():
         try:
-            for token in llm_instance.generate_response(
-                request.messages, request.max_tokens, stream=True
-            ):
-                yield f'data: {{"token": "{token.replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")}"}}\n\n'
+            token_iterator = llm_instance.generate_response(
+                request.messages,
+                request.max_tokens,
+                stream=True,
+            )
+
+            while True:
+                # Pull the next token off-thread so event loop remains responsive.
+                token = await asyncio.to_thread(next_token_or_end, token_iterator)
+                if token is end_of_stream:
+                    break
+
+                payload = json.dumps({"token": token})
+                yield f"data: {payload}\n\n"
+
             yield "data: [DONE]\n\n"
         except Exception as e:
-            yield f'data: {{"error": "{str(e).replace('"', '\\"')}"}}\n\n'
+            payload = json.dumps({"error": str(e)})
+            yield f"data: {payload}\n\n"
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
