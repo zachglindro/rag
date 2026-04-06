@@ -11,7 +11,7 @@ from transformers import (
 
 
 class QwenLLM:
-    def __init__(self, model_path: str | None = None, enable_thinking: bool = False):
+    def __init__(self, model_path: str | None = None, enable_thinking: bool = True):
         default_model_path = (
             Path(__file__).resolve().parents[3] / "models" / "qwen3-0.6b"
         )
