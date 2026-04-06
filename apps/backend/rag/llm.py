@@ -3,17 +3,16 @@ from pathlib import Path
 import torch
 from typing import Any
 from transformers import (
-    AutoConfig,
     AutoModelForCausalLM,
-    AutoTokenizer,
+    AutoProcessor,
     TextIteratorStreamer,
 )
 
 
-class QwenLLM:
-    def __init__(self, model_path: str | None = None, enable_thinking: bool = True):
+class GemmaLLM:
+    def __init__(self, model_path: str | None = None, enable_thinking: bool = False):
         default_model_path = (
-            Path(__file__).resolve().parents[3] / "models" / "qwen3-0.6b"
+            Path(__file__).resolve().parents[3] / "models" / "gemma-4-E2B-it"
         )
         resolved_model_path = (
             Path(model_path).expanduser().resolve()
@@ -26,14 +25,12 @@ class QwenLLM:
 
         model_path = str(resolved_model_path)
 
-        config = AutoConfig.from_pretrained(model_path)
-        config.tie_word_embeddings = False
-
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.processor = AutoProcessor.from_pretrained(model_path)
+        # AutoProcessor wraps the tokenizer needed for text streaming.
+        self.tokenizer = getattr(self.processor, "tokenizer", self.processor)
         self.model: Any = AutoModelForCausalLM.from_pretrained(
             model_path,
-            config=config,
-            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            torch_dtype="auto",
             device_map="auto",
         )
         self.enable_thinking = enable_thinking
@@ -59,14 +56,21 @@ Key guidelines:
         if not messages or messages[0].get("role") != "system":
             messages = [{"role": "system", "content": system_prompt}] + messages
 
-        text = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=self.enable_thinking,
-        )
+        try:
+            text = self.processor.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=self.enable_thinking,
+            )
+        except TypeError:
+            text = self.processor.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
 
-        inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
+        inputs = self.processor(text=text, return_tensors="pt").to(self.model.device)
 
         if stream:
             # For streaming, use TextIteratorStreamer to yield tokens
@@ -112,25 +116,28 @@ Key guidelines:
                     pad_token_id=self.tokenizer.eos_token_id,
                 )
 
-            # Decode and extract content (handle thinking if enabled)
-            full_output = self.tokenizer.decode(
-                outputs[0][len(inputs.input_ids[0]) :], skip_special_tokens=True
+            input_len = inputs["input_ids"].shape[-1]
+            response = self.processor.decode(
+                outputs[0][input_len:], skip_special_tokens=False
             )
 
-            if isinstance(full_output, list):
-                full_output = " ".join(full_output)
+            parse_response = getattr(self.processor, "parse_response", None)
+            if callable(parse_response):
+                parsed = parse_response(response)
+                if isinstance(parsed, dict):
+                    answer = parsed.get("response") or parsed.get("text")
+                    if isinstance(answer, str) and answer.strip():
+                        return answer.strip()
 
-            if self.enable_thinking and "<think>" in full_output:
-                # Split thinking and final answer
-                parts = full_output.split("</think>")
-                thinking = parts[0].replace("<think>", "").strip()
-                answer = parts[1].strip() if len(parts) > 1 else ""
-                return f"Thinking: {thinking}\n\nAnswer: {answer}"
-            return full_output.strip()
+            return response.strip()
+
+
+# Backward-compatible alias for existing imports/usages.
+QwenLLM = GemmaLLM
 
 
 if __name__ == "__main__":
-    llm = QwenLLM(enable_thinking=False)
+    llm = GemmaLLM(enable_thinking=False)
     messages = [{"role": "user", "content": "List 2 traits ideal to have in crops."}]
     response = llm.generate_response(messages, stream=True)
     full_response = "".join(response)
