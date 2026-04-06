@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from preprocessing.description_builder import build_natural_language_description
 from pydantic import BaseModel
 from rag.embedding import EmbeddingService
-from rag.llm import QwenLLM
+from rag.llm import GemmaLLM
 from rag.vectordb import ChromaVectorDB
 
 DB_PATH = Path(__file__).parent / "db.sqlite3"
@@ -28,7 +28,7 @@ embedder = None  # Will be set in lifespan
 async def lifespan(app: FastAPI):
     initialize_database(DB_PATH)
     global llm
-    llm = QwenLLM()
+    llm = GemmaLLM()
     global vectordb
     vectordb = ChromaVectorDB()
     global embedder
@@ -534,7 +534,7 @@ async def reset_database():
         conn.close()
 
 
-def get_llm() -> QwenLLM:
+def get_llm() -> GemmaLLM:
     if llm is None:
         raise RuntimeError("LLM was not initialized during startup")
 
@@ -557,7 +557,7 @@ def get_embedder() -> EmbeddingService:
 
 @app.post("/generate")
 async def generate_response_endpoint(
-    request: GenerateRequest, llm_instance: QwenLLM = Depends(get_llm)
+    request: GenerateRequest, llm_instance: GemmaLLM = Depends(get_llm)
 ):
     async def generate_stream():
         try:
