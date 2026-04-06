@@ -18,6 +18,7 @@ type ChatMessage = {
   role: MessageRole
   content: string
   thinking?: string
+  thinkingComplete?: boolean
 }
 
 function createMessage(role: MessageRole, content: string): ChatMessage {
@@ -28,9 +29,22 @@ function createMessage(role: MessageRole, content: string): ChatMessage {
   }
 }
 
+const LoadingDots = () => (
+  <span className="inline-flex space-x-0.5">
+    <span className="animate-pulse">.</span>
+    <span className="animate-pulse" style={{ animationDelay: "0.2s" }}>
+      .
+    </span>
+    <span className="animate-pulse" style={{ animationDelay: "0.4s" }}>
+      .
+    </span>
+  </span>
+)
+
 function parseThinking(content: string): {
   thinking: string | null
   answer: string
+  thinkingComplete: boolean
 } {
   const thinkStart = content.indexOf("<think>")
   const thinkEnd = content.indexOf("</think>")
@@ -39,16 +53,16 @@ function parseThinking(content: string): {
     const thinking = content.substring(thinkStart + 7, thinkEnd).trim()
     const answer =
       `${content.substring(0, thinkStart)}${content.substring(thinkEnd + 8)}`.trim()
-    return { thinking, answer }
+    return { thinking, answer, thinkingComplete: true }
   }
 
   if (thinkStart !== -1) {
     const thinking = content.substring(thinkStart + 7).trim()
     const answer = content.substring(0, thinkStart).trim()
-    return { thinking, answer }
+    return { thinking, answer, thinkingComplete: false }
   }
 
-  return { thinking: null, answer: content }
+  return { thinking: null, answer: content, thinkingComplete: false }
 }
 
 const markdownComponents = {
@@ -244,7 +258,7 @@ export default function Page() {
                     throw new Error(parsed.error)
                   } else if (parsed.token) {
                     accumulatedContent += parsed.token
-                    const { thinking, answer } =
+                    const { thinking, answer, thinkingComplete } =
                       parseThinking(accumulatedContent)
                     setMessages((prev) =>
                       prev.map((msg) =>
@@ -253,6 +267,9 @@ export default function Page() {
                               ...msg,
                               content: answer,
                               thinking: thinking || undefined,
+                              thinkingComplete: thinking
+                                ? thinkingComplete
+                                : undefined,
                             }
                           : msg
                       )
@@ -262,7 +279,7 @@ export default function Page() {
                   // If parsing fails, treat as plain text (fallback)
                   if (!dataStr.startsWith("[ERROR]")) {
                     accumulatedContent += dataStr
-                    const { thinking, answer } =
+                    const { thinking, answer, thinkingComplete } =
                       parseThinking(accumulatedContent)
                     setMessages((prev) =>
                       prev.map((msg) =>
@@ -271,6 +288,9 @@ export default function Page() {
                               ...msg,
                               content: answer,
                               thinking: thinking || undefined,
+                              thinkingComplete: thinking
+                                ? thinkingComplete
+                                : undefined,
                             }
                           : msg
                       )
@@ -286,7 +306,7 @@ export default function Page() {
       }
 
       // Finalize the message
-      const { thinking, answer } = parseThinking(
+      const { thinking, answer, thinkingComplete } = parseThinking(
         accumulatedContent.trim() || "I could not generate a response."
       )
       setMessages((prev) =>
@@ -296,6 +316,7 @@ export default function Page() {
                 ...msg,
                 content: answer,
                 thinking: thinking || undefined,
+                thinkingComplete: thinking ? thinkingComplete : undefined,
               }
             : msg
         )
@@ -443,7 +464,12 @@ export default function Page() {
                                     <span className="transition-transform group-open:rotate-90">
                                       ▶
                                     </span>
-                                    Thinking process
+                                    {message.thinkingComplete
+                                      ? "Thought process"
+                                      : "Thinking"}
+                                    {!message.thinkingComplete && (
+                                      <LoadingDots />
+                                    )}
                                   </summary>
                                   <div className="mt-2 rounded-md border-l-2 border-muted bg-muted/50 p-3 text-sm text-muted-foreground">
                                     {message.thinking}
