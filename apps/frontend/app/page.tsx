@@ -17,6 +17,7 @@ type ChatMessage = {
   id: string
   role: MessageRole
   content: string
+  thinking?: string
 }
 
 function createMessage(role: MessageRole, content: string): ChatMessage {
@@ -25,6 +26,29 @@ function createMessage(role: MessageRole, content: string): ChatMessage {
     role,
     content,
   }
+}
+
+function parseThinking(content: string): {
+  thinking: string | null
+  answer: string
+} {
+  const thinkStart = content.indexOf("<think>")
+  const thinkEnd = content.indexOf("</think>")
+
+  if (thinkStart !== -1 && thinkEnd !== -1 && thinkEnd > thinkStart) {
+    const thinking = content.substring(thinkStart + 7, thinkEnd).trim()
+    const answer =
+      `${content.substring(0, thinkStart)}${content.substring(thinkEnd + 8)}`.trim()
+    return { thinking, answer }
+  }
+
+  if (thinkStart !== -1) {
+    const thinking = content.substring(thinkStart + 7).trim()
+    const answer = content.substring(0, thinkStart).trim()
+    return { thinking, answer }
+  }
+
+  return { thinking: null, answer: content }
 }
 
 const markdownComponents = {
@@ -220,10 +244,16 @@ export default function Page() {
                     throw new Error(parsed.error)
                   } else if (parsed.token) {
                     accumulatedContent += parsed.token
+                    const { thinking, answer } =
+                      parseThinking(accumulatedContent)
                     setMessages((prev) =>
                       prev.map((msg) =>
                         msg.id === assistantMessage.id
-                          ? { ...msg, content: accumulatedContent }
+                          ? {
+                              ...msg,
+                              content: answer,
+                              thinking: thinking || undefined,
+                            }
                           : msg
                       )
                     )
@@ -232,10 +262,16 @@ export default function Page() {
                   // If parsing fails, treat as plain text (fallback)
                   if (!dataStr.startsWith("[ERROR]")) {
                     accumulatedContent += dataStr
+                    const { thinking, answer } =
+                      parseThinking(accumulatedContent)
                     setMessages((prev) =>
                       prev.map((msg) =>
                         msg.id === assistantMessage.id
-                          ? { ...msg, content: accumulatedContent }
+                          ? {
+                              ...msg,
+                              content: answer,
+                              thinking: thinking || undefined,
+                            }
                           : msg
                       )
                     )
@@ -250,14 +286,16 @@ export default function Page() {
       }
 
       // Finalize the message
+      const { thinking, answer } = parseThinking(
+        accumulatedContent.trim() || "I could not generate a response."
+      )
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessage.id
             ? {
                 ...msg,
-                content:
-                  accumulatedContent.trim() ||
-                  "I could not generate a response.",
+                content: answer,
+                thinking: thinking || undefined,
               }
             : msg
         )
@@ -369,7 +407,8 @@ export default function Page() {
                       !isUser &&
                       isLoading &&
                       index === messages.length - 1 &&
-                      !message.content.trim()
+                      !message.content.trim() &&
+                      !message.thinking?.trim()
 
                     return (
                       <div
@@ -397,9 +436,24 @@ export default function Page() {
                           ) : isUser ? (
                             message.content
                           ) : (
-                            <ReactMarkdown components={markdownComponents}>
-                              {message.content}
-                            </ReactMarkdown>
+                            <div className="space-y-3">
+                              {message.thinking && (
+                                <details className="group">
+                                  <summary className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                                    <span className="transition-transform group-open:rotate-90">
+                                      ▶
+                                    </span>
+                                    Thinking process
+                                  </summary>
+                                  <div className="mt-2 rounded-md border-l-2 border-muted bg-muted/50 p-3 text-sm text-muted-foreground">
+                                    {message.thinking}
+                                  </div>
+                                </details>
+                              )}
+                              <ReactMarkdown components={markdownComponents}>
+                                {message.content}
+                              </ReactMarkdown>
+                            </div>
                           )}
                         </div>
 
