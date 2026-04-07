@@ -45,7 +45,7 @@ MODEL_LABELS = {
     "gemma-4-e2b-it": "Gemma 4 (Slowest)",
     "qwen3-0.6b": "Qwen 3 (Fast)",
     "qwen3.5-0.8b": "Qwen 3.5 (Slow)",
-    "openrouter-free": "OpenRouter Free (Online)",
+    "openrouter-free": "OpenRouter",
 }
 
 # Cache of loaded LLM instances
