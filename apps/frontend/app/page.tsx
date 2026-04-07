@@ -13,6 +13,22 @@ const BACKEND_URL = "http://localhost:8000"
 const GENERATE_URL = `${BACKEND_URL}/generate`
 const SEARCH_RECORDS_URL = `${BACKEND_URL}/semantic-search/records`
 const RAG_TOP_K = 5
+const ROUTER_MAX_TOKENS = 80
+const BASE_RESPONSE_MAX_TOKENS = 512
+const RETRIEVAL_RESPONSE_MAX_TOKENS = 320
+const RAG_RECORD_TEXT_MAX_CHARS = 420
+const RAG_CONTEXT_MAX_CHARS = 3200
+
+const TOOL_ROUTER_SYSTEM_PROMPT = [
+  "You are a tool-routing assistant.",
+  "Always use search_database for any question that requires looking up or retrieving data from the inventory, such as queries about records, traits, comparisons, filtering, counts, or specific data points.",
+  "Only use 'none' for pure conversational responses like greetings, thanks, or general chit-chat that don't involve data retrieval.",
+  "If in doubt, use search_database.",
+  "Output ONLY valid JSON with one of these shapes:",
+  '{"tool":"none"}',
+  '{"tool":"search_database","query":"<optimized semantic search query>"}',
+  "No markdown. No extra text.",
+].join("\n")
 
 type MessageRole = "user" | "assistant"
 
@@ -24,6 +40,7 @@ type ChatMessage = {
   thinkingComplete?: boolean
   retrievedRecords?: RetrievedRecord[]
   retrievalComplete?: boolean
+  retrievalQuery?: string
 }
 
 type RetrievedRecord = {
@@ -45,6 +62,15 @@ type RagRetrievalResult = {
   records: RetrievedRecord[]
   completed: boolean
 }
+
+type ToolDecision =
+  | {
+      tool: "none"
+    }
+  | {
+      tool: "search_database"
+      query: string
+    }
 
 function createMessage(role: MessageRole, content: string): ChatMessage {
   return {
@@ -93,10 +119,16 @@ function parseThinking(content: string): {
 function formatRagRecord(record: RetrievedRecord, index: number): string {
   const description = record.natural_language_description?.trim()
   const serializedData = JSON.stringify(record.data)
+  const preferredText =
+    description && description.length > 0 ? description : serializedData
+  const clippedText =
+    preferredText.length > RAG_RECORD_TEXT_MAX_CHARS
+      ? `${preferredText.slice(0, RAG_RECORD_TEXT_MAX_CHARS)}…`
+      : preferredText
 
   return [
     `Record ${index + 1} (id=${record.id})`,
-    description ? `Description: ${description}` : `Data: ${serializedData}`,
+    `Description: ${clippedText}`,
   ].join("\n")
 }
 
@@ -141,6 +173,170 @@ function getRecordTableColumns(records: RetrievedRecord[]): string[] {
   return Array.from(keySet)
 }
 
+function extractFirstJsonObject(text: string): string | null {
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidate = fencedMatch?.[1]?.trim() ?? text.trim()
+  const firstBrace = candidate.indexOf("{")
+  const lastBrace = candidate.lastIndexOf("}")
+
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return null
+  }
+
+  return candidate.slice(firstBrace, lastBrace + 1)
+}
+
+function parseToolDecision(raw: string): ToolDecision {
+  const jsonBlock = extractFirstJsonObject(raw)
+  if (!jsonBlock) {
+    return /search_database/i.test(raw)
+      ? { tool: "search_database", query: "" }
+      : { tool: "none" }
+  }
+
+  try {
+    const parsed = JSON.parse(jsonBlock) as {
+      tool?: unknown
+      query?: unknown
+    }
+    if (parsed.tool === "search_database") {
+      return {
+        tool: "search_database",
+        query: typeof parsed.query === "string" ? parsed.query.trim() : "",
+      }
+    }
+  } catch {
+    return /search_database/i.test(raw)
+      ? { tool: "search_database", query: "" }
+      : { tool: "none" }
+  }
+
+  return { tool: "none" }
+}
+
+async function streamGenerateTokens(
+  requestMessages: Array<{ role: string; content: string }>,
+  maxTokens: number,
+  onToken?: (token: string) => void
+): Promise<string> {
+  const response = await fetch(GENERATE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messages: requestMessages,
+      max_tokens: maxTokens,
+    }),
+  })
+
+  if (!response.ok) {
+    let detail = "Unable to generate a response right now."
+    try {
+      const data = (await response.json()) as { detail?: string }
+      if (data.detail) {
+        detail = data.detail
+      }
+    } catch {
+      // Keep the default error message when response body is not JSON.
+    }
+    throw new Error(detail)
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    return ""
+  }
+
+  const decoder = new TextDecoder()
+  let sseBuffer = ""
+  let accumulatedContent = ""
+
+  const processEventData = (dataStr: string) => {
+    if (dataStr === "[DONE]") {
+      return
+    }
+
+    let parsed: { token?: unknown; error?: unknown } | null = null
+    try {
+      parsed = JSON.parse(dataStr) as {
+        token?: unknown
+        error?: unknown
+      }
+    } catch {
+      parsed = null
+    }
+
+    if (parsed) {
+      if (typeof parsed.error === "string" && parsed.error.trim()) {
+        throw new Error(parsed.error)
+      }
+
+      if (typeof parsed.token === "string") {
+        accumulatedContent += parsed.token
+        onToken?.(parsed.token)
+      }
+      return
+    }
+
+    if (dataStr.startsWith("[ERROR]")) {
+      throw new Error(dataStr.slice(8))
+    }
+
+    accumulatedContent += dataStr
+    onToken?.(dataStr)
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    sseBuffer += decoder.decode(value, { stream: !done })
+
+    let separatorIndex = sseBuffer.indexOf("\n\n")
+    while (separatorIndex !== -1) {
+      const eventBlock = sseBuffer.slice(0, separatorIndex)
+      sseBuffer = sseBuffer.slice(separatorIndex + 2)
+
+      const dataLines = eventBlock
+        .split("\n")
+        .filter((line) => line.startsWith("data: "))
+        .map((line) => line.slice(6))
+
+      if (dataLines.length > 0) {
+        processEventData(dataLines.join("\n"))
+      }
+
+      separatorIndex = sseBuffer.indexOf("\n\n")
+    }
+
+    if (done) {
+      break
+    }
+  }
+
+  return accumulatedContent
+}
+
+async function decideRetrievalToolUse(
+  conversationMessages: Array<{ role: string; content: string }>
+): Promise<ToolDecision> {
+  const recentMessages = conversationMessages.slice(-8)
+  const routingMessages = [
+    { role: "system", content: TOOL_ROUTER_SYSTEM_PROMPT },
+    ...recentMessages,
+  ]
+
+  try {
+    const decisionRaw = await streamGenerateTokens(
+      routingMessages,
+      ROUTER_MAX_TOKENS
+    )
+    return parseToolDecision(decisionRaw)
+  } catch {
+    // Keep chat responsive if routing call fails.
+    return { tool: "none" }
+  }
+}
+
 async function retrieveRagContext(query: string): Promise<RagRetrievalResult> {
   try {
     const response = await fetch(
@@ -160,12 +356,17 @@ async function retrieveRagContext(query: string): Promise<RagRetrievalResult> {
       .map((record, index) => formatRagRecord(record, index))
       .join("\n\n")
 
-    const context = [
+    const fullContext = [
       "Use the retrieved inventory records below as grounding context.",
       "If the context does not contain the answer, clearly say so and avoid guessing.",
       "",
       formattedRecords,
     ].join("\n")
+
+    const context =
+      fullContext.length > RAG_CONTEXT_MAX_CHARS
+        ? `${fullContext.slice(0, RAG_CONTEXT_MAX_CHARS)}\n\n[Context truncated for speed.]`
+        : fullContext
 
     return { context, records: data.records, completed: true }
   } catch {
@@ -320,7 +521,17 @@ export default function Page() {
         content: message.content,
       }))
 
-      const retrieval = await retrieveRagContext(nextContent)
+      const toolDecision = await decideRetrievalToolUse(conversationMessages)
+      const shouldRetrieve = toolDecision.tool === "search_database"
+      const retrievalQuery =
+        shouldRetrieve && toolDecision.query.trim().length > 0
+          ? toolDecision.query
+          : nextContent
+
+      const retrieval = shouldRetrieve
+        ? await retrieveRagContext(retrievalQuery)
+        : { context: null, records: [], completed: true }
+
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessage.id
@@ -328,6 +539,7 @@ export default function Page() {
                 ...msg,
                 retrievedRecords: retrieval.records,
                 retrievalComplete: retrieval.completed,
+                retrievalQuery: shouldRetrieve ? retrievalQuery : undefined,
               }
             : msg
         )
@@ -351,105 +563,38 @@ export default function Page() {
             })
           : conversationMessages
 
-      const response = await fetch(GENERATE_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: requestMessages,
-          max_tokens: 1024,
-        }),
-      })
+      let streamedContent = ""
+      const responseMaxTokens = shouldRetrieve
+        ? RETRIEVAL_RESPONSE_MAX_TOKENS
+        : BASE_RESPONSE_MAX_TOKENS
 
-      if (!response.ok) {
-        let detail = "Unable to generate a response right now."
-        try {
-          const data = (await response.json()) as { detail?: string }
-          if (data.detail) {
-            detail = data.detail
-          }
-        } catch {
-          // Keep the default error message when response body is not JSON.
-        }
-        throw new Error(detail)
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      let accumulatedContent = ""
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value, { stream: true })
-          const lines = chunk.split("\n")
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const dataStr = line.slice(6)
-              if (dataStr === "[DONE]") {
-                // Stream ended
-                break
-              } else {
-                try {
-                  const parsed = JSON.parse(dataStr)
-                  if (parsed.error) {
-                    throw new Error(parsed.error)
-                  } else if (parsed.token) {
-                    accumulatedContent += parsed.token
-                    const { thinking, answer, thinkingComplete } =
-                      parseThinking(accumulatedContent)
-                    setMessages((prev) =>
-                      prev.map((msg) =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: answer,
-                              thinking: thinking || undefined,
-                              thinkingComplete: thinking
-                                ? thinkingComplete
-                                : undefined,
-                            }
-                          : msg
-                      )
-                    )
+      const accumulatedContent = await streamGenerateTokens(
+        requestMessages,
+        responseMaxTokens,
+        (token) => {
+          streamedContent += token
+          const { thinking, answer, thinkingComplete } =
+            parseThinking(streamedContent)
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessage.id
+                ? {
+                    ...msg,
+                    content: answer,
+                    thinking: thinking || undefined,
+                    thinkingComplete: thinking ? thinkingComplete : undefined,
                   }
-                } catch {
-                  // If parsing fails, treat as plain text (fallback)
-                  if (!dataStr.startsWith("[ERROR]")) {
-                    accumulatedContent += dataStr
-                    const { thinking, answer, thinkingComplete } =
-                      parseThinking(accumulatedContent)
-                    setMessages((prev) =>
-                      prev.map((msg) =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: answer,
-                              thinking: thinking || undefined,
-                              thinkingComplete: thinking
-                                ? thinkingComplete
-                                : undefined,
-                            }
-                          : msg
-                      )
-                    )
-                  } else {
-                    throw new Error(dataStr.slice(8))
-                  }
-                }
-              }
-            }
-          }
+                : msg
+            )
+          )
         }
-      }
+      )
 
       // Finalize the message
       const { thinking, answer, thinkingComplete } = parseThinking(
-        accumulatedContent.trim() || "I could not generate a response."
+        streamedContent.trim() ||
+          accumulatedContent.trim() ||
+          "I could not generate a response."
       )
       setMessages((prev) =>
         prev.map((msg) =>
@@ -612,6 +757,12 @@ export default function Page() {
                                   <div className="text-xs font-medium text-muted-foreground">
                                     Retrieved relevant records
                                   </div>
+                                  {message.retrievalQuery && (
+                                    <div className="text-xs text-muted-foreground">
+                                      Query: &quot;{message.retrievalQuery}
+                                      &quot;
+                                    </div>
+                                  )}
                                   <div className="max-h-72 overflow-auto rounded-md border">
                                     <table className="w-full min-w-[560px] border-collapse text-xs">
                                       <thead className="sticky top-0 bg-muted">
