@@ -37,7 +37,7 @@ MODEL_LABELS = {
 loaded_llms: dict[str, GemmaLLM] = {}
 
 # Active model ID (server-wide)
-active_model_id: str = "gemma-4-e2b-it"
+active_model_id: str = "qwen3-0.6b"
 
 vectordb = None  # Will be set in lifespan
 embedder = None  # Will be set in lifespan
