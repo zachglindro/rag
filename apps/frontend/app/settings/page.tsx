@@ -38,6 +38,8 @@ interface ModelSettingsResponse {
 
 export default function Settings() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
+  const [selectedModelToSwitch, setSelectedModelToSwitch] = useState<string>("")
   const [activeModel, setActiveModel] = useState<string>("")
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [isSwitching, setIsSwitching] = useState(false)
@@ -45,7 +47,6 @@ export default function Settings() {
   const selectedModel = availableModels.find(
     (model) => model.id === activeModel
   )
-  const isOnlineModelSelected = selectedModel?.source === "online"
 
   const fetchModelSettings = async () => {
     try {
@@ -62,6 +63,22 @@ export default function Settings() {
   useEffect(() => {
     fetchModelSettings()
   }, [])
+
+  const handleModelSelection = (modelId: string) => {
+    const model = availableModels.find((m) => m.id === modelId)
+    if (model?.source === "online") {
+      setSelectedModelToSwitch(modelId)
+      setIsConfirmDialogOpen(true)
+    } else {
+      handleSwitchModel(modelId)
+    }
+  }
+
+  const handleConfirmSwitch = () => {
+    handleSwitchModel(selectedModelToSwitch)
+    setIsConfirmDialogOpen(false)
+    setSelectedModelToSwitch("")
+  }
 
   const handleSwitchModel = async (modelId: string) => {
     setIsSwitching(true)
@@ -119,7 +136,7 @@ export default function Settings() {
               <div className="mt-4 flex items-center gap-2">
                 <Select
                   value={activeModel}
-                  onValueChange={handleSwitchModel}
+                  onValueChange={handleModelSelection}
                   disabled={isSwitching}
                 >
                   <SelectTrigger className="w-[180px]">
@@ -143,11 +160,28 @@ export default function Settings() {
                 {isSwitching && <Loader2 className="h-4 w-4 animate-spin" />}
                 {switchSuccess && <Check className="h-4 w-4 text-green-500" />}
               </div>
-              {isOnlineModelSelected && (
-                <p className="mt-2 text-sm text-amber-700">
-                  This sends your data to an online model.
-                </p>
-              )}
+
+              <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Switch to Online Model</DialogTitle>
+                    <DialogDescription>
+                      This will send your data to an online model. Are you sure you want to proceed?
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsConfirmDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={handleConfirmSwitch}>
+                      Confirm
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
 
             <div>
