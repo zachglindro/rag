@@ -27,6 +27,7 @@ interface ModelInfo {
   id: string
   label: string
   path: string
+  source: "local" | "online"
   loaded: boolean
 }
 
@@ -41,6 +42,10 @@ export default function Settings() {
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [isSwitching, setIsSwitching] = useState(false)
   const [switchSuccess, setSwitchSuccess] = useState(false)
+  const selectedModel = availableModels.find(
+    (model) => model.id === activeModel
+  )
+  const isOnlineModelSelected = selectedModel?.source === "online"
 
   const fetchModelSettings = async () => {
     try {
@@ -123,7 +128,14 @@ export default function Settings() {
                   <SelectContent>
                     {availableModels.map((model) => (
                       <SelectItem key={model.id} value={model.id}>
-                        {model.label}
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span>{model.label}</span>
+                          {model.source === "online" && (
+                            <span className="text-xs font-medium text-amber-600">
+                              Online
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -131,6 +143,11 @@ export default function Settings() {
                 {isSwitching && <Loader2 className="h-4 w-4 animate-spin" />}
                 {switchSuccess && <Check className="h-4 w-4 text-green-500" />}
               </div>
+              {isOnlineModelSelected && (
+                <p className="mt-2 text-sm text-amber-700">
+                  This sends your data to an online model.
+                </p>
+              )}
             </div>
 
             <div>
