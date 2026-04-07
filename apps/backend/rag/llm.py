@@ -1,6 +1,9 @@
 from pathlib import Path
 import inspect
+import json
+import os
 
+import httpx
 import torch
 from typing import Any
 from transformers import (
@@ -156,6 +159,154 @@ Key guidelines:
                         return answer.strip()
 
             return response.strip()
+
+
+class OpenRouterFreeLLM:
+    def __init__(
+        self,
+        model_name: str = "openrouter/free",
+        api_key: str | None = None,
+    ):
+        key_source = api_key if api_key is not None else os.getenv("OPENROUTER_API_KEY")
+        if key_source is None:
+            key_source = ""
+
+        resolved_api_key = key_source.strip()
+        if not resolved_api_key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY is not set. Configure it before selecting the online model."
+            )
+
+        self.api_key = resolved_api_key
+        self.model_name = model_name
+        site_url = os.getenv("OPENROUTER_SITE_URL")
+        site_name = os.getenv("OPENROUTER_SITE_NAME")
+        self.site_url = (site_url or "").strip()
+        self.site_name = (site_name or "").strip()
+        self.client = httpx.Client(
+            base_url="https://openrouter.ai/api/v1",
+            timeout=httpx.Timeout(120.0),
+        )
+
+    def cleanup(self):
+        self.client.close()
+
+    def _request_headers(self) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        if self.site_url:
+            headers["HTTP-Referer"] = self.site_url
+
+        if self.site_name:
+            headers["X-Title"] = self.site_name
+
+        return headers
+
+    def generate_response(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int = 1024,
+        stream: bool = False,
+    ):
+        system_prompt = """You are an AI assistant for the Institute of Plant Breeding, specialized in maize phenotypic trait data and parental line selection for plant breeding research. Your primary role is to help researchers, lab technicians, and breeders efficiently query and analyze phenotypic data using natural language, overcoming the limitations of traditional keyword-based searches in spreadsheets. You understand concepts like semantic similarity, dense embeddings, and retrieval-augmented generation (RAG), and you draw from knowledge of maize traits such as plant height, kernel type, tassel color, lodging resistance, husk tightness, ear length, and disease observations.
+
+Key guidelines:
+
+- Respond in a clear, concise, and helpful manner. Use natural language to explain concepts, suggest queries, or provide insights based on typical maize breeding scenarios.
+- When users describe traits or queries (e.g., "varieties resistant to lodging with purple tassels"), interpret them semantically-consider synonyms, related terms, and conceptual meanings (e.g., "strong stems" for lodging resistance).
+- Provide factual, evidence-based information grounded in plant breeding principles. Avoid hallucinations; if uncertain, suggest consulting domain experts or additional data.
+- Assist with tasks like formulating natural language queries, explaining trait relationships, or simulating search results based on common maize data patterns (e.g., from synthetic datasets mirroring fields like Local Name, Kernel Type, Plant Height).
+- Promote efficiency: Help users transition from exact keyword matching to conceptual searches, and highlight how semantic tools can improve parental line selection.
+- Maintain a professional, supportive tone suitable for researchers with varying technical expertise."""
+
+        if not messages or messages[0].get("role") != "system":
+            messages = [{"role": "system", "content": system_prompt}] + messages
+
+        payload: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.7,
+        }
+
+        if stream:
+            payload["stream"] = True
+            with self.client.stream(
+                "POST",
+                "/chat/completions",
+                headers=self._request_headers(),
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    if not line.startswith("data:"):
+                        continue
+
+                    data_str = line[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+
+                    try:
+                        payload_obj = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+
+                    error_obj = payload_obj.get("error")
+                    if error_obj:
+                        raise RuntimeError(str(error_obj))
+
+                    choices = payload_obj.get("choices")
+                    if not isinstance(choices, list) or not choices:
+                        continue
+
+                    first_choice = choices[0]
+                    if not isinstance(first_choice, dict):
+                        continue
+
+                    delta = first_choice.get("delta")
+                    if not isinstance(delta, dict):
+                        continue
+
+                    content = delta.get("content")
+                    if isinstance(content, str) and content:
+                        yield content
+            return
+
+        response = self.client.post(
+            "/chat/completions",
+            headers=self._request_headers(),
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return ""
+
+        message = choices[0].get("message")
+        if not isinstance(message, dict):
+            return ""
+
+        content = message.get("content")
+        if isinstance(content, str):
+            return content.strip()
+
+        if isinstance(content, list):
+            text_chunks = []
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("type") == "text" and isinstance(item.get("text"), str):
+                    text_chunks.append(item["text"])
+            return "".join(text_chunks).strip()
+
+        return ""
 
 
 # Backward-compatible alias for existing imports/usages.

@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+
 import pandas as pd
 from db.init_db import initialize_database
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
@@ -14,27 +16,40 @@ from fastapi.responses import StreamingResponse
 from preprocessing.description_builder import build_natural_language_description
 from pydantic import BaseModel
 from rag.embedding import EmbeddingService
-from rag.llm import GemmaLLM
+from rag.llm import GemmaLLM, OpenRouterFreeLLM
 from rag.reranker import FlashRankService
 from rag.vectordb import ChromaVectorDB
 
+load_dotenv()
+
 DB_PATH = Path(__file__).parent / "db.sqlite3"
 
-# Model registry: maps model IDs to local paths
-MODEL_REGISTRY = {
+# Local model registry: maps model IDs to local paths
+LOCAL_MODEL_REGISTRY = {
     "gemma-4-e2b-it": Path(__file__).resolve().parents[2] / "models" / "gemma-4-E2B-it",
     "qwen3-0.6b": Path(__file__).resolve().parents[2] / "models" / "Qwen3-0.6B",
     "qwen3.5-0.8b": Path(__file__).resolve().parents[2] / "models" / "qwen3.5-0.8b",
+}
+
+# Online model registry: maps model IDs to provider model names
+ONLINE_MODEL_REGISTRY = {
+    "openrouter-free": "openrouter/free",
+}
+
+MODEL_REGISTRY = {
+    **LOCAL_MODEL_REGISTRY,
+    **ONLINE_MODEL_REGISTRY,
 }
 
 MODEL_LABELS = {
     "gemma-4-e2b-it": "Gemma 4 (Slowest)",
     "qwen3-0.6b": "Qwen 3 (Fast)",
     "qwen3.5-0.8b": "Qwen 3.5 (Slow)",
+    "openrouter-free": "OpenRouter Free (Online)",
 }
 
 # Cache of loaded LLM instances
-loaded_llms: dict[str, GemmaLLM] = {}
+loaded_llms: dict[str, Any] = {}
 
 # Active model ID (server-wide)
 active_model_id: str = "qwen3-0.6b"
@@ -44,11 +59,23 @@ embedder = None  # Will be set in lifespan
 reranker = None  # Will be set in lifespan
 
 
+def is_online_model(model_id: str) -> bool:
+    return model_id in ONLINE_MODEL_REGISTRY
+
+
+def load_model(model_id: str):
+    if is_online_model(model_id):
+        provider_model_id = ONLINE_MODEL_REGISTRY[model_id]
+        return OpenRouterFreeLLM(model_name=provider_model_id)
+
+    return GemmaLLM(str(LOCAL_MODEL_REGISTRY[model_id]))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_database(DB_PATH)
     global loaded_llms
-    loaded_llms[active_model_id] = GemmaLLM(str(MODEL_REGISTRY[active_model_id]))
+    loaded_llms[active_model_id] = load_model(active_model_id)
     global vectordb
     vectordb = ChromaVectorDB()
     global embedder
@@ -153,6 +180,7 @@ class ModelInfo(BaseModel):
     id: str
     label: str
     path: str
+    source: str
     loaded: bool
 
 
@@ -729,14 +757,16 @@ async def reset_database():
 @app.get("/settings/model", response_model=ModelSettingsResponse)
 async def get_model_settings():
     available_models = []
-    for model_id, path in MODEL_REGISTRY.items():
+    for model_id, path_or_name in MODEL_REGISTRY.items():
         try:
             label = MODEL_LABELS.get(model_id, model_id.replace("-", " ").title())
+            source = "online" if is_online_model(model_id) else "local"
             available_models.append(
                 ModelInfo(
                     id=model_id,
                     label=label,
-                    path=str(path),
+                    path=str(path_or_name),
+                    source=source,
                     loaded=model_id in loaded_llms,
                 )
             )
@@ -754,20 +784,31 @@ async def switch_model(request: SwitchModelRequest):
     if request.model_id not in MODEL_REGISTRY:
         raise HTTPException(status_code=400, detail="Invalid model ID")
 
-    # If switching to a different model, unload the current one
-    if request.model_id != active_model_id and active_model_id in loaded_llms:
-        loaded_llms[active_model_id].cleanup()
-        del loaded_llms[active_model_id]
+    # If selecting an online model, unload all local models for performance.
+    if is_online_model(request.model_id):
+        for model_id in list(loaded_llms.keys()):
+            if model_id in LOCAL_MODEL_REGISTRY:
+                loaded_llms[model_id].cleanup()
+                del loaded_llms[model_id]
+    # If selecting a local model, keep only that local model loaded.
+    elif request.model_id != active_model_id:
+        for model_id in list(loaded_llms.keys()):
+            if model_id in LOCAL_MODEL_REGISTRY and model_id != request.model_id:
+                loaded_llms[model_id].cleanup()
+                del loaded_llms[model_id]
 
     # Lazy load the new model if not already loaded
     if request.model_id not in loaded_llms:
-        loaded_llms[request.model_id] = GemmaLLM(str(MODEL_REGISTRY[request.model_id]))
+        try:
+            loaded_llms[request.model_id] = load_model(request.model_id)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     active_model_id = request.model_id
     return {"message": f"Switched to model {request.model_id}"}
 
 
-def get_llm() -> GemmaLLM:
+def get_llm() -> Any:
     if active_model_id not in loaded_llms:
         raise RuntimeError(f"Active model {active_model_id} is not loaded")
     return loaded_llms[active_model_id]
@@ -796,7 +837,7 @@ def get_reranker() -> FlashRankService:
 
 @app.post("/generate")
 async def generate_response_endpoint(
-    request: GenerateRequest, llm_instance: GemmaLLM = Depends(get_llm)
+    request: GenerateRequest, llm_instance: Any = Depends(get_llm)
 ):
     end_of_stream = object()
 
