@@ -19,9 +19,13 @@ const RETRIEVAL_RESPONSE_MAX_TOKENS = 320
 
 const TOOL_ROUTER_SYSTEM_PROMPT = [
   "You are a tool-routing assistant.",
-  "Always use search_database for any question that requires looking up or retrieving data from the inventory, such as queries about records, traits, comparisons, filtering, counts, or specific data points.",
-  "Only use 'none' for pure conversational responses like greetings, thanks, or general chit-chat that don't involve data retrieval.",
-  "If in doubt, use search_database.",
+  "Your primary goal is to decide whether to call search_database.",
+  "Use search_database by default for any user request that could depend on inventory/database facts.",
+  "This includes: questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset.",
+  "Also use search_database for follow-up questions that reference prior data (for example: 'which is best?', 'compare those', 'what about the first one?', 'why?').",
+  "Only use 'none' for purely social/meta conversation that clearly does not require dataset facts (for example: hello, thanks, rewrite this sentence, explain your process, or general non-database chit-chat).",
+  "Never choose 'none' just because the user phrasing is ambiguous. If there is any reasonable chance retrieval is needed, use search_database.",
+  "If you are unsure, use search_database.",
   "Output ONLY valid JSON with one of these shapes:",
   '{"tool":"none"}',
   '{"tool":"search_database","query":"<optimized semantic search query>"}',
@@ -283,6 +287,24 @@ async function streamGenerateTokens(
     onToken?.(dataStr)
   }
 
+  const processEventBlock = (eventBlock: string) => {
+    const normalizedBlock = eventBlock.replace(/\r/g, "")
+    const dataLines = normalizedBlock
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+
+    if (dataLines.length > 0) {
+      processEventData(dataLines.join("\n"))
+      return
+    }
+
+    const trimmed = normalizedBlock.trim()
+    if (trimmed) {
+      processEventData(trimmed)
+    }
+  }
+
   while (true) {
     const { done, value } = await reader.read()
     sseBuffer += decoder.decode(value, { stream: !done })
@@ -292,19 +314,16 @@ async function streamGenerateTokens(
       const eventBlock = sseBuffer.slice(0, separatorIndex)
       sseBuffer = sseBuffer.slice(separatorIndex + 2)
 
-      const dataLines = eventBlock
-        .split("\n")
-        .filter((line) => line.startsWith("data: "))
-        .map((line) => line.slice(6))
-
-      if (dataLines.length > 0) {
-        processEventData(dataLines.join("\n"))
-      }
+      processEventBlock(eventBlock)
 
       separatorIndex = sseBuffer.indexOf("\n\n")
     }
 
     if (done) {
+      // Some servers flush a final chunk without the SSE \n\n delimiter.
+      if (sseBuffer.trim()) {
+        processEventBlock(sseBuffer)
+      }
       break
     }
   }
@@ -317,6 +336,16 @@ async function decideRetrievalToolUse(
   signal?: AbortSignal,
   log?: (message: string) => void
 ): Promise<ToolDecision> {
+  const lastUserMessage = [...conversationMessages]
+    .reverse()
+    .find((message) => message.role === "user")?.content
+    ?.trim()
+
+  const fallbackSearchDecision: ToolDecision = {
+    tool: "search_database",
+    query: lastUserMessage && lastUserMessage.length > 0 ? lastUserMessage : "",
+  }
+
   const recentMessages = conversationMessages.slice(-8)
   const routingMessages = [
     { role: "system", content: TOOL_ROUTER_SYSTEM_PROMPT },
@@ -334,6 +363,12 @@ async function decideRetrievalToolUse(
       ROUTER_MAX_TOKENS,
       signal
     )
+
+    if (!decisionRaw.trim()) {
+      log?.("ROUTER OUTPUT TEXT: [empty response; fallback=search_database]")
+      return fallbackSearchDecision
+    }
+
     log?.(`ROUTER OUTPUT TEXT:\n${decisionRaw}`)
     return parseToolDecision(decisionRaw)
   } catch (error) {
@@ -341,8 +376,9 @@ async function decideRetrievalToolUse(
       throw error
     }
 
-    // Keep chat responsive if routing call fails.
-    return { tool: "none" }
+    // Prefer retrieval on router failures so data questions still use grounding.
+    log?.("ROUTER OUTPUT TEXT: [router error; fallback=search_database]")
+    return fallbackSearchDecision
   }
 }
 
