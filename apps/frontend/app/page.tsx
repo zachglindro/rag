@@ -16,8 +16,6 @@ const RAG_TOP_K = 5
 const ROUTER_MAX_TOKENS = 80
 const BASE_RESPONSE_MAX_TOKENS = 512
 const RETRIEVAL_RESPONSE_MAX_TOKENS = 320
-const RAG_RECORD_TEXT_MAX_CHARS = 420
-const RAG_CONTEXT_MAX_CHARS = 3200
 
 const TOOL_ROUTER_SYSTEM_PROMPT = [
   "You are a tool-routing assistant.",
@@ -121,14 +119,10 @@ function formatRagRecord(record: RetrievedRecord, index: number): string {
   const serializedData = JSON.stringify(record.data)
   const preferredText =
     description && description.length > 0 ? description : serializedData
-  const clippedText =
-    preferredText.length > RAG_RECORD_TEXT_MAX_CHARS
-      ? `${preferredText.slice(0, RAG_RECORD_TEXT_MAX_CHARS)}…`
-      : preferredText
 
   return [
     `Record ${index + 1} (id=${record.id})`,
-    `Description: ${clippedText}`,
+    `Description: ${preferredText}`,
   ].join("\n")
 }
 
@@ -320,7 +314,8 @@ async function streamGenerateTokens(
 
 async function decideRetrievalToolUse(
   conversationMessages: Array<{ role: string; content: string }>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  log?: (message: string) => void
 ): Promise<ToolDecision> {
   const recentMessages = conversationMessages.slice(-8)
   const routingMessages = [
@@ -328,12 +323,18 @@ async function decideRetrievalToolUse(
     ...recentMessages,
   ]
 
+  const inputText = routingMessages
+    .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
+    .join("\n\n")
+  log?.(`ROUTER INPUT TEXT:\n${inputText}`)
+
   try {
     const decisionRaw = await streamGenerateTokens(
       routingMessages,
       ROUTER_MAX_TOKENS,
       signal
     )
+    log?.(`ROUTER OUTPUT TEXT:\n${decisionRaw}`)
     return parseToolDecision(decisionRaw)
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -375,12 +376,7 @@ async function retrieveRagContext(
       formattedRecords,
     ].join("\n")
 
-    const context =
-      fullContext.length > RAG_CONTEXT_MAX_CHARS
-        ? `${fullContext.slice(0, RAG_CONTEXT_MAX_CHARS)}\n\n[Context truncated for speed.]`
-        : fullContext
-
-    return { context, records: data.records, completed: true }
+    return { context: fullContext, records: data.records, completed: true }
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error
@@ -463,6 +459,7 @@ export default function Page() {
   const requestSeqRef = useRef(0)
   const activeRequestIdRef = useRef<number | null>(null)
   const [textareaMaxHeight, setTextareaMaxHeight] = useState(220)
+  const [debugLogs, setDebugLogs] = useState<string[]>([])
 
   const stopGeneration = useCallback(() => {
     activeRequestIdRef.current = null
@@ -541,6 +538,11 @@ export default function Page() {
       return
     }
 
+    setDebugLogs((prev: string[]) => [
+      ...prev,
+      `=== NEW MESSAGE: ${nextContent} ===`,
+    ])
+
     const requestId = ++requestSeqRef.current
     const abortController = new AbortController()
     abortControllerRef.current = abortController
@@ -566,7 +568,8 @@ export default function Page() {
 
       const toolDecision = await decideRetrievalToolUse(
         conversationMessages,
-        abortController.signal
+        abortController.signal,
+        (log: string) => setDebugLogs((prev: string[]) => [...prev, log])
       )
 
       if (activeRequestIdRef.current !== requestId) {
@@ -618,6 +621,14 @@ export default function Page() {
             })
           : conversationMessages
 
+      const inputText = requestMessages
+        .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
+        .join("\n\n")
+      setDebugLogs((prev: string[]) => [
+        ...prev,
+        `GENERATION INPUT TEXT:\n${inputText}`,
+      ])
+
       const responseMaxTokens = shouldRetrieve
         ? RETRIEVAL_RESPONSE_MAX_TOKENS
         : BASE_RESPONSE_MAX_TOKENS
@@ -648,6 +659,11 @@ export default function Page() {
           )
         }
       )
+
+      setDebugLogs((prev: string[]) => [
+        ...prev,
+        `GENERATION OUTPUT TEXT:\n${accumulatedContent}`,
+      ])
 
       // Finalize the message
       if (activeRequestIdRef.current !== requestId) {
@@ -950,6 +966,17 @@ export default function Page() {
 
                   <div ref={messagesEndRef} />
                 </div>
+              </div>
+
+              <div className="px-4 py-4">
+                <details className="w-full">
+                  <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+                    Debug Logs
+                  </summary>
+                  <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap text-muted-foreground">
+                    {debugLogs.join("\n\n")}
+                  </pre>
+                </details>
               </div>
 
               <div className="sticky bottom-0 border-t bg-background/95 px-4 py-4 backdrop-blur sm:px-8">
