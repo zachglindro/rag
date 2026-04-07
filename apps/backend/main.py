@@ -28,9 +28,9 @@ MODEL_REGISTRY = {
 }
 
 MODEL_LABELS = {
-    "gemma-4-e2b-it": "Gemma-4-E2B-it",
-    "qwen3-0.6b": "Qwen3-0.6B",
-    "qwen3.5-0.8b": "Qwen3.5-0.8B",
+    "gemma-4-e2b-it": "Gemma 4 (Slowest)",
+    "qwen3-0.6b": "Qwen 3 (Fast)",
+    "qwen3.5-0.8b": "Qwen 3.5 (Slow)",
 }
 
 # Cache of loaded LLM instances
