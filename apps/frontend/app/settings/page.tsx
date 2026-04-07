@@ -44,9 +44,6 @@ export default function Settings() {
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [isSwitching, setIsSwitching] = useState(false)
   const [switchSuccess, setSwitchSuccess] = useState(false)
-  const selectedModel = availableModels.find(
-    (model) => model.id === activeModel
-  )
 
   const fetchModelSettings = async () => {
     try {
