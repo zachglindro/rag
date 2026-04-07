@@ -106,7 +106,7 @@ export default function Settings() {
                     onClick={() => handleSwitchModel(model.id)}
                     disabled={isSwitching}
                   >
-                    {model.label} {model.loaded ? "(Loaded)" : "(Not Loaded)"}
+                    {model.label}
                   </Button>
                 ))}
               </div>
