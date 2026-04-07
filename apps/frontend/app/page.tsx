@@ -614,7 +614,7 @@ export default function Page() {
                                   </div>
                                   <div className="max-h-72 overflow-auto rounded-md border">
                                     <table className="w-full min-w-[560px] border-collapse text-xs">
-                                      <thead className="sticky top-0 bg-muted/60">
+                                      <thead className="sticky top-0 bg-muted">
                                         <tr>
                                           <th className="border-b px-2 py-1.5 text-left font-medium">
                                             ID
