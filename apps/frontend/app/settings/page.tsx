@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { useState, useEffect } from "react"
+import { Loader2, Check } from "lucide-react"
 
 interface ModelInfo {
   id: string
@@ -39,6 +40,7 @@ export default function Settings() {
   const [activeModel, setActiveModel] = useState<string>("")
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [isSwitching, setIsSwitching] = useState(false)
+  const [switchSuccess, setSwitchSuccess] = useState(false)
 
   const fetchModelSettings = async () => {
     try {
@@ -58,6 +60,7 @@ export default function Settings() {
 
   const handleSwitchModel = async (modelId: string) => {
     setIsSwitching(true)
+    setSwitchSuccess(false) // Reset success state
     try {
       const response = await fetch("http://localhost:8000/settings/model", {
         method: "POST",
@@ -66,8 +69,11 @@ export default function Settings() {
       })
       if (!response.ok) throw new Error("Failed to switch model")
       setActiveModel(modelId)
+      setSwitchSuccess(true)
       const model = availableModels.find((m) => m.id === modelId)
       toast.success(`Switched to ${model?.label || modelId}`)
+      // Clear success indicator after 3 seconds
+      setTimeout(() => setSwitchSuccess(false), 3000)
     } catch {
       toast.error("Failed to switch model")
     } finally {
@@ -105,7 +111,7 @@ export default function Settings() {
               <p className="text-sm text-muted-foreground">
                 Choose the active language model for chat generation.
               </p>
-              <div className="mt-4">
+              <div className="mt-4 flex items-center gap-2">
                 <Select
                   value={activeModel}
                   onValueChange={handleSwitchModel}
@@ -122,6 +128,8 @@ export default function Settings() {
                     ))}
                   </SelectContent>
                 </Select>
+                {isSwitching && <Loader2 className="h-4 w-4 animate-spin" />}
+                {switchSuccess && <Check className="h-4 w-4 text-green-500" />}
               </div>
             </div>
 
