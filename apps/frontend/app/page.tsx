@@ -4,7 +4,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
-import { Bot, Database, Loader2, Send, User } from "lucide-react"
+import { Bot, Database, Loader2, Send, Square, User } from "lucide-react"
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
@@ -217,10 +217,12 @@ function parseToolDecision(raw: string): ToolDecision {
 async function streamGenerateTokens(
   requestMessages: Array<{ role: string; content: string }>,
   maxTokens: number,
+  signal?: AbortSignal,
   onToken?: (token: string) => void
 ): Promise<string> {
   const response = await fetch(GENERATE_URL, {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
     },
@@ -317,7 +319,8 @@ async function streamGenerateTokens(
 }
 
 async function decideRetrievalToolUse(
-  conversationMessages: Array<{ role: string; content: string }>
+  conversationMessages: Array<{ role: string; content: string }>,
+  signal?: AbortSignal
 ): Promise<ToolDecision> {
   const recentMessages = conversationMessages.slice(-8)
   const routingMessages = [
@@ -328,19 +331,28 @@ async function decideRetrievalToolUse(
   try {
     const decisionRaw = await streamGenerateTokens(
       routingMessages,
-      ROUTER_MAX_TOKENS
+      ROUTER_MAX_TOKENS,
+      signal
     )
     return parseToolDecision(decisionRaw)
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error
+    }
+
     // Keep chat responsive if routing call fails.
     return { tool: "none" }
   }
 }
 
-async function retrieveRagContext(query: string): Promise<RagRetrievalResult> {
+async function retrieveRagContext(
+  query: string,
+  signal?: AbortSignal
+): Promise<RagRetrievalResult> {
   try {
     const response = await fetch(
-      `${SEARCH_RECORDS_URL}?query=${encodeURIComponent(query)}&top_k=${RAG_TOP_K}`
+      `${SEARCH_RECORDS_URL}?query=${encodeURIComponent(query)}&top_k=${RAG_TOP_K}`,
+      { signal }
     )
 
     if (!response.ok) {
@@ -369,10 +381,21 @@ async function retrieveRagContext(query: string): Promise<RagRetrievalResult> {
         : fullContext
 
     return { context, records: data.records, completed: true }
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error
+    }
+
     // Keep chat available even when retrieval is unavailable.
     return { context: null, records: [], completed: false }
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  )
 }
 
 const markdownComponents = {
@@ -435,7 +458,19 @@ export default function Page() {
   const [hasRecords, setHasRecords] = useState<boolean | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const isLoadingRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const requestSeqRef = useRef(0)
+  const activeRequestIdRef = useRef<number | null>(null)
   const [textareaMaxHeight, setTextareaMaxHeight] = useState(220)
+
+  const stopGeneration = useCallback(() => {
+    activeRequestIdRef.current = null
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    isLoadingRef.current = false
+    setIsLoading(false)
+  }, [])
 
   useEffect(() => {
     const fetchRecordCount = async () => {
@@ -502,9 +537,14 @@ export default function Page() {
 
   const sendMessage = async (content?: string) => {
     const nextContent = (content ?? inputValue).trim()
-    if (!nextContent || isLoading) {
+    if (!nextContent || isLoadingRef.current) {
       return
     }
+
+    const requestId = ++requestSeqRef.current
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+    activeRequestIdRef.current = requestId
 
     const userMessage = createMessage("user", nextContent)
     const assistantMessage = createMessage("assistant", "")
@@ -513,7 +553,10 @@ export default function Page() {
     setMessages(nextMessages)
     setInputValue("")
     setError(null)
+    isLoadingRef.current = true
     setIsLoading(true)
+
+    let streamedContent = ""
 
     try {
       const conversationMessages = nextMessages.slice(0, -1).map((message) => ({
@@ -521,7 +564,15 @@ export default function Page() {
         content: message.content,
       }))
 
-      const toolDecision = await decideRetrievalToolUse(conversationMessages)
+      const toolDecision = await decideRetrievalToolUse(
+        conversationMessages,
+        abortController.signal
+      )
+
+      if (activeRequestIdRef.current !== requestId) {
+        return
+      }
+
       const shouldRetrieve = toolDecision.tool === "search_database"
       const retrievalQuery =
         shouldRetrieve && toolDecision.query.trim().length > 0
@@ -529,8 +580,12 @@ export default function Page() {
           : nextContent
 
       const retrieval = shouldRetrieve
-        ? await retrieveRagContext(retrievalQuery)
+        ? await retrieveRagContext(retrievalQuery, abortController.signal)
         : { context: null, records: [], completed: true }
+
+      if (activeRequestIdRef.current !== requestId) {
+        return
+      }
 
       setMessages((prev) =>
         prev.map((msg) =>
@@ -563,7 +618,6 @@ export default function Page() {
             })
           : conversationMessages
 
-      let streamedContent = ""
       const responseMaxTokens = shouldRetrieve
         ? RETRIEVAL_RESPONSE_MAX_TOKENS
         : BASE_RESPONSE_MAX_TOKENS
@@ -571,7 +625,12 @@ export default function Page() {
       const accumulatedContent = await streamGenerateTokens(
         requestMessages,
         responseMaxTokens,
+        abortController.signal,
         (token) => {
+          if (activeRequestIdRef.current !== requestId) {
+            return
+          }
+
           streamedContent += token
           const { thinking, answer, thinkingComplete } =
             parseThinking(streamedContent)
@@ -591,6 +650,10 @@ export default function Page() {
       )
 
       // Finalize the message
+      if (activeRequestIdRef.current !== requestId) {
+        return
+      }
+
       const { thinking, answer, thinkingComplete } = parseThinking(
         streamedContent.trim() ||
           accumulatedContent.trim() ||
@@ -609,6 +672,24 @@ export default function Page() {
         )
       )
     } catch (err) {
+      if (isAbortError(err)) {
+        setMessages((prev) =>
+          prev.filter(
+            (msg) =>
+              !(
+                msg.id === assistantMessage.id &&
+                !msg.content.trim() &&
+                !msg.thinking?.trim()
+              )
+          )
+        )
+        return
+      }
+
+      if (activeRequestIdRef.current !== requestId) {
+        return
+      }
+
       const message =
         err instanceof Error
           ? err.message
@@ -619,7 +700,12 @@ export default function Page() {
         prev.filter((msg) => msg.id !== assistantMessage.id)
       )
     } finally {
-      setIsLoading(false)
+      if (activeRequestIdRef.current === requestId) {
+        activeRequestIdRef.current = null
+        abortControllerRef.current = null
+        isLoadingRef.current = false
+        setIsLoading(false)
+      }
     }
   }
 
@@ -646,12 +732,19 @@ export default function Page() {
           <Button
             size="icon"
             className="h-8 w-8 shrink-0 rounded-full"
-            onClick={() => void sendMessage()}
-            disabled={isLoading || !inputValue.trim()}
-            aria-label="Send message"
+            onClick={() => {
+              if (isLoading) {
+                stopGeneration()
+                return
+              }
+
+              void sendMessage()
+            }}
+            disabled={!isLoading && !inputValue.trim()}
+            aria-label={isLoading ? "Stop generation" : "Send message"}
           >
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Square className="h-3.5 w-3.5" />
             ) : (
               <Send className="h-4 w-4" />
             )}
