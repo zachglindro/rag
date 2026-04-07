@@ -1,10 +1,9 @@
 from pathlib import Path
 import inspect
-import json
 import os
 
-import httpx
 import torch
+from groq import Groq
 from typing import Any
 from transformers import (
     AutoModelForCausalLM,
@@ -161,49 +160,30 @@ Key guidelines:
             return response.strip()
 
 
-class OpenRouterFreeLLM:
+class GroqLLM:
     def __init__(
         self,
-        model_name: str = "openrouter/free",
+        model_name: str = "qwen/qwen3-32b",
         api_key: str | None = None,
     ):
-        key_source = api_key if api_key is not None else os.getenv("OPENROUTER_API_KEY")
+        key_source = api_key if api_key is not None else os.getenv("GROQ_API_KEY")
         if key_source is None:
             key_source = ""
 
         resolved_api_key = key_source.strip()
         if not resolved_api_key:
             raise RuntimeError(
-                "OPENROUTER_API_KEY is not set. Configure it before selecting the online model."
+                "GROQ_API_KEY is not set. Configure it before selecting the online model."
             )
 
         self.api_key = resolved_api_key
         self.model_name = model_name
-        site_url = os.getenv("OPENROUTER_SITE_URL")
-        site_name = os.getenv("OPENROUTER_SITE_NAME")
-        self.site_url = (site_url or "").strip()
-        self.site_name = (site_name or "").strip()
-        self.client = httpx.Client(
-            base_url="https://openrouter.ai/api/v1",
-            timeout=httpx.Timeout(120.0),
-        )
+        self.client = Groq(api_key=self.api_key)
 
     def cleanup(self):
-        self.client.close()
-
-    def _request_headers(self) -> dict[str, str]:
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-
-        if self.site_url:
-            headers["HTTP-Referer"] = self.site_url
-
-        if self.site_name:
-            headers["X-Title"] = self.site_name
-
-        return headers
+        close_method = getattr(self.client, "close", None)
+        if callable(close_method):
+            close_method()
 
     def generate_response(
         self,
@@ -225,7 +205,7 @@ Key guidelines:
         if not messages or messages[0].get("role") != "system":
             messages = [{"role": "system", "content": system_prompt}] + messages
 
-        payload: dict[str, Any] = {
+        request_kwargs: dict[str, Any] = {
             "model": self.model_name,
             "messages": messages,
             "max_tokens": max_tokens,
@@ -233,84 +213,44 @@ Key guidelines:
         }
 
         if stream:
-            payload["stream"] = True
-            with self.client.stream(
-                "POST",
-                "/chat/completions",
-                headers=self._request_headers(),
-                json=payload,
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                    if not line.startswith("data:"):
-                        continue
+            stream_response = self.client.chat.completions.create(
+                **request_kwargs,
+                stream=True,
+            )
+            for chunk in stream_response:
+                choices = getattr(chunk, "choices", None)
+                if not choices:
+                    continue
 
-                    data_str = line[5:].strip()
-                    if data_str == "[DONE]":
-                        break
+                first_choice = choices[0]
+                delta = getattr(first_choice, "delta", None)
+                if delta is None:
+                    continue
 
-                    try:
-                        payload_obj = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
-
-                    error_obj = payload_obj.get("error")
-                    if error_obj:
-                        raise RuntimeError(str(error_obj))
-
-                    choices = payload_obj.get("choices")
-                    if not isinstance(choices, list) or not choices:
-                        continue
-
-                    first_choice = choices[0]
-                    if not isinstance(first_choice, dict):
-                        continue
-
-                    delta = first_choice.get("delta")
-                    if not isinstance(delta, dict):
-                        continue
-
-                    content = delta.get("content")
-                    if isinstance(content, str) and content:
-                        yield content
+                content = getattr(delta, "content", None)
+                if isinstance(content, str) and content:
+                    yield content
             return
 
-        response = self.client.post(
-            "/chat/completions",
-            headers=self._request_headers(),
-            json=payload,
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        choices = data.get("choices")
-        if not isinstance(choices, list) or not choices:
+        completion = self.client.chat.completions.create(**request_kwargs)
+        choices = getattr(completion, "choices", None)
+        if not choices:
             return ""
 
-        message = choices[0].get("message")
-        if not isinstance(message, dict):
+        message = getattr(choices[0], "message", None)
+        if message is None:
             return ""
 
-        content = message.get("content")
+        content = getattr(message, "content", None)
         if isinstance(content, str):
             return content.strip()
-
-        if isinstance(content, list):
-            text_chunks = []
-            for item in content:
-                if not isinstance(item, dict):
-                    continue
-                if item.get("type") == "text" and isinstance(item.get("text"), str):
-                    text_chunks.append(item["text"])
-            return "".join(text_chunks).strip()
 
         return ""
 
 
 # Backward-compatible alias for existing imports/usages.
 QwenLLM = GemmaLLM
+OpenRouterFreeLLM = GroqLLM
 
 
 if __name__ == "__main__":

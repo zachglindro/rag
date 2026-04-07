@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from preprocessing.description_builder import build_natural_language_description
 from pydantic import BaseModel
 from rag.embedding import EmbeddingService
-from rag.llm import GemmaLLM, OpenRouterFreeLLM
+from rag.llm import GemmaLLM, GroqLLM
 from rag.reranker import FlashRankService
 from rag.vectordb import ChromaVectorDB
 
@@ -33,7 +33,7 @@ LOCAL_MODEL_REGISTRY = {
 
 # Online model registry: maps model IDs to provider model names
 ONLINE_MODEL_REGISTRY = {
-    "openrouter-free": "openrouter/free",
+    "groq": "qwen/qwen3-32b",
 }
 
 MODEL_REGISTRY = {
@@ -45,7 +45,7 @@ MODEL_LABELS = {
     "gemma-4-e2b-it": "Gemma 4 (Slowest)",
     "qwen3-0.6b": "Qwen 3 (Fast)",
     "qwen3.5-0.8b": "Qwen 3.5 (Slow)",
-    "openrouter-free": "OpenRouter",
+    "groq": "Groq",
 }
 
 # Cache of loaded LLM instances
@@ -66,7 +66,7 @@ def is_online_model(model_id: str) -> bool:
 def load_model(model_id: str):
     if is_online_model(model_id):
         provider_model_id = ONLINE_MODEL_REGISTRY[model_id]
-        return OpenRouterFreeLLM(model_name=provider_model_id)
+        return GroqLLM(model_name=provider_model_id)
 
     return GemmaLLM(str(LOCAL_MODEL_REGISTRY[model_id]))
 
