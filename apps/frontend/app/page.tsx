@@ -9,7 +9,10 @@ import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 
-const GENERATE_URL = "http://localhost:8000/generate"
+const BACKEND_URL = "http://localhost:8000"
+const GENERATE_URL = `${BACKEND_URL}/generate`
+const SEARCH_RECORDS_URL = `${BACKEND_URL}/semantic-search/records`
+const RAG_TOP_K = 5
 
 type MessageRole = "user" | "assistant"
 
@@ -19,6 +22,28 @@ type ChatMessage = {
   content: string
   thinking?: string
   thinkingComplete?: boolean
+  retrievedRecords?: RetrievedRecord[]
+  retrievalComplete?: boolean
+}
+
+type RetrievedRecord = {
+  id: number
+  data: Record<string, unknown>
+  natural_language_description: string | null
+  distance?: number | null
+  rerank_score?: number | null
+}
+
+type RecordSearchResponse = {
+  query: string
+  top_k: number
+  records: RetrievedRecord[]
+}
+
+type RagRetrievalResult = {
+  context: string | null
+  records: RetrievedRecord[]
+  completed: boolean
 }
 
 function createMessage(role: MessageRole, content: string): ChatMessage {
@@ -63,6 +88,90 @@ function parseThinking(content: string): {
   }
 
   return { thinking: null, answer: content, thinkingComplete: false }
+}
+
+function formatRagRecord(record: RetrievedRecord, index: number): string {
+  const description = record.natural_language_description?.trim()
+  const serializedData = JSON.stringify(record.data)
+
+  return [
+    `Record ${index + 1} (id=${record.id})`,
+    description ? `Description: ${description}` : `Data: ${serializedData}`,
+  ].join("\n")
+}
+
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "-"
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? value : "-"
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return "[]"
+    }
+
+    return value.map((item) => stringifyValue(item)).join(", ")
+  }
+
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return "[object]"
+    }
+  }
+
+  return String(value)
+}
+
+function getRecordTableColumns(records: RetrievedRecord[]): string[] {
+  const keySet = new Set<string>()
+  records.forEach((record) => {
+    Object.keys(record.data ?? {}).forEach((key) => keySet.add(key))
+  })
+  return Array.from(keySet)
+}
+
+async function retrieveRagContext(query: string): Promise<RagRetrievalResult> {
+  try {
+    const response = await fetch(
+      `${SEARCH_RECORDS_URL}?query=${encodeURIComponent(query)}&top_k=${RAG_TOP_K}`
+    )
+
+    if (!response.ok) {
+      return { context: null, records: [], completed: false }
+    }
+
+    const data: RecordSearchResponse = await response.json()
+    if (!data.records.length) {
+      return { context: null, records: [], completed: true }
+    }
+
+    const formattedRecords = data.records
+      .map((record, index) => formatRagRecord(record, index))
+      .join("\n\n")
+
+    const context = [
+      "Use the retrieved inventory records below as grounding context.",
+      "If the context does not contain the answer, clearly say so and avoid guessing.",
+      "",
+      formattedRecords,
+    ].join("\n")
+
+    return { context, records: data.records, completed: true }
+  } catch {
+    // Keep chat available even when retrieval is unavailable.
+    return { context: null, records: [], completed: false }
+  }
 }
 
 const markdownComponents = {
@@ -130,7 +239,7 @@ export default function Page() {
   useEffect(() => {
     const fetchRecordCount = async () => {
       try {
-        const response = await fetch("http://localhost:8000/records/count")
+        const response = await fetch(`${BACKEND_URL}/records/count`)
         if (!response.ok) {
           throw new Error("Failed to fetch record count")
         }
@@ -206,16 +315,49 @@ export default function Page() {
     setIsLoading(true)
 
     try {
+      const conversationMessages = nextMessages.slice(0, -1).map((message) => ({
+        role: message.role,
+        content: message.content,
+      }))
+
+      const retrieval = await retrieveRagContext(nextContent)
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessage.id
+            ? {
+                ...msg,
+                retrievedRecords: retrieval.records,
+                retrievalComplete: retrieval.completed,
+              }
+            : msg
+        )
+      )
+
+      const ragContext = retrieval.context
+      const requestMessages =
+        ragContext && conversationMessages.length > 0
+          ? conversationMessages.map((message, index) => {
+              const isLastMessage = index === conversationMessages.length - 1
+              const isLastUserMessage = isLastMessage && message.role === "user"
+
+              if (!isLastUserMessage) {
+                return message
+              }
+
+              return {
+                ...message,
+                content: `${ragContext}\n\nUser question:\n${message.content}`,
+              }
+            })
+          : conversationMessages
+
       const response = await fetch(GENERATE_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          messages: nextMessages.slice(0, -1).map((message) => ({
-            role: message.role,
-            content: message.content,
-          })),
+          messages: requestMessages,
           max_tokens: 1024,
         }),
       })
@@ -429,7 +571,14 @@ export default function Page() {
                       isLoading &&
                       index === messages.length - 1 &&
                       !message.content.trim() &&
-                      !message.thinking?.trim()
+                      !message.thinking?.trim() &&
+                      message.retrievalComplete !== true
+
+                    const recordColumns = getRecordTableColumns(
+                      message.retrievedRecords ?? []
+                    )
+                    const hasRetrievedRecords =
+                      !isUser && (message.retrievedRecords?.length ?? 0) > 0
 
                     return (
                       <div
@@ -452,12 +601,69 @@ export default function Page() {
                           {isStreamingAssistantMessage ? (
                             <span className="inline-flex items-center gap-2 text-muted-foreground">
                               <Loader2 className="h-4 w-4 animate-spin" />
-                              Thinking...
+                              Retrieving relevant records...
                             </span>
                           ) : isUser ? (
                             message.content
                           ) : (
                             <div className="space-y-3">
+                              {hasRetrievedRecords && (
+                                <div className="space-y-2">
+                                  <div className="text-xs font-medium text-muted-foreground">
+                                    Retrieved relevant records
+                                  </div>
+                                  <div className="max-h-72 overflow-auto rounded-md border">
+                                    <table className="w-full min-w-[560px] border-collapse text-xs">
+                                      <thead className="sticky top-0 bg-muted/60">
+                                        <tr>
+                                          <th className="border-b px-2 py-1.5 text-left font-medium">
+                                            ID
+                                          </th>
+                                          {recordColumns.map((column) => (
+                                            <th
+                                              key={`${message.id}-col-${column}`}
+                                              className="border-b px-2 py-1.5 text-left font-medium"
+                                            >
+                                              {column}
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {message.retrievedRecords?.map(
+                                          (record) => (
+                                            <tr
+                                              key={`${message.id}-row-${record.id}`}
+                                            >
+                                              <td className="border-b px-2 py-1.5 align-top font-medium">
+                                                {record.id}
+                                              </td>
+                                              {recordColumns.map((column) => (
+                                                <td
+                                                  key={`${message.id}-row-${record.id}-${column}`}
+                                                  className="border-b px-2 py-1.5 align-top"
+                                                >
+                                                  {stringifyValue(
+                                                    record.data?.[column]
+                                                  )}
+                                                </td>
+                                              ))}
+                                            </tr>
+                                          )
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                              {isLoading && index === messages.length - 1 && (
+                                <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Generating answer...
+                                </div>
+                              )}
+
                               {message.thinking && (
                                 <details className="group">
                                   <summary className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
