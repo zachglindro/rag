@@ -12,6 +12,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { toast } from "sonner"
 import { useState, useEffect } from "react"
 
@@ -98,17 +105,23 @@ export default function Settings() {
               <p className="text-sm text-muted-foreground">
                 Choose the active language model for chat generation.
               </p>
-              <div className="mt-4 flex gap-2">
-                {availableModels.map((model) => (
-                  <Button
-                    key={model.id}
-                    variant={activeModel === model.id ? "default" : "outline"}
-                    onClick={() => handleSwitchModel(model.id)}
-                    disabled={isSwitching}
-                  >
-                    {model.label}
-                  </Button>
-                ))}
+              <div className="mt-4">
+                <Select
+                  value={activeModel}
+                  onValueChange={handleSwitchModel}
+                  disabled={isSwitching}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
