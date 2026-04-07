@@ -13,10 +13,60 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+
+interface ModelInfo {
+  id: string
+  label: string
+  path: string
+  loaded: boolean
+}
+
+interface ModelSettingsResponse {
+  active_model: string
+  available_models: ModelInfo[]
+}
 
 export default function Settings() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [activeModel, setActiveModel] = useState<string>("")
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
+  const [isSwitching, setIsSwitching] = useState(false)
+
+  const fetchModelSettings = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/settings/model")
+      if (!response.ok) throw new Error("Failed to fetch model settings")
+      const data: ModelSettingsResponse = await response.json()
+      setActiveModel(data.active_model)
+      setAvailableModels(data.available_models)
+    } catch {
+      toast.error("Failed to load model settings")
+    }
+  }
+
+  useEffect(() => {
+    fetchModelSettings()
+  }, [])
+
+  const handleSwitchModel = async (modelId: string) => {
+    setIsSwitching(true)
+    try {
+      const response = await fetch("http://localhost:8000/settings/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_id: modelId }),
+      })
+      if (!response.ok) throw new Error("Failed to switch model")
+      setActiveModel(modelId)
+      const model = availableModels.find((m) => m.id === modelId)
+      toast.success(`Switched to ${model?.label || modelId}`)
+    } catch {
+      toast.error("Failed to switch model")
+    } finally {
+      setIsSwitching(false)
+    }
+  }
 
   const handleReset = async () => {
     try {
@@ -28,11 +78,8 @@ export default function Settings() {
       }
       toast.success("Database and embeddings reset successfully")
       setIsDialogOpen(false)
-    } catch (error) {
-      toast.error(
-        "Failed to reset database: " +
-          (error instanceof Error ? error.message : String(error))
-      )
+    } catch {
+      toast.error("Failed to reset database")
     }
   }
 
@@ -41,33 +88,59 @@ export default function Settings() {
       <AppSidebar />
       <SidebarInset>
         <div className="flex min-h-svh p-6">
-          <div>
-            <h1>Settings</h1>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="destructive">Reset Database</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Reset Database</DialogTitle>
-                  <DialogDescription>
-                    This will permanently delete all data in the database and
-                    associated vector embeddings. This action cannot be undone.
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
+          <div className="space-y-6">
+            <div>
+              <h1>Settings</h1>
+            </div>
+
+            <div>
+              <h2>Model Settings</h2>
+              <p className="text-sm text-muted-foreground">
+                Choose the active language model for chat generation.
+              </p>
+              <div className="mt-4 flex gap-2">
+                {availableModels.map((model) => (
                   <Button
-                    variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
+                    key={model.id}
+                    variant={activeModel === model.id ? "default" : "outline"}
+                    onClick={() => handleSwitchModel(model.id)}
+                    disabled={isSwitching}
                   >
-                    Cancel
+                    {model.label} {model.loaded ? "(Loaded)" : "(Not Loaded)"}
                   </Button>
-                  <Button variant="destructive" onClick={handleReset}>
-                    Reset
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h2>Database</h2>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive">Reset Database</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Reset Database</DialogTitle>
+                    <DialogDescription>
+                      This will permanently delete all data in the database and
+                      associated vector embeddings. This action cannot be
+                      undone.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={handleReset}>
+                      Reset
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </div>
       </SidebarInset>

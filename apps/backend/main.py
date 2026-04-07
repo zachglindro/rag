@@ -20,8 +20,25 @@ from rag.vectordb import ChromaVectorDB
 
 DB_PATH = Path(__file__).parent / "db.sqlite3"
 
+# Model registry: maps model IDs to local paths
+MODEL_REGISTRY = {
+    "gemma-4-e2b-it": Path(__file__).resolve().parents[2] / "models" / "gemma-4-E2B-it",
+    "qwen3-0.6b": Path(__file__).resolve().parents[2] / "models" / "Qwen3-0.6B",
+    "qwen3.5-0.8b": Path(__file__).resolve().parents[2] / "models" / "qwen3.5-0.8b",
+}
 
-llm = None  # Will be set in lifespan
+MODEL_LABELS = {
+    "gemma-4-e2b-it": "Gemma-4-E2B-it",
+    "qwen3-0.6b": "Qwen3-0.6B",
+    "qwen3.5-0.8b": "Qwen3.5-0.8B",
+}
+
+# Cache of loaded LLM instances
+loaded_llms: dict[str, GemmaLLM] = {}
+
+# Active model ID (server-wide)
+active_model_id: str = "gemma-4-e2b-it"
+
 vectordb = None  # Will be set in lifespan
 embedder = None  # Will be set in lifespan
 reranker = None  # Will be set in lifespan
@@ -30,8 +47,8 @@ reranker = None  # Will be set in lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_database(DB_PATH)
-    global llm
-    llm = GemmaLLM()
+    global loaded_llms
+    loaded_llms[active_model_id] = GemmaLLM(str(MODEL_REGISTRY[active_model_id]))
     global vectordb
     vectordb = ChromaVectorDB()
     global embedder
@@ -42,6 +59,7 @@ async def lifespan(app: FastAPI):
     print("ChromaDB collection 'trait_embeddings' ready")
     print("Embedding service initialized")
     print("FlashRank reranker initialized")
+    print(f"Active model: {active_model_id}")
     yield
 
 
@@ -129,6 +147,22 @@ class RecordSearchResponse(BaseModel):
     query: str
     top_k: int
     records: list[RetrievedRecordRow]
+
+
+class ModelInfo(BaseModel):
+    id: str
+    label: str
+    path: str
+    loaded: bool
+
+
+class ModelSettingsResponse(BaseModel):
+    active_model: str
+    available_models: list[ModelInfo]
+
+
+class SwitchModelRequest(BaseModel):
+    model_id: str
 
 
 def infer_column_data_type(values: list[Any]) -> str:
@@ -649,7 +683,9 @@ async def search_records(
         rerank_score_by_record_id[record_id] = score_value
 
     if not reranked_ids:
-        reranked_ids = [record_id for record_id in ordered_record_ids if record_id in rows_by_id]
+        reranked_ids = [
+            record_id for record_id in ordered_record_ids if record_id in rows_by_id
+        ]
 
     limited_ids = reranked_ids[:top_k]
     ordered_rows = []
@@ -690,11 +726,51 @@ async def reset_database():
         conn.close()
 
 
-def get_llm() -> GemmaLLM:
-    if llm is None:
-        raise RuntimeError("LLM was not initialized during startup")
+@app.get("/settings/model", response_model=ModelSettingsResponse)
+async def get_model_settings():
+    available_models = []
+    for model_id, path in MODEL_REGISTRY.items():
+        try:
+            label = MODEL_LABELS.get(model_id, model_id.replace("-", " ").title())
+            available_models.append(
+                ModelInfo(
+                    id=model_id,
+                    label=label,
+                    path=str(path),
+                    loaded=model_id in loaded_llms,
+                )
+            )
+        except Exception as e:
+            print(f"Error processing {model_id}: {e}")
+    return ModelSettingsResponse(
+        active_model=active_model_id,
+        available_models=available_models,
+    )
 
-    return llm
+
+@app.post("/settings/model")
+async def switch_model(request: SwitchModelRequest):
+    global active_model_id
+    if request.model_id not in MODEL_REGISTRY:
+        raise HTTPException(status_code=400, detail="Invalid model ID")
+
+    # If switching to a different model, unload the current one
+    if request.model_id != active_model_id and active_model_id in loaded_llms:
+        loaded_llms[active_model_id].cleanup()
+        del loaded_llms[active_model_id]
+
+    # Lazy load the new model if not already loaded
+    if request.model_id not in loaded_llms:
+        loaded_llms[request.model_id] = GemmaLLM(str(MODEL_REGISTRY[request.model_id]))
+
+    active_model_id = request.model_id
+    return {"message": f"Switched to model {request.model_id}"}
+
+
+def get_llm() -> GemmaLLM:
+    if active_model_id not in loaded_llms:
+        raise RuntimeError(f"Active model {active_model_id} is not loaded")
+    return loaded_llms[active_model_id]
 
 
 def get_vectordb() -> ChromaVectorDB:

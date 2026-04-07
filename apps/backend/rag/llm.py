@@ -1,4 +1,5 @@
 from pathlib import Path
+import inspect
 
 import torch
 from typing import Any
@@ -34,6 +35,30 @@ class GemmaLLM:
             device_map="auto",
         )
         self.enable_thinking = enable_thinking
+
+    def cleanup(self):
+        """Clean up model resources and free GPU memory."""
+        if hasattr(self, "model") and self.model is not None:
+            del self.model
+        if hasattr(self, "processor") and self.processor is not None:
+            del self.processor
+        if hasattr(self, "tokenizer") and self.tokenizer is not None:
+            del self.tokenizer
+        # Force garbage collection and CUDA cache clearing
+        import gc
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def _filter_supported_model_inputs(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        """Drop processor keys unsupported by the loaded model's forward signature."""
+        try:
+            forward_params = set(inspect.signature(self.model.forward).parameters)
+        except (TypeError, ValueError):
+            return inputs
+
+        return {key: value for key, value in inputs.items() if key in forward_params}
 
     def generate_response(
         self,
@@ -71,6 +96,7 @@ Key guidelines:
             )
 
         inputs = self.processor(text=text, return_tensors="pt").to(self.model.device)
+        model_inputs = self._filter_supported_model_inputs(dict(inputs))
 
         if stream:
             # For streaming, use TextIteratorStreamer to yield tokens
@@ -79,7 +105,7 @@ Key guidelines:
             )  # type: ignore
 
             generation_kwargs = {
-                **inputs,
+                **model_inputs,
                 "max_new_tokens": max_tokens,
                 "temperature": 0.7 if not self.enable_thinking else 0.6,
                 "top_p": 0.8 if not self.enable_thinking else 0.95,
@@ -106,7 +132,7 @@ Key guidelines:
             # Non-streaming logic (existing code)
             with torch.no_grad():
                 outputs = self.model.generate(
-                    **inputs,
+                    **model_inputs,
                     max_new_tokens=max_tokens,
                     temperature=0.7 if not self.enable_thinking else 0.6,
                     top_p=0.8 if not self.enable_thinking else 0.95,
