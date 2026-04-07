@@ -163,7 +163,7 @@ Key guidelines:
 class GroqLLM:
     def __init__(
         self,
-        model_name: str = "qwen/qwen3-32b",
+        model_name: str = "openai/gpt-oss-120b",
         api_key: str | None = None,
     ):
         key_source = api_key if api_key is not None else os.getenv("GROQ_API_KEY")
@@ -185,6 +185,26 @@ class GroqLLM:
         if callable(close_method):
             close_method()
 
+    def _extract_text(self, content: Any) -> str:
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+
+                if isinstance(item, dict):
+                    text_value = item.get("text")
+                    if isinstance(text_value, str):
+                        parts.append(text_value)
+
+            return "".join(parts)
+
+        return ""
+
     def generate_response(
         self,
         messages: list[dict[str, str]],
@@ -205,47 +225,94 @@ Key guidelines:
         if not messages or messages[0].get("role") != "system":
             messages = [{"role": "system", "content": system_prompt}] + messages
 
-        request_kwargs: dict[str, Any] = {
-            "model": self.model_name,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": 0.7,
-        }
+        continuation_prompt = (
+            "Continue exactly where you stopped. Start with the next word only, "
+            "without repeating prior text."
+        )
+        max_continuations = 2
 
         if stream:
-            stream_response = self.client.chat.completions.create(
-                **request_kwargs,
-                stream=True,
-            )
-            for chunk in stream_response:
-                choices = getattr(chunk, "choices", None)
-                if not choices:
-                    continue
+            conversation = list(messages)
+            for attempt in range(max_continuations + 1):
+                request_kwargs: dict[str, Any] = {
+                    "model": self.model_name,
+                    "messages": conversation,
+                    "max_tokens": max_tokens,
+                    "temperature": 0.7,
+                }
 
-                first_choice = choices[0]
-                delta = getattr(first_choice, "delta", None)
-                if delta is None:
-                    continue
+                stream_response = self.client.chat.completions.create(
+                    **request_kwargs,
+                    stream=True,
+                )
 
-                content = getattr(delta, "content", None)
-                if isinstance(content, str) and content:
-                    yield content
+                finish_reason = ""
+                chunk_texts: list[str] = []
+                for chunk in stream_response:
+                    choices = getattr(chunk, "choices", None)
+                    if not choices:
+                        continue
+
+                    first_choice = choices[0]
+                    reason = getattr(first_choice, "finish_reason", None)
+                    if isinstance(reason, str) and reason:
+                        finish_reason = reason
+
+                    delta = getattr(first_choice, "delta", None)
+                    if delta is None:
+                        continue
+
+                    content = getattr(delta, "content", None)
+                    text = self._extract_text(content)
+                    if text:
+                        chunk_texts.append(text)
+                        yield text
+
+                partial_text = "".join(chunk_texts).strip()
+                if partial_text:
+                    conversation.append({"role": "assistant", "content": partial_text})
+
+                if finish_reason != "length" or attempt >= max_continuations:
+                    break
+
+                conversation.append({"role": "user", "content": continuation_prompt})
+
             return
 
-        completion = self.client.chat.completions.create(**request_kwargs)
-        choices = getattr(completion, "choices", None)
-        if not choices:
-            return ""
+        conversation = list(messages)
+        response_parts: list[str] = []
+        for attempt in range(max_continuations + 1):
+            request_kwargs = {
+                "model": self.model_name,
+                "messages": conversation,
+                "max_tokens": max_tokens,
+                "temperature": 0.7,
+            }
 
-        message = getattr(choices[0], "message", None)
-        if message is None:
-            return ""
+            completion = self.client.chat.completions.create(**request_kwargs)
+            choices = getattr(completion, "choices", None)
+            if not choices:
+                break
 
-        content = getattr(message, "content", None)
-        if isinstance(content, str):
-            return content.strip()
+            first_choice = choices[0]
+            finish_reason = getattr(first_choice, "finish_reason", "")
 
-        return ""
+            message = getattr(first_choice, "message", None)
+            if message is None:
+                break
+
+            content = getattr(message, "content", None)
+            text = self._extract_text(content).strip()
+            if text:
+                response_parts.append(text)
+                conversation.append({"role": "assistant", "content": text})
+
+            if finish_reason != "length" or attempt >= max_continuations:
+                break
+
+            conversation.append({"role": "user", "content": continuation_prompt})
+
+        return "".join(response_parts).strip()
 
 
 # Backward-compatible alias for existing imports/usages.

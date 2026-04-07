@@ -33,7 +33,7 @@ LOCAL_MODEL_REGISTRY = {
 
 # Online model registry: maps model IDs to provider model names
 ONLINE_MODEL_REGISTRY = {
-    "groq": "qwen/qwen3-32b",
+    "groq": "openai/gpt-oss-120b",
 }
 
 MODEL_REGISTRY = {
