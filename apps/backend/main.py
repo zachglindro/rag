@@ -165,6 +165,10 @@ class RecordCountResponse(BaseModel):
     count: int
 
 
+class UpdateRecordRequest(BaseModel):
+    data: dict[str, Any]
+
+
 class RetrievedRecordRow(RecordRow):
     distance: float | None = None
     rerank_score: float | None = None
@@ -580,6 +584,170 @@ async def get_record(record_id: int):
             created_at=row[3],
             updated_at=row[4],
         )
+    finally:
+        conn.close()
+
+
+@app.put("/records/{record_id}", response_model=RecordRow)
+async def update_record(record_id: int, request: UpdateRecordRequest):
+    if not request.data:
+        raise HTTPException(status_code=400, detail="Record data must not be empty")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    embedder_instance = get_embedder()
+    vector_db = get_vectordb()
+
+    vector_updated = False
+    old_data: dict[str, Any] | None = None
+    old_description: str | None = None
+
+    try:
+        cursor.execute(
+            """
+            SELECT data, natural_language_description
+            FROM records
+            WHERE id = ?
+            """,
+            (record_id,),
+        )
+        existing_row = cursor.fetchone()
+        if existing_row is None:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        old_data = parse_record_data(existing_row[0])
+        old_description = existing_row[1]
+
+        new_description = build_natural_language_description(request.data)
+        new_embedding = embedder_instance.embed(new_description)
+        if not new_embedding:
+            raise RuntimeError("Failed to embed updated record")
+
+        conn.execute("BEGIN")
+        cursor.execute(
+            """
+            UPDATE records
+            SET data = ?, natural_language_description = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (json.dumps(request.data), new_description, record_id),
+        )
+
+        vector_db.upsert_documents(
+            ids=[str(record_id)],
+            documents=[new_description],
+            embeddings=[new_embedding],
+            metadatas=[{"record_id": record_id}],
+        )
+        vector_updated = True
+
+        conn.commit()
+
+        cursor.execute(
+            """
+            SELECT id, data, natural_language_description, created_at, updated_at
+            FROM records
+            WHERE id = ?
+            """,
+            (record_id,),
+        )
+        updated_row = cursor.fetchone()
+        if updated_row is None:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        return RecordRow(
+            id=updated_row[0],
+            data=parse_record_data(updated_row[1]),
+            natural_language_description=updated_row[2],
+            created_at=updated_row[3],
+            updated_at=updated_row[4],
+        )
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+
+        if vector_updated and old_data is not None:
+            try:
+                rollback_description = (
+                    old_description or build_natural_language_description(old_data)
+                )
+                rollback_embedding = embedder_instance.embed(rollback_description)
+                if rollback_embedding:
+                    vector_db.upsert_documents(
+                        ids=[str(record_id)],
+                        documents=[rollback_description],
+                        embeddings=[rollback_embedding],
+                        metadatas=[{"record_id": record_id}],
+                    )
+            except Exception:
+                pass
+
+        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
+    finally:
+        conn.close()
+
+
+@app.delete("/records/{record_id}")
+async def delete_record(record_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    embedder_instance = get_embedder()
+    vector_db = get_vectordb()
+
+    vector_deleted = False
+    existing_data: dict[str, Any] | None = None
+    existing_description: str | None = None
+
+    try:
+        cursor.execute(
+            """
+            SELECT data, natural_language_description
+            FROM records
+            WHERE id = ?
+            """,
+            (record_id,),
+        )
+        existing_row = cursor.fetchone()
+        if existing_row is None:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        existing_data = parse_record_data(existing_row[0])
+        existing_description = existing_row[1]
+
+        conn.execute("BEGIN")
+        cursor.execute("DELETE FROM records WHERE id = ?", (record_id,))
+
+        vector_db.delete_by_ids([str(record_id)])
+        vector_deleted = True
+
+        conn.commit()
+        return {"status": "success", "deleted_id": record_id}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+
+        if vector_deleted and existing_data is not None:
+            try:
+                rollback_description = (
+                    existing_description
+                    or build_natural_language_description(existing_data)
+                )
+                rollback_embedding = embedder_instance.embed(rollback_description)
+                if rollback_embedding:
+                    vector_db.upsert_documents(
+                        ids=[str(record_id)],
+                        documents=[rollback_description],
+                        embeddings=[rollback_embedding],
+                        metadatas=[{"record_id": record_id}],
+                    )
+            except Exception:
+                pass
+
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
     finally:
         conn.close()
 
