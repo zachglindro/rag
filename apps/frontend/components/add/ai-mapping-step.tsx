@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Check, ChevronsUpDown, ChevronRight, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,6 +18,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+
+// Define the type for mapping suggestions from the API
+interface MappingSuggestion {
+  orig_column: string
+  suggested_column: string
+  confidence: number
+}
 
 // List of all available columns in the system
 const allSystemColumns = [
@@ -63,6 +70,43 @@ export function AIMappingStep({
   })
   const [mappedSearch, setMappedSearch] = useState("")
   const [unmappedSearch, setUnmappedSearch] = useState("")
+  const [suggestionsApplied, setSuggestionsApplied] = useState(false)
+
+  useEffect(() => {
+    if (mappings.length > 0 && !suggestionsApplied) {
+      const fetchSuggestions = async () => {
+        try {
+          const response = await fetch(
+            "http://localhost:8000/suggest-mappings",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                columns: mappings.map((m) => m.origColumn),
+              }),
+            }
+          )
+          const suggestions: MappingSuggestion[] = await response.json()
+          const newMappings = mappings.map((mapping) => {
+            const suggestion = suggestions.find(
+              (s: MappingSuggestion) => s.orig_column === mapping.origColumn
+            )
+            if (suggestion && suggestion.confidence > 0.5) {
+              return { ...mapping, mappedColumn: suggestion.suggested_column }
+            }
+            return mapping
+          })
+          onMappingsChange(newMappings)
+          setSuggestionsApplied(true)
+        } catch (error) {
+          console.error("Failed to fetch suggestions:", error)
+        }
+      }
+      fetchSuggestions()
+    }
+  }, [mappings, suggestionsApplied, onMappingsChange])
 
   const handleMappingChange = (origColumn: string, newValue: string) => {
     const newMappings = mappings.map((mapping) =>
