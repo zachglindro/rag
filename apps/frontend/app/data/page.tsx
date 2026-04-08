@@ -2,6 +2,22 @@
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { SidebarInset } from "@/components/ui/sidebar"
 import {
@@ -14,6 +30,7 @@ import {
 } from "@/components/ui/table"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 
 interface RecordRow {
   id: number
@@ -48,6 +65,8 @@ interface RecordSearchResponse {
 
 const BACKEND_URL = "http://localhost:8000"
 const PAGE_SIZE = 25
+const BOOLEAN_TRUE_VALUES = new Set(["true", "1", "yes"])
+const BOOLEAN_FALSE_VALUES = new Set(["false", "0", "no"])
 
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) {
@@ -91,6 +110,14 @@ export default function DataPage() {
   const [appliedSearchQuery, setAppliedSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [draftCells, setDraftCells] = useState<
+    Record<number, Record<string, string>>
+  >({})
+  const [recordPendingDelete, setRecordPendingDelete] =
+    useState<RecordRow | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isMutating, setIsMutating] = useState(false)
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
@@ -178,7 +205,143 @@ export default function DataPage() {
   const currentPage = Math.floor(skip / PAGE_SIZE) + 1
   const totalPages = totalCount > 0 ? Math.ceil(totalCount / PAGE_SIZE) : 1
 
-  const hasDistanceValues = isSearchMode && rows.some((row) => row.distance !== null && row.distance !== undefined)
+  const toEditableCellValue = useCallback((value: unknown): string => {
+    if (value === null || value === undefined) {
+      return ""
+    }
+
+    if (typeof value === "string") {
+      return value
+    }
+
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value)
+    }
+
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }, [])
+
+  const getDraftCellValue = useCallback(
+    (row: RecordRow, columnKey: string) => {
+      const existingDraft = draftCells[row.id]?.[columnKey]
+      if (existingDraft !== undefined) {
+        return existingDraft
+      }
+
+      return toEditableCellValue(row.data?.[columnKey])
+    },
+    [draftCells, toEditableCellValue]
+  )
+
+  const parseEditedCellValue = useCallback(
+    (rawValue: string, originalValue: unknown): unknown => {
+      const trimmed = rawValue.trim()
+
+      if (
+        Array.isArray(originalValue) ||
+        (typeof originalValue === "object" && originalValue !== null)
+      ) {
+        if (!trimmed) {
+          return null
+        }
+
+        try {
+          return JSON.parse(rawValue)
+        } catch {
+          throw new Error("must be valid JSON")
+        }
+      }
+
+      if (typeof originalValue === "number") {
+        if (!trimmed) {
+          throw new Error("cannot be empty for number fields")
+        }
+
+        const parsed = Number(trimmed)
+        if (!Number.isFinite(parsed)) {
+          throw new Error("must be a valid number")
+        }
+
+        return parsed
+      }
+
+      if (typeof originalValue === "boolean") {
+        const normalized = trimmed.toLowerCase()
+        if (BOOLEAN_TRUE_VALUES.has(normalized)) {
+          return true
+        }
+        if (BOOLEAN_FALSE_VALUES.has(normalized)) {
+          return false
+        }
+
+        throw new Error("must be true/false, yes/no, or 1/0")
+      }
+
+      if (originalValue === null || originalValue === undefined) {
+        if (!trimmed) {
+          return ""
+        }
+
+        if (trimmed === "null") {
+          return null
+        }
+
+        if (BOOLEAN_TRUE_VALUES.has(trimmed.toLowerCase())) {
+          return true
+        }
+
+        if (BOOLEAN_FALSE_VALUES.has(trimmed.toLowerCase())) {
+          return false
+        }
+
+        const asNumber = Number(trimmed)
+        if (!Number.isNaN(asNumber) && trimmed !== "") {
+          return asNumber
+        }
+
+        if (
+          trimmed.startsWith("{") ||
+          trimmed.startsWith("[") ||
+          trimmed.startsWith('"')
+        ) {
+          try {
+            return JSON.parse(trimmed)
+          } catch {
+            return rawValue
+          }
+        }
+
+        return rawValue
+      }
+
+      return rawValue
+    },
+    []
+  )
+
+  const isCellChanged = useCallback(
+    (row: RecordRow, columnKey: string) => {
+      const draftValue = draftCells[row.id]?.[columnKey]
+      if (draftValue === undefined) {
+        return false
+      }
+
+      return draftValue !== toEditableCellValue(row.data?.[columnKey])
+    },
+    [draftCells, toEditableCellValue]
+  )
+
+  const hasPendingChanges = useMemo(
+    () =>
+      rows.some((row) =>
+        visibleColumns.some((column) => isCellChanged(row, column.key))
+      ),
+    [rows, visibleColumns, isCellChanged]
+  )
 
   const applySearch = () => {
     const nextQuery = searchInput.trim()
@@ -187,9 +350,160 @@ export default function DataPage() {
   }
 
   const clearSearch = () => {
+    if (isEditMode) {
+      toast.error("Exit edit mode before changing the search query")
+      return
+    }
+
     setSearchInput("")
     setAppliedSearchQuery("")
     setSkip(0)
+  }
+
+  const refreshAfterMutation = async (isDeleteAction: boolean) => {
+    if (isDeleteAction && !isSearchMode && rows.length === 1 && skip > 0) {
+      setSkip((previous) => Math.max(previous - PAGE_SIZE, 0))
+      return
+    }
+
+    await fetchData()
+  }
+
+  const enterEditMode = () => {
+    setIsEditMode(true)
+  }
+
+  const exitEditMode = () => {
+    setIsEditMode(false)
+    setDraftCells({})
+  }
+
+  const updateDraftCell = (rowId: number, columnKey: string, value: string) => {
+    setDraftCells((previous) => ({
+      ...previous,
+      [rowId]: {
+        ...(previous[rowId] ?? {}),
+        [columnKey]: value,
+      },
+    }))
+  }
+
+  const handleSaveSpreadsheetChanges = async () => {
+    const changedRows = rows.filter((row) =>
+      visibleColumns.some((column) => isCellChanged(row, column.key))
+    )
+
+    if (changedRows.length === 0) {
+      toast.message("No changes to save")
+      return
+    }
+
+    const updates: Array<{ id: number; data: Record<string, unknown> }> = []
+
+    try {
+      for (const row of changedRows) {
+        const nextData: Record<string, unknown> = { ...(row.data ?? {}) }
+
+        for (const column of visibleColumns) {
+          const cellInput = getDraftCellValue(row, column.key)
+          nextData[column.key] = parseEditedCellValue(
+            cellInput,
+            row.data?.[column.key]
+          )
+        }
+
+        updates.push({ id: row.id, data: nextData })
+      }
+    } catch (parseError) {
+      toast.error(
+        parseError instanceof Error
+          ? parseError.message
+          : "Invalid edited value"
+      )
+      return
+    }
+
+    setIsMutating(true)
+    try {
+      const failedIds: number[] = []
+      let successCount = 0
+
+      for (const update of updates) {
+        const response = await fetch(`${BACKEND_URL}/records/${update.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ data: update.data }),
+        })
+
+        if (!response.ok) {
+          failedIds.push(update.id)
+          continue
+        }
+
+        successCount += 1
+      }
+
+      if (failedIds.length === 0) {
+        toast.success(
+          `Saved ${successCount} record${successCount === 1 ? "" : "s"}`
+        )
+        exitEditMode()
+      } else {
+        toast.error(
+          `Saved ${successCount}, failed ${failedIds.length} (IDs: ${failedIds.join(", ")})`
+        )
+      }
+
+      await refreshAfterMutation(false)
+    } catch {
+      toast.error("Failed to save changes")
+    } finally {
+      setIsMutating(false)
+    }
+  }
+
+  const handleContextEditRow = (row: RecordRow) => {
+    if (!isEditMode) {
+      setIsEditMode(true)
+      toast.message(`Edit mode enabled for row ${row.id}`)
+    }
+  }
+
+  const openDeleteDialog = (row: RecordRow) => {
+    setRecordPendingDelete(row)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!recordPendingDelete) {
+      return
+    }
+
+    setIsMutating(true)
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/records/${recordPendingDelete.id}`,
+        {
+          method: "DELETE",
+        }
+      )
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || "Failed to delete record")
+      }
+
+      toast.success("Record deleted")
+      setIsDeleteDialogOpen(false)
+      setRecordPendingDelete(null)
+      await refreshAfterMutation(true)
+    } catch {
+      toast.error("Failed to delete record")
+    } finally {
+      setIsMutating(false)
+    }
   }
 
   return (
@@ -217,21 +531,62 @@ export default function DataPage() {
                 }}
                 placeholder="Search"
                 aria-label="Semantic search query"
+                disabled={isEditMode || isMutating}
               />
               <div className="flex gap-2">
-                <Button onClick={applySearch} disabled={searchInput.trim().length === 0}>
+                <Button
+                  onClick={applySearch}
+                  disabled={
+                    searchInput.trim().length === 0 || isEditMode || isMutating
+                  }
+                >
                   Search
                 </Button>
                 <Button
                   variant="outline"
                   onClick={clearSearch}
-                  disabled={!isSearchMode && searchInput.trim().length === 0}
+                  disabled={
+                    (!isSearchMode && searchInput.trim().length === 0) ||
+                    isMutating
+                  }
                 >
                   Clear
                 </Button>
               </div>
             </div>
           </div>
+
+          {!isLoading && !error && totalCount > 0 && (
+            <div className="rounded-lg border p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {!isEditMode && (
+                  <Button onClick={enterEditMode} disabled={isMutating}>
+                    Edit
+                  </Button>
+                )}
+                {isEditMode && (
+                  <>
+                    <Button
+                      onClick={handleSaveSpreadsheetChanges}
+                      disabled={!hasPendingChanges || isMutating}
+                    >
+                      Save Changes
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={exitEditMode}
+                      disabled={isMutating}
+                    >
+                      Cancel
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Edit mode is active. Right-click a row for row actions.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {isLoading && (
             <div className="rounded-lg border p-6 text-sm text-muted-foreground">
@@ -263,12 +618,13 @@ export default function DataPage() {
             <div className="flex flex-col gap-4">
               {isSearchMode ? (
                 <div className="text-sm text-muted-foreground">
-                  Semantic search for &quot;{appliedSearchQuery}&quot; returned {rows.length} results.
+                  Semantic search for &quot;{appliedSearchQuery}&quot; returned{" "}
+                  {rows.length} results.
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">
-                  Showing {skip + 1}-{Math.min(skip + rows.length, totalCount)} of{" "}
-                  {totalCount}
+                  Showing {skip + 1}-{Math.min(skip + rows.length, totalCount)}{" "}
+                  of {totalCount}
                 </div>
               )}
 
@@ -284,14 +640,66 @@ export default function DataPage() {
                   </TableHeader>
                   <TableBody>
                     {rows.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium">{row.id}</TableCell>
-                        {visibleColumns.map((column) => (
-                          <TableCell key={`${row.id}-${column.key}`}>
-                            {stringifyValue(row.data?.[column.key])}
-                          </TableCell>
-                        ))}
-                      </TableRow>
+                      <ContextMenu key={row.id}>
+                        <ContextMenuTrigger asChild>
+                          <TableRow>
+                            <TableCell className="font-medium">
+                              {row.id}
+                            </TableCell>
+                            {visibleColumns.map((column) => {
+                              const draftValue = getDraftCellValue(
+                                row,
+                                column.key
+                              )
+                              const changed = isCellChanged(row, column.key)
+
+                              if (isEditMode) {
+                                return (
+                                  <TableCell key={`${row.id}-${column.key}`}>
+                                    <Input
+                                      value={draftValue}
+                                      onChange={(event) =>
+                                        updateDraftCell(
+                                          row.id,
+                                          column.key,
+                                          event.target.value
+                                        )
+                                      }
+                                      className={
+                                        changed ? "border-amber-500" : ""
+                                      }
+                                      disabled={isMutating}
+                                    />
+                                  </TableCell>
+                                )
+                              }
+
+                              return (
+                                <TableCell key={`${row.id}-${column.key}`}>
+                                  {stringifyValue(row.data?.[column.key])}
+                                </TableCell>
+                              )
+                            })}
+                          </TableRow>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuLabel>Row {row.id}</ContextMenuLabel>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem
+                            onSelect={() => handleContextEditRow(row)}
+                            disabled={isMutating}
+                          >
+                            Edit
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            variant="destructive"
+                            onSelect={() => openDeleteDialog(row)}
+                            disabled={isMutating}
+                          >
+                            Delete
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     ))}
                   </TableBody>
                 </Table>
@@ -305,7 +713,7 @@ export default function DataPage() {
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
-                      disabled={!hasPreviousPage}
+                      disabled={!hasPreviousPage || isEditMode || isMutating}
                       onClick={() =>
                         setSkip((previous) => Math.max(previous - PAGE_SIZE, 0))
                       }
@@ -314,8 +722,10 @@ export default function DataPage() {
                     </Button>
                     <Button
                       variant="outline"
-                      disabled={!hasNextPage}
-                      onClick={() => setSkip((previous) => previous + PAGE_SIZE)}
+                      disabled={!hasNextPage || isEditMode || isMutating}
+                      onClick={() =>
+                        setSkip((previous) => previous + PAGE_SIZE)
+                      }
                     >
                       Next
                     </Button>
@@ -330,6 +740,37 @@ export default function DataPage() {
               Column metadata is empty. Columns are inferred from record keys.
             </div>
           )}
+
+          <Dialog
+            open={isDeleteDialogOpen}
+            onOpenChange={setIsDeleteDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Record</DialogTitle>
+                <DialogDescription>
+                  This will permanently delete record #{recordPendingDelete?.id}{" "}
+                  from SQLite and Chroma.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsDeleteDialogOpen(false)}
+                  disabled={isMutating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleConfirmDelete}
+                  disabled={isMutating}
+                >
+                  Delete
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </SidebarInset>
     </>
