@@ -75,7 +75,7 @@ export function TemplatePreviewStep({
       </div>
 
       {/* Data table */}
-      <div className="w-full rounded-lg border">
+      <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>

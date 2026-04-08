@@ -152,8 +152,8 @@ export default function AddPage() {
   return (
     <>
       <AppSidebar />
-      <SidebarInset>
-        <div className="flex min-h-svh flex-col">
+      <SidebarInset className="min-w-0">
+        <div className="flex min-h-svh w-full min-w-0 flex-col overflow-x-hidden">
           <div className="flex flex-1 flex-col gap-6 p-6">
             <Stepper currentStep={currentStep} steps={steps} />
             <div
