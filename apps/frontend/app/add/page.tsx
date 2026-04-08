@@ -7,7 +7,7 @@ import { TemplatePreviewStep } from "@/components/add/template-preview-step"
 import { UploadStep } from "@/components/add/upload-step"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 
 interface ColumnMapping {
   origColumn: string
@@ -40,16 +40,19 @@ export default function AddPage() {
     setSelectedFile(file)
   }
 
-  const handleColumnsSet = (
-    cols: unknown[],
-    rows: Record<string, unknown>[]
-  ) => {
-    const normalizedColumns = cols.map((col) => String(col ?? ""))
-    setParsedData(rows)
-    setMappings(
-      normalizedColumns.map((col) => ({ origColumn: col, mappedColumn: col }))
-    )
-  }
+  const handleColumnsSet = useCallback(
+    (cols: unknown[], rows: Record<string, unknown>[]) => {
+      const normalizedColumns = cols.map((col) => String(col ?? ""))
+      setParsedData(rows)
+      setMappings(
+        normalizedColumns.map((col) => ({
+          origColumn: col,
+          mappedColumn: hasData ? "" : col,
+        }))
+      )
+    },
+    [hasData]
+  )
 
   const goToStep = (step: number) => {
     setCurrentStep(step)

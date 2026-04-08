@@ -26,24 +26,10 @@ interface MappingSuggestion {
   confidence: number
 }
 
-// List of all available columns in the system
-const allSystemColumns = [
-  { value: "local_name", label: "Local Name" },
-  { value: "plant_height", label: "Plant Height (cm)" },
-  { value: "tassel_color", label: "Tassel Color" },
-  { value: "ear_height", label: "Ear Height (cm)" },
-  { value: "days_to_silking", label: "Days to Silking" },
-  { value: "days_to_anthesis", label: "Days to Anthesis" },
-  { value: "grain_yield", label: "Grain Yield (kg/ha)" },
-  { value: "moisture_content", label: "Moisture Content (%)" },
-  { value: "stalk_rot_resistance", label: "Stalk Rot Resistance" },
-  { value: "drought_tolerance", label: "Drought Tolerance" },
-  { value: "waterlogging_tolerance", label: "Waterlogging Tolerance" },
-  { value: "silk_color", label: "Silk Color" },
-  { value: "grain_type", label: "Grain Type" },
-  { value: "maturity_group", label: "Maturity Group" },
-  { value: "region_adaptation", label: "Region Adaptation" },
-]
+interface ColumnMetadata {
+  column_name: string
+  display_name: string
+}
 
 interface ColumnMapping {
   origColumn: string
@@ -73,6 +59,9 @@ export function AIMappingStep({
   const [mappedSearch, setMappedSearch] = useState("")
   const [unmappedSearch, setUnmappedSearch] = useState("")
   const [suggestionsApplied, setSuggestionsApplied] = useState(false)
+  const [availableColumns, setAvailableColumns] = useState<
+    { value: string; label: string }[]
+  >([])
 
   useEffect(() => {
     if (mappings.length > 0 && !suggestionsApplied) {
@@ -110,6 +99,23 @@ export function AIMappingStep({
     }
   }, [mappings, suggestionsApplied, onMappingsChange])
 
+  useEffect(() => {
+    const fetchColumns = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/column-metadata")
+        const data = await response.json()
+        const columns = data.map((col: ColumnMetadata) => ({
+          value: col.column_name,
+          label: col.display_name,
+        }))
+        setAvailableColumns(columns)
+      } catch (error) {
+        console.error("Failed to fetch column metadata:", error)
+      }
+    }
+    fetchColumns()
+  }, [])
+
   const handleMappingChange = (origColumn: string, newValue: string) => {
     const newMappings = mappings.map((mapping) =>
       mapping.origColumn === origColumn
@@ -120,7 +126,8 @@ export function AIMappingStep({
   }
 
   const getSystemColumnLabel = (value: string) => {
-    const column = allSystemColumns.find((col) => col.value === value)
+    if (!value) return "Select mapping"
+    const column = availableColumns.find((col) => col.value === value)
     return column?.label || value
   }
 
@@ -184,7 +191,7 @@ export function AIMappingStep({
             <CommandList>
               <CommandEmpty>No column found.</CommandEmpty>
               <CommandGroup>
-                {allSystemColumns.map((column) => (
+                {availableColumns.map((column) => (
                   <CommandItem
                     key={column.value}
                     value={column.value}
