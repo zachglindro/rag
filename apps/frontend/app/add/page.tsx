@@ -41,11 +41,14 @@ export default function AddPage() {
   }
 
   const handleColumnsSet = (
-    cols: string[],
+    cols: unknown[],
     rows: Record<string, unknown>[]
   ) => {
+    const normalizedColumns = cols.map((col) => String(col ?? ""))
     setParsedData(rows)
-    setMappings(cols.map((col) => ({ origColumn: col, mappedColumn: col })))
+    setMappings(
+      normalizedColumns.map((col) => ({ origColumn: col, mappedColumn: col }))
+    )
   }
 
   const goToStep = (step: number) => {

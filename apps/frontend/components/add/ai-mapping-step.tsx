@@ -50,6 +50,8 @@ interface ColumnMapping {
   mappedColumn: string
 }
 
+const toSearchableText = (value: unknown) => String(value ?? "").toLowerCase()
+
 interface AIMappingStepProps {
   onBack: () => void
   onNext: () => void
@@ -137,10 +139,10 @@ export function AIMappingStep({
   )
 
   const filteredMappedMappings = mappedMappings.filter((mapping) =>
-    mapping.origColumn.toLowerCase().includes(mappedSearch.toLowerCase())
+    toSearchableText(mapping.origColumn).includes(mappedSearch.toLowerCase())
   )
   const filteredUnmappedMappings = unmappedMappings.filter((mapping) =>
-    mapping.origColumn.toLowerCase().includes(unmappedSearch.toLowerCase())
+    toSearchableText(mapping.origColumn).includes(unmappedSearch.toLowerCase())
   )
 
   const renderMappingRow = (mapping: ColumnMapping) => (

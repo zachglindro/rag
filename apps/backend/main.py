@@ -309,8 +309,13 @@ async def upload_file(file: UploadFile = File(...)):
                 detail="Unsupported file type. Only CSV and XLSX are allowed.",
             )
 
-        columns = df.columns.tolist()
-        rows = df.fillna("").to_dict("records")
+        # Normalize headers and row keys to strings so frontend mapping logic
+        # can safely treat all column identifiers as text.
+        columns = [str(col) for col in df.columns.tolist()]
+        rows = [
+            {str(key): value for key, value in row.items()}
+            for row in df.fillna("").to_dict("records")
+        ]
 
         return {"columns": columns, "rows": rows, "row_count": len(rows)}
     except pd.errors.EmptyDataError:
