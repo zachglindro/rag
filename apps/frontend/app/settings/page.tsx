@@ -23,6 +23,11 @@ import { toast } from "sonner"
 import { useState, useEffect } from "react"
 import { Loader2, Check } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 interface ModelInfo {
   id: string
@@ -51,6 +56,7 @@ export default function Settings() {
     }
     return false
   })
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
 
   const fetchModelSettings = async () => {
     try {
@@ -225,22 +231,27 @@ export default function Settings() {
               </Dialog>
             </div>
 
-            <div>
-              <h2>Advanced Settings</h2>
-              <p className="text-sm text-muted-foreground">
-                Configure advanced options for debugging and development.
-              </p>
-              <div className="mt-4 flex items-center gap-2">
-                <Switch
-                  id="enable-debugging"
-                  checked={enableDebugging}
-                  onCheckedChange={handleToggleDebugging}
-                />
-                <label htmlFor="enable-debugging" className="text-sm">
-                  Enable Debugging
-                </label>
-              </div>
-            </div>
+            <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+              <CollapsibleTrigger asChild>
+                <button className="flex w-full items-center justify-between text-left">
+                  <span className="text-sm text-muted-foreground">
+                    {isAdvancedOpen ? "Hide" : "Show"} developer options
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4 pt-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="enable-debugging"
+                    checked={enableDebugging}
+                    onCheckedChange={handleToggleDebugging}
+                  />
+                  <label htmlFor="enable-debugging" className="text-sm">
+                    Enable Debugging
+                  </label>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </div>
       </SidebarInset>
