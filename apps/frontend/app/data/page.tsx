@@ -509,8 +509,8 @@ export default function DataPage() {
   return (
     <>
       <AppSidebar />
-      <SidebarInset>
-        <div className="flex min-h-svh flex-col gap-6 p-6">
+      <SidebarInset className="min-w-0">
+        <div className="flex min-h-svh w-full min-w-0 flex-col gap-6 overflow-x-hidden p-6">
           <div>
             <h1 className="text-xl font-semibold">Data</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -615,7 +615,7 @@ export default function DataPage() {
           )}
 
           {!isLoading && !error && totalCount > 0 && (
-            <div className="flex flex-col gap-4">
+            <div className="flex w-full min-w-0 flex-col gap-4">
               {isSearchMode ? (
                 <div className="text-sm text-muted-foreground">
                   Semantic search for &quot;{appliedSearchQuery}&quot; returned{" "}
@@ -628,7 +628,7 @@ export default function DataPage() {
                 </div>
               )}
 
-              <div className="overflow-x-auto rounded-lg border">
+              <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
                 <Table>
                   <TableHeader>
                     <TableRow>
