@@ -29,7 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 interface RecordRow {
@@ -101,6 +101,90 @@ function stringifyValue(value: unknown): string {
   return String(value)
 }
 
+interface VisibleColumn {
+  key: string
+  label: string
+}
+
+interface DataTableRowProps {
+  row: RecordRow
+  visibleColumns: VisibleColumn[]
+  isEditMode: boolean
+  isMutating: boolean
+  rowDraft: Record<string, string> | undefined
+  toEditableCellValue: (value: unknown) => string
+  onUpdateDraftCell: (rowId: number, columnKey: string, value: string) => void
+  onContextEditRow: (row: RecordRow) => void
+  onOpenDeleteDialog: (row: RecordRow) => void
+}
+
+const DataTableRow = memo(function DataTableRow({
+  row,
+  visibleColumns,
+  isEditMode,
+  isMutating,
+  rowDraft,
+  toEditableCellValue,
+  onUpdateDraftCell,
+  onContextEditRow,
+  onOpenDeleteDialog,
+}: DataTableRowProps) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <TableRow>
+          <TableCell className="font-medium">{row.id}</TableCell>
+          {visibleColumns.map((column) => {
+            const originalValue = toEditableCellValue(row.data?.[column.key])
+            const draftValue = rowDraft?.[column.key]
+            const cellValue = draftValue ?? originalValue
+            const changed =
+              draftValue !== undefined && draftValue !== originalValue
+
+            if (isEditMode) {
+              return (
+                <TableCell key={`${row.id}-${column.key}`}>
+                  <Input
+                    value={cellValue}
+                    onChange={(event) =>
+                      onUpdateDraftCell(row.id, column.key, event.target.value)
+                    }
+                    className={changed ? "border-amber-500" : ""}
+                    disabled={isMutating}
+                  />
+                </TableCell>
+              )
+            }
+
+            return (
+              <TableCell key={`${row.id}-${column.key}`}>
+                {stringifyValue(row.data?.[column.key])}
+              </TableCell>
+            )
+          })}
+        </TableRow>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuLabel>Row {row.id}</ContextMenuLabel>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onSelect={() => onContextEditRow(row)}
+          disabled={isMutating}
+        >
+          Edit
+        </ContextMenuItem>
+        <ContextMenuItem
+          variant="destructive"
+          onSelect={() => onOpenDeleteDialog(row)}
+          disabled={isMutating}
+        >
+          Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+})
+
 export default function DataPage() {
   const [rows, setRows] = useState<RecordRow[]>([])
   const [metadata, setMetadata] = useState<ColumnMetadataRow[]>([])
@@ -118,6 +202,7 @@ export default function DataPage() {
     useState<RecordRow | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
+  const [dirtyCellCount, setDirtyCellCount] = useState(0)
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
@@ -225,18 +310,6 @@ export default function DataPage() {
     }
   }, [])
 
-  const getDraftCellValue = useCallback(
-    (row: RecordRow, columnKey: string) => {
-      const existingDraft = draftCells[row.id]?.[columnKey]
-      if (existingDraft !== undefined) {
-        return existingDraft
-      }
-
-      return toEditableCellValue(row.data?.[columnKey])
-    },
-    [draftCells, toEditableCellValue]
-  )
-
   const parseEditedCellValue = useCallback(
     (rawValue: string, originalValue: unknown): unknown => {
       const trimmed = rawValue.trim()
@@ -323,25 +396,21 @@ export default function DataPage() {
     []
   )
 
-  const isCellChanged = useCallback(
-    (row: RecordRow, columnKey: string) => {
-      const draftValue = draftCells[row.id]?.[columnKey]
-      if (draftValue === undefined) {
-        return false
+  const hasPendingChanges = dirtyCellCount > 0
+
+  const originalEditableValuesByRow = useMemo(() => {
+    const byRow = new Map<number, Record<string, string>>()
+
+    for (const row of rows) {
+      const valueByColumn: Record<string, string> = {}
+      for (const column of visibleColumns) {
+        valueByColumn[column.key] = toEditableCellValue(row.data?.[column.key])
       }
+      byRow.set(row.id, valueByColumn)
+    }
 
-      return draftValue !== toEditableCellValue(row.data?.[columnKey])
-    },
-    [draftCells, toEditableCellValue]
-  )
-
-  const hasPendingChanges = useMemo(
-    () =>
-      rows.some((row) =>
-        visibleColumns.some((column) => isCellChanged(row, column.key))
-      ),
-    [rows, visibleColumns, isCellChanged]
-  )
+    return byRow
+  }, [rows, visibleColumns, toEditableCellValue])
 
   const applySearch = () => {
     const nextQuery = searchInput.trim()
@@ -376,22 +445,76 @@ export default function DataPage() {
   const exitEditMode = () => {
     setIsEditMode(false)
     setDraftCells({})
+    setDirtyCellCount(0)
   }
 
-  const updateDraftCell = (rowId: number, columnKey: string, value: string) => {
-    setDraftCells((previous) => ({
-      ...previous,
-      [rowId]: {
-        ...(previous[rowId] ?? {}),
-        [columnKey]: value,
-      },
-    }))
-  }
+  const updateDraftCell = useCallback(
+    (rowId: number, columnKey: string, value: string) => {
+      const originalValue =
+        originalEditableValuesByRow.get(rowId)?.[columnKey] ?? ""
+
+      setDraftCells((previous) => {
+        const existingRowDraft = previous[rowId]
+        const previousCellValue = existingRowDraft?.[columnKey]
+        const nextCellIsDirty = value !== originalValue
+
+        if (!nextCellIsDirty && previousCellValue === undefined) {
+          return previous
+        }
+
+        if (nextCellIsDirty && previousCellValue === value) {
+          return previous
+        }
+
+        let nextDirtyDelta = 0
+
+        if (previousCellValue === undefined && nextCellIsDirty) {
+          nextDirtyDelta = 1
+        } else if (previousCellValue !== undefined && !nextCellIsDirty) {
+          nextDirtyDelta = -1
+        }
+
+        if (nextDirtyDelta !== 0) {
+          setDirtyCellCount((current) => Math.max(current + nextDirtyDelta, 0))
+        }
+
+        if (!nextCellIsDirty) {
+          if (!existingRowDraft) {
+            return previous
+          }
+
+          const remainingColumns = { ...existingRowDraft }
+          delete remainingColumns[columnKey]
+
+          if (Object.keys(remainingColumns).length === 0) {
+            const remainingRows = { ...previous }
+            delete remainingRows[rowId]
+            return remainingRows
+          }
+
+          return {
+            ...previous,
+            [rowId]: remainingColumns,
+          }
+        }
+
+        return {
+          ...previous,
+          [rowId]: {
+            ...(existingRowDraft ?? {}),
+            [columnKey]: value,
+          },
+        }
+      })
+    },
+    [originalEditableValuesByRow]
+  )
 
   const handleSaveSpreadsheetChanges = async () => {
-    const changedRows = rows.filter((row) =>
-      visibleColumns.some((column) => isCellChanged(row, column.key))
+    const changedRowIds = new Set(
+      Object.keys(draftCells).map((id) => Number(id))
     )
+    const changedRows = rows.filter((row) => changedRowIds.has(row.id))
 
     if (changedRows.length === 0) {
       toast.message("No changes to save")
@@ -405,7 +528,9 @@ export default function DataPage() {
         const nextData: Record<string, unknown> = { ...(row.data ?? {}) }
 
         for (const column of visibleColumns) {
-          const cellInput = getDraftCellValue(row, column.key)
+          const cellInput =
+            draftCells[row.id]?.[column.key] ??
+            toEditableCellValue(row.data?.[column.key])
           nextData[column.key] = parseEditedCellValue(
             cellInput,
             row.data?.[column.key]
@@ -464,17 +589,20 @@ export default function DataPage() {
     }
   }
 
-  const handleContextEditRow = (row: RecordRow) => {
-    if (!isEditMode) {
-      setIsEditMode(true)
-      toast.message(`Edit mode enabled for row ${row.id}`)
-    }
-  }
+  const handleContextEditRow = useCallback(
+    (row: RecordRow) => {
+      if (!isEditMode) {
+        setIsEditMode(true)
+        toast.message(`Edit mode enabled for row ${row.id}`)
+      }
+    },
+    [isEditMode]
+  )
 
-  const openDeleteDialog = (row: RecordRow) => {
+  const openDeleteDialog = useCallback((row: RecordRow) => {
     setRecordPendingDelete(row)
     setIsDeleteDialogOpen(true)
-  }
+  }, [])
 
   const handleConfirmDelete = async () => {
     if (!recordPendingDelete) {
@@ -640,66 +768,18 @@ export default function DataPage() {
                   </TableHeader>
                   <TableBody>
                     {rows.map((row) => (
-                      <ContextMenu key={row.id}>
-                        <ContextMenuTrigger asChild>
-                          <TableRow>
-                            <TableCell className="font-medium">
-                              {row.id}
-                            </TableCell>
-                            {visibleColumns.map((column) => {
-                              const draftValue = getDraftCellValue(
-                                row,
-                                column.key
-                              )
-                              const changed = isCellChanged(row, column.key)
-
-                              if (isEditMode) {
-                                return (
-                                  <TableCell key={`${row.id}-${column.key}`}>
-                                    <Input
-                                      value={draftValue}
-                                      onChange={(event) =>
-                                        updateDraftCell(
-                                          row.id,
-                                          column.key,
-                                          event.target.value
-                                        )
-                                      }
-                                      className={
-                                        changed ? "border-amber-500" : ""
-                                      }
-                                      disabled={isMutating}
-                                    />
-                                  </TableCell>
-                                )
-                              }
-
-                              return (
-                                <TableCell key={`${row.id}-${column.key}`}>
-                                  {stringifyValue(row.data?.[column.key])}
-                                </TableCell>
-                              )
-                            })}
-                          </TableRow>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent>
-                          <ContextMenuLabel>Row {row.id}</ContextMenuLabel>
-                          <ContextMenuSeparator />
-                          <ContextMenuItem
-                            onSelect={() => handleContextEditRow(row)}
-                            disabled={isMutating}
-                          >
-                            Edit
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            variant="destructive"
-                            onSelect={() => openDeleteDialog(row)}
-                            disabled={isMutating}
-                          >
-                            Delete
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
+                      <DataTableRow
+                        key={row.id}
+                        row={row}
+                        visibleColumns={visibleColumns}
+                        isEditMode={isEditMode}
+                        isMutating={isMutating}
+                        rowDraft={draftCells[row.id]}
+                        toEditableCellValue={toEditableCellValue}
+                        onUpdateDraftCell={updateDraftCell}
+                        onContextEditRow={handleContextEditRow}
+                        onOpenDeleteDialog={openDeleteDialog}
+                      />
                     ))}
                   </TableBody>
                 </Table>
