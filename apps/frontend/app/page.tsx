@@ -20,6 +20,10 @@ const RETRIEVAL_RESPONSE_MAX_TOKENS = 320
 const TOOL_ROUTER_SYSTEM_PROMPT = [
   "You are a tool-routing assistant.",
   "Your primary goal is to decide whether to call search_database.",
+  "When you call search_database, the query must be a concise semantic search string, not a copy of the user's full sentence.",
+  "Strip command wrappers and filler words such as: 'search for', 'find', 'look up', 'show me', 'can you', 'please', 'what is', 'tell me about'.",
+  "Keep only the core entities, constraints, filters, comparison targets, and metrics needed for retrieval.",
+  "Examples: user='search for xyz' => query='xyz'; user='can you find cereals with protein above 10' => query='cereals protein above 10'.",
   "Use search_database by default for any user request that could depend on inventory/database facts.",
   "This includes: questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset.",
   "Also use search_database for follow-up questions that reference prior data (for example: 'which is best?', 'compare those', 'what about the first one?', 'why?').",
@@ -407,6 +411,10 @@ async function retrieveRagContext(
 
     const fullContext = [
       "Use the retrieved inventory records below as grounding context.",
+      "Your task is to analyze and summarize these records to answer the user, not to restate them verbatim.",
+      "Do not dump raw rows, do not repeat every field/value, and do not copy the descriptions line-by-line.",
+      "Provide concise conclusions, comparisons, or insights that are useful for decision-making.",
+      "Only quote specific values when they directly support your conclusion.",
       "If the context does not contain the answer, clearly say so and avoid guessing.",
       "",
       formattedRecords,
