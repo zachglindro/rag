@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner"
 import { useState, useEffect } from "react"
 import { Loader2, Check } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 
 interface ModelInfo {
   id: string
@@ -44,6 +45,12 @@ export default function Settings() {
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [isSwitching, setIsSwitching] = useState(false)
   const [switchSuccess, setSwitchSuccess] = useState(false)
+  const [enableDebugging, setEnableDebugging] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("enableDebugging") === "true"
+    }
+    return false
+  })
 
   const fetchModelSettings = async () => {
     try {
@@ -115,6 +122,11 @@ export default function Settings() {
     }
   }
 
+  const handleToggleDebugging = (checked: boolean) => {
+    setEnableDebugging(checked)
+    localStorage.setItem("enableDebugging", checked ? "true" : "false")
+  }
+
   return (
     <>
       <AppSidebar />
@@ -158,12 +170,16 @@ export default function Settings() {
                 {switchSuccess && <Check className="h-4 w-4 text-green-500" />}
               </div>
 
-              <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+              <Dialog
+                open={isConfirmDialogOpen}
+                onOpenChange={setIsConfirmDialogOpen}
+              >
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Switch to Online Model</DialogTitle>
                     <DialogDescription>
-                      This will send your data to an online model. Are you sure you want to proceed?
+                      This will send your data to an online model. Are you sure
+                      you want to proceed?
                     </DialogDescription>
                   </DialogHeader>
                   <DialogFooter>
@@ -173,9 +189,7 @@ export default function Settings() {
                     >
                       Cancel
                     </Button>
-                    <Button onClick={handleConfirmSwitch}>
-                      Confirm
-                    </Button>
+                    <Button onClick={handleConfirmSwitch}>Confirm</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -209,6 +223,23 @@ export default function Settings() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+            </div>
+
+            <div>
+              <h2>Advanced Settings</h2>
+              <p className="text-sm text-muted-foreground">
+                Configure advanced options for debugging and development.
+              </p>
+              <div className="mt-4 flex items-center gap-2">
+                <Switch
+                  id="enable-debugging"
+                  checked={enableDebugging}
+                  onCheckedChange={handleToggleDebugging}
+                />
+                <label htmlFor="enable-debugging" className="text-sm">
+                  Enable Debugging
+                </label>
+              </div>
             </div>
           </div>
         </div>

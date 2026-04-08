@@ -342,8 +342,8 @@ async function decideRetrievalToolUse(
 ): Promise<ToolDecision> {
   const lastUserMessage = [...conversationMessages]
     .reverse()
-    .find((message) => message.role === "user")?.content
-    ?.trim()
+    .find((message) => message.role === "user")
+    ?.content?.trim()
 
   const fallbackSearchDecision: ToolDecision = {
     tool: "search_database",
@@ -496,6 +496,12 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasRecords, setHasRecords] = useState<boolean | null>(null)
+  const [enableDebugging, setEnableDebugging] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("enableDebugging") === "true"
+    }
+    return false
+  })
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const isLoadingRef = useRef(false)
@@ -530,6 +536,19 @@ export default function Page() {
     }
 
     void fetchRecordCount()
+  }, [])
+
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "enableDebugging") {
+        setEnableDebugging(e.newValue === "true")
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+    }
   }, [])
 
   const updateTextareaHeight = useCallback(() => {
@@ -1013,14 +1032,16 @@ export default function Page() {
               </div>
 
               <div className="px-4 py-4">
-                <details className="w-full">
-                  <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
-                    Debug Logs
-                  </summary>
-                  <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap text-muted-foreground">
-                    {debugLogs.join("\n\n")}
-                  </pre>
-                </details>
+                {enableDebugging && (
+                  <details className="w-full">
+                    <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+                      Debug Logs
+                    </summary>
+                    <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap text-muted-foreground">
+                      {debugLogs.join("\n\n")}
+                    </pre>
+                  </details>
+                )}
               </div>
 
               <div className="sticky bottom-0 border-t bg-background/95 px-4 py-4 backdrop-blur sm:px-8">
