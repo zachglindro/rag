@@ -6,6 +6,8 @@ import { Check, Loader2, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
+const startedIngestionKeys = new Set<string>()
+
 interface IngestStepProps {
   onComplete: () => void
   rows?: Record<string, unknown>[]
@@ -25,6 +27,13 @@ export function IngestStep({ onComplete, rows, mappings }: IngestStepProps) {
       onComplete()
       return
     }
+
+    const ingestionKey = JSON.stringify({ rows, mappings })
+    if (startedIngestionKeys.has(ingestionKey)) {
+      return
+    }
+
+    startedIngestionKeys.add(ingestionKey)
 
     const ingestData = async () => {
       try {
@@ -52,6 +61,7 @@ export function IngestStep({ onComplete, rows, mappings }: IngestStepProps) {
         setIsLoading(false)
         onComplete()
       } catch (err) {
+        startedIngestionKeys.delete(ingestionKey)
         setIsLoading(false)
         setError(err instanceof Error ? err.message : "Unknown error occurred")
       }
