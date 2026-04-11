@@ -20,6 +20,7 @@ from rag.llm import GemmaLLM, GroqLLM
 from rag.reranker import FlashRankService
 from rag.vectordb import ChromaVectorDB
 
+
 load_dotenv()
 
 DB_PATH = Path(__file__).parent / "db.sqlite3"
@@ -238,6 +239,59 @@ def parse_record_data(data_value: Any) -> dict[str, Any]:
             return {"_raw": data_value}
 
     return {}
+
+
+def build_export_rows(
+    records: list[tuple[Any, ...]], metadata_rows: list[tuple[Any, ...]]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    ordered_column_names = [str(row[0]) for row in metadata_rows if row and row[0]]
+    discovered_columns: set[str] = set(ordered_column_names)
+    normalized_records: list[tuple[int, dict[str, Any], Any, Any, Any]] = []
+
+    for record in records:
+        record_id = int(record[0])
+        record_data = parse_record_data(record[1])
+        normalized_records.append(
+            (record_id, record_data, record[2], record[3], record[4])
+        )
+
+        for key in record_data.keys():
+            if key not in discovered_columns:
+                ordered_column_names.append(key)
+                discovered_columns.add(key)
+
+    export_rows: list[dict[str, Any]] = []
+    for (
+        record_id,
+        record_data,
+        natural_description,
+        created_at,
+        updated_at,
+    ) in normalized_records:
+        row: dict[str, Any] = {
+            "id": record_id,
+            "natural_language_description": natural_description,
+            "created_at": created_at,
+            "updated_at": updated_at,
+        }
+
+        for column_name in ordered_column_names:
+            value = record_data.get(column_name, None)
+            if isinstance(value, dict | list):
+                row[column_name] = json.dumps(value, ensure_ascii=False)
+            else:
+                row[column_name] = value
+
+        export_rows.append(row)
+
+    ordered_export_columns = [
+        "id",
+        *ordered_column_names,
+        "natural_language_description",
+        "created_at",
+        "updated_at",
+    ]
+    return export_rows, ordered_export_columns
 
 
 @app.post("/columns")
@@ -949,6 +1003,80 @@ async def get_model_settings():
         active_model=active_model_id,
         available_models=available_models,
     )
+
+
+@app.get("/export-data")
+async def export_data(format: str = Query(..., pattern="^(csv|xlsx|txt)$")):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT column_name, "order"
+            FROM column_metadata
+            ORDER BY "order" ASC, column_name ASC
+            """
+        )
+        metadata_rows = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT id, data, natural_language_description, created_at, updated_at
+            FROM records
+            ORDER BY id ASC
+            """
+        )
+        records = cursor.fetchall()
+
+        export_rows, ordered_export_columns = build_export_rows(records, metadata_rows)
+        records_df = pd.DataFrame(export_rows)
+        if not records_df.empty:
+            records_df = records_df.reindex(columns=ordered_export_columns)
+
+        metadata_df = pd.DataFrame(
+            [
+                {
+                    "column_name": row[0],
+                    "order": row[1],
+                }
+                for row in metadata_rows
+            ]
+        )
+
+        bytes_buffer = io.BytesIO()
+        text_buffer = io.StringIO()
+
+        if format == "csv":
+            records_df.to_csv(text_buffer, index=False)
+            content = text_buffer.getvalue().encode("utf-8")
+            media_type = "text/csv"
+            filename = "export_data.csv"
+        elif format == "xlsx":
+            with pd.ExcelWriter(bytes_buffer, engine="openpyxl") as writer:
+                records_df.to_excel(writer, sheet_name="records", index=False)
+                metadata_df.to_excel(writer, sheet_name="column_metadata", index=False)
+            content = bytes_buffer.getvalue()
+            media_type = (
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            filename = "export_data.xlsx"
+        else:
+            payload = {
+                "column_metadata": metadata_df.to_dict(orient="records"),
+                "records": export_rows,
+            }
+            content = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+            media_type = "text/plain"
+            filename = "export_data.txt"
+
+        response = StreamingResponse(iter([content]), media_type=media_type)
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+    finally:
+        conn.close()
 
 
 @app.post("/settings/model")
