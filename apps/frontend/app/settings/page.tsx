@@ -57,10 +57,9 @@ export default function Settings() {
     return false
   })
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
-  const [exportFormat, setExportFormat] = useState<"csv" | "xlsx" | "txt">(
-    "csv"
-  )
+  const [exportFormat, setExportFormat] = useState<"csv" | "xlsx">("csv")
   const [isExporting, setIsExporting] = useState(false)
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
 
   const fetchModelSettings = async () => {
     try {
@@ -158,6 +157,7 @@ export default function Settings() {
       window.URL.revokeObjectURL(url)
 
       toast.success(`Exported data as ${exportFormat.toUpperCase()}`)
+      setIsExportDialogOpen(false)
     } catch {
       toast.error("Failed to export data")
     } finally {
@@ -235,25 +235,9 @@ export default function Settings() {
 
             <div>
               <h2>Database</h2>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Select
-                  value={exportFormat}
-                  onValueChange={(value: "csv" | "xlsx" | "txt") =>
-                    setExportFormat(value)
-                  }
-                  disabled={isExporting}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select export format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="csv">CSV</SelectItem>
-                    <SelectItem value="xlsx">XLSX</SelectItem>
-                    <SelectItem value="txt">TXT</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button onClick={handleExportData} disabled={isExporting}>
-                  {isExporting ? "Exporting..." : "Export Data"}
+              <div className="mt-4">
+                <Button onClick={() => setIsExportDialogOpen(true)}>
+                  Export Database
                 </Button>
               </div>
 
@@ -281,6 +265,40 @@ export default function Settings() {
                       Reset
                     </Button>
                   </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog
+                open={isExportDialogOpen}
+                onOpenChange={setIsExportDialogOpen}
+              >
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Export Database</DialogTitle>
+                    <DialogDescription>
+                      Select the export format and download the data.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={exportFormat}
+                      onValueChange={(value: "csv" | "xlsx") =>
+                        setExportFormat(value)
+                      }
+                      disabled={isExporting}
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select export format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="csv">CSV</SelectItem>
+                        <SelectItem value="xlsx">XLSX</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={handleExportData} disabled={isExporting}>
+                      {isExporting ? "Exporting..." : "Export"}
+                    </Button>
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>

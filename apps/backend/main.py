@@ -1006,7 +1006,7 @@ async def get_model_settings():
 
 
 @app.get("/export-data")
-async def export_data(format: str = Query(..., pattern="^(csv|xlsx|txt)$")):
+async def export_data(format: str = Query(..., pattern="^(csv|xlsx)$")):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -1047,6 +1047,10 @@ async def export_data(format: str = Query(..., pattern="^(csv|xlsx|txt)$")):
         bytes_buffer = io.BytesIO()
         text_buffer = io.StringIO()
 
+        content = b""
+        media_type = ""
+        filename = ""
+
         if format == "csv":
             records_df.to_csv(text_buffer, index=False)
             content = text_buffer.getvalue().encode("utf-8")
@@ -1061,14 +1065,6 @@ async def export_data(format: str = Query(..., pattern="^(csv|xlsx|txt)$")):
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             filename = "export_data.xlsx"
-        else:
-            payload = {
-                "column_metadata": metadata_df.to_dict(orient="records"),
-                "records": export_rows,
-            }
-            content = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
-            media_type = "text/plain"
-            filename = "export_data.txt"
 
         response = StreamingResponse(iter([content]), media_type=media_type)
         response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
