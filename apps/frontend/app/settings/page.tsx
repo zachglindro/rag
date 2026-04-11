@@ -57,6 +57,10 @@ export default function Settings() {
     return false
   })
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
+  const [exportFormat, setExportFormat] = useState<"csv" | "xlsx" | "txt">(
+    "csv"
+  )
+  const [isExporting, setIsExporting] = useState(false)
 
   const fetchModelSettings = async () => {
     try {
@@ -133,6 +137,34 @@ export default function Settings() {
     localStorage.setItem("enableDebugging", checked ? "true" : "false")
   }
 
+  const handleExportData = async () => {
+    setIsExporting(true)
+    try {
+      const response = await fetch(
+        `http://localhost:8000/export-data?format=${exportFormat}`
+      )
+      if (!response.ok) {
+        throw new Error("Export failed")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `export_data.${exportFormat}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+
+      toast.success(`Exported data as ${exportFormat.toUpperCase()}`)
+    } catch {
+      toast.error("Failed to export data")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <>
       <AppSidebar />
@@ -203,6 +235,28 @@ export default function Settings() {
 
             <div>
               <h2>Database</h2>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Select
+                  value={exportFormat}
+                  onValueChange={(value: "csv" | "xlsx" | "txt") =>
+                    setExportFormat(value)
+                  }
+                  disabled={isExporting}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select export format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="csv">CSV</SelectItem>
+                    <SelectItem value="xlsx">XLSX</SelectItem>
+                    <SelectItem value="txt">TXT</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleExportData} disabled={isExporting}>
+                  {isExporting ? "Exporting..." : "Export Data"}
+                </Button>
+              </div>
+
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="destructive">Reset Database</Button>
