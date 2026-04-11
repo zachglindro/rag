@@ -542,16 +542,28 @@ async def ingest_records(request: IngestRequest):
 async def get_records(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    sort_by: str = Query(default="id"),
+    sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
 ):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     try:
+        # Build ORDER BY clause
+        sort_order_upper = sort_order.upper()
+        if sort_by in ["id", "created_at", "updated_at"]:
+            order_clause = f"ORDER BY {sort_by} {sort_order_upper}"
+        else:
+            # Assume sort_by is a data column, use json_extract
+            order_clause = (
+                f"ORDER BY json_extract(data, '$.{sort_by}') {sort_order_upper}"
+            )
+
         cursor.execute(
-            """
+            f"""
             SELECT id, data, natural_language_description, created_at, updated_at
             FROM records
-            ORDER BY id ASC
+            {order_clause}
             LIMIT ? OFFSET ?
             """,
             (limit, skip),
@@ -815,6 +827,8 @@ async def delete_record(record_id: int):
 async def search_records(
     query: str = Query(..., min_length=1),
     top_k: int = Query(default=10, ge=1, le=100),
+    sort_by: str = Query(default=""),
+    sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
 ):
     cleaned_query = query.strip()
     if not cleaned_query:
@@ -948,6 +962,28 @@ async def search_records(
         row = rows_by_id[record_id]
         row.rerank_score = rerank_score_by_record_id.get(record_id)
         ordered_rows.append(row)
+
+    # Apply user-specified sorting if provided
+    if sort_by:
+        reverse = sort_order == "desc"
+
+        def sort_key(row):
+            if sort_by == "id":
+                return row.id
+            elif sort_by == "created_at":
+                return row.created_at or ""
+            elif sort_by == "updated_at":
+                return row.updated_at or ""
+            elif sort_by == "distance":
+                return row.distance if row.distance is not None else float("inf")
+            else:
+                # Assume data field
+                value = row.data.get(sort_by)
+                if value is None:
+                    return ""
+                return str(value)  # Handle mixed types by converting to string
+
+        ordered_rows.sort(key=sort_key, reverse=reverse)
 
     return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=ordered_rows)
 

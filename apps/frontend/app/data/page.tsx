@@ -38,6 +38,7 @@ import {
 import Link from "next/link"
 import { memo, useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { ChevronUp, ChevronDown } from "lucide-react"
 
 interface RecordRow {
   id: number
@@ -213,6 +214,8 @@ export default function DataPage() {
   const [exportFormat, setExportFormat] = useState<"csv" | "xlsx">("csv")
   const [isExporting, setIsExporting] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [sortColumn, setSortColumn] = useState<string>("id")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
@@ -224,7 +227,7 @@ export default function DataPage() {
       if (isSearchMode) {
         const [searchResponse, metadataResponse] = await Promise.all([
           fetch(
-            `${BACKEND_URL}/semantic-search/records?query=${encodeURIComponent(appliedSearchQuery)}&top_k=50`
+            `${BACKEND_URL}/semantic-search/records?query=${encodeURIComponent(appliedSearchQuery)}&top_k=50&sort_by=${encodeURIComponent(sortColumn)}&sort_order=${sortDirection}`
           ),
           fetch(`${BACKEND_URL}/column-metadata`),
         ])
@@ -242,7 +245,9 @@ export default function DataPage() {
       } else {
         const [recordsResponse, metadataResponse, countResponse] =
           await Promise.all([
-            fetch(`${BACKEND_URL}/records?skip=${skip}&limit=${PAGE_SIZE}`),
+            fetch(
+              `${BACKEND_URL}/records?skip=${skip}&limit=${PAGE_SIZE}&sort_by=${encodeURIComponent(sortColumn)}&sort_order=${sortDirection}`
+            ),
             fetch(`${BACKEND_URL}/column-metadata`),
             fetch(`${BACKEND_URL}/records/count`),
           ])
@@ -269,7 +274,7 @@ export default function DataPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [appliedSearchQuery, isSearchMode, skip])
+  }, [appliedSearchQuery, isSearchMode, skip, sortColumn, sortDirection])
 
   useEffect(() => {
     fetchData()
@@ -294,6 +299,20 @@ export default function DataPage() {
 
     return Array.from(discoveredKeys).map((key) => ({ key, label: key }))
   }, [metadata, rows])
+
+  const handleSort = useCallback(
+    (columnKey: string) => {
+      if (isEditMode) return
+      if (sortColumn === columnKey) {
+        setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
+      } else {
+        setSortColumn(columnKey)
+        setSortDirection("asc")
+      }
+      setSkip(0)
+    },
+    [isEditMode, sortColumn]
+  )
 
   const hasPreviousPage = skip > 0
   const hasNextPage = skip + rows.length < totalCount
@@ -437,6 +456,8 @@ export default function DataPage() {
     setSearchInput("")
     setAppliedSearchQuery("")
     setSkip(0)
+    setSortColumn("id")
+    setSortDirection("asc")
   }
 
   const refreshAfterMutation = async (isDeleteAction: boolean) => {
@@ -807,9 +828,32 @@ export default function DataPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-20">ID</TableHead>
+                      <TableHead
+                        className="w-20 cursor-pointer"
+                        onClick={() => handleSort("id")}
+                      >
+                        ID
+                        {sortColumn === "id" &&
+                          (sortDirection === "asc" ? (
+                            <ChevronUp className="ml-1 inline h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="ml-1 inline h-4 w-4" />
+                          ))}
+                      </TableHead>
                       {visibleColumns.map((column) => (
-                        <TableHead key={column.key}>{column.label}</TableHead>
+                        <TableHead
+                          key={column.key}
+                          className="cursor-pointer"
+                          onClick={() => handleSort(column.key)}
+                        >
+                          {column.label}
+                          {sortColumn === column.key &&
+                            (sortDirection === "asc" ? (
+                              <ChevronUp className="ml-1 inline h-4 w-4" />
+                            ) : (
+                              <ChevronDown className="ml-1 inline h-4 w-4" />
+                            ))}
+                        </TableHead>
                       ))}
                     </TableRow>
                   </TableHeader>
