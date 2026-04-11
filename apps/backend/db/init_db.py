@@ -28,6 +28,16 @@ def create_tables(cursor: sqlite3.Cursor) -> None:
     """)
 
 
+def create_fts_table(cursor: sqlite3.Cursor) -> None:
+    # FTS5 virtual table for keyword search
+    cursor.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(
+            record_id UNINDEXED,
+            content
+        )
+    """)
+
+
 def initialize_database(db_path: Path) -> None:
     if not db_path.exists():
         conn = sqlite3.connect(db_path)

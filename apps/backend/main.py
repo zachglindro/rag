@@ -10,7 +10,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 import pandas as pd
-from db.init_db import initialize_database
+from db.init_db import initialize_database, create_fts_table
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from preprocessing.description_builder import build_natural_language_description
@@ -198,6 +198,22 @@ class SwitchModelRequest(BaseModel):
     model_id: str
 
 
+class CompareSetupResponse(BaseModel):
+    indexed_count: int
+    setup_duration_ms: int
+
+
+class CompareStatusResponse(BaseModel):
+    ready: bool
+    indexed_count: int | None = None
+    last_updated: str | None = None
+
+
+class CompareRebuildResponse(BaseModel):
+    indexed_count: int
+    rebuild_duration_ms: int
+
+
 def infer_column_data_type(values: list[Any]) -> str:
     for value in values:
         if value is None:
@@ -239,6 +255,14 @@ def parse_record_data(data_value: Any) -> dict[str, Any]:
             return {"_raw": data_value}
 
     return {}
+
+
+def build_searchable_text(
+    record_data: dict[str, Any], natural_description: str | None
+) -> str:
+    if natural_description:
+        return natural_description
+    return json.dumps(record_data, ensure_ascii=False)
 
 
 def build_export_rows(
@@ -996,6 +1020,7 @@ async def reset_database():
         # Drop existing tables
         cursor.execute("DROP TABLE IF EXISTS records")
         cursor.execute("DROP TABLE IF EXISTS column_metadata")
+        cursor.execute("DROP TABLE IF EXISTS records_fts")
 
         # Recreate tables
         from db.init_db import create_tables
@@ -1013,6 +1038,250 @@ async def reset_database():
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post("/compare/setup", response_model=CompareSetupResponse)
+async def setup_compare_mode():
+    import time
+
+    start_time = time.time()
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # Create FTS table if not exists
+        create_fts_table(cursor)
+
+        # Clear existing FTS data
+        cursor.execute("DELETE FROM records_fts")
+
+        # Fetch all records
+        cursor.execute("""
+            SELECT id, data, natural_language_description
+            FROM records
+        """)
+        records = cursor.fetchall()
+
+        # Insert into FTS
+        indexed_count = 0
+        for record in records:
+            record_id, data, natural_description = record
+            content = build_searchable_text(
+                parse_record_data(data), natural_description
+            )
+            cursor.execute(
+                """
+                INSERT INTO records_fts (record_id, content)
+                VALUES (?, ?)
+            """,
+                (record_id, content),
+            )
+            indexed_count += 1
+
+        conn.commit()
+
+        duration_ms = int((time.time() - start_time) * 1000)
+        return CompareSetupResponse(
+            indexed_count=indexed_count, setup_duration_ms=duration_ms
+        )
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Setup failed: {str(e)}")
+    finally:
+        conn.close()
+
+
+@app.get("/compare/status", response_model=CompareStatusResponse)
+async def get_compare_status():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # Check if FTS table exists and has data
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='records_fts'
+        """)
+        table_exists = cursor.fetchone() is not None
+
+        if not table_exists:
+            return CompareStatusResponse(ready=False)
+
+        cursor.execute("SELECT COUNT(*) FROM records_fts")
+        count = cursor.fetchone()[0]
+
+        # For simplicity, no last_updated tracking yet
+        return CompareStatusResponse(ready=True, indexed_count=count, last_updated=None)
+    finally:
+        conn.close()
+
+
+@app.post("/compare/rebuild", response_model=CompareRebuildResponse)
+async def rebuild_compare_index():
+    import time
+
+    start_time = time.time()
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # Check if table exists
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='records_fts'
+        """)
+        if cursor.fetchone() is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Compare mode not set up. Call /compare/setup first.",
+            )
+
+        # Clear and rebuild
+        cursor.execute("DELETE FROM records_fts")
+
+        cursor.execute("""
+            SELECT id, data, natural_language_description
+            FROM records
+        """)
+        records = cursor.fetchall()
+
+        indexed_count = 0
+        for record in records:
+            record_id, data, natural_description = record
+            content = build_searchable_text(
+                parse_record_data(data), natural_description
+            )
+            cursor.execute(
+                """
+                INSERT INTO records_fts (record_id, content)
+                VALUES (?, ?)
+            """,
+                (record_id, content),
+            )
+            indexed_count += 1
+
+        conn.commit()
+
+        duration_ms = int((time.time() - start_time) * 1000)
+        return CompareRebuildResponse(
+            indexed_count=indexed_count, rebuild_duration_ms=duration_ms
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Rebuild failed: {str(e)}")
+    finally:
+        conn.close()
+
+
+@app.get("/keyword-search/records", response_model=RecordSearchResponse)
+async def search_records_keyword(
+    query: str = Query(..., min_length=1),
+    top_k: int = Query(default=10, ge=1, le=100),
+    sort_by: str = Query(default=""),
+    sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
+):
+    cleaned_query = query.strip()
+    if not cleaned_query:
+        raise HTTPException(status_code=400, detail="Query must not be empty")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # Check if compare mode is ready
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='records_fts'
+        """)
+        if cursor.fetchone() is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Keyword search not available. Set up compare mode first via POST /compare/setup.",
+            )
+
+        # Perform FTS search with BM25
+        candidate_limit = max(top_k, 20)
+        cursor.execute(
+            """
+            SELECT record_id, bm25(records_fts)
+            FROM records_fts
+            WHERE content MATCH ?
+            ORDER BY bm25(records_fts)
+            LIMIT ?
+        """,
+            (cleaned_query, candidate_limit),
+        )
+
+        fts_results = cursor.fetchall()
+
+        if not fts_results:
+            return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=[])
+
+        # Get record IDs
+        record_ids = [row[0] for row in fts_results]
+        bm25_scores = {row[0]: row[1] for row in fts_results}
+
+        # Fetch full records
+        placeholders = ",".join("?" for _ in record_ids)
+        cursor.execute(
+            f"""
+            SELECT id, data, natural_language_description, created_at, updated_at
+            FROM records
+            WHERE id IN ({placeholders})
+        """,
+            record_ids,
+        )
+
+        rows = cursor.fetchall()
+
+        rows_by_id = {
+            row[0]: RetrievedRecordRow(
+                id=row[0],
+                data=parse_record_data(row[1]),
+                natural_language_description=row[2],
+                created_at=row[3],
+                updated_at=row[4],
+                rerank_score=bm25_scores.get(row[0]),  # Using rerank_score for BM25
+            )
+            for row in rows
+        }
+
+        # Order by BM25 score (already sorted by FTS)
+        ordered_rows = [rows_by_id[rid] for rid in record_ids if rid in rows_by_id]
+
+        # Apply user sorting if specified
+        if sort_by:
+            reverse = sort_order == "desc"
+
+            def sort_key(row):
+                if sort_by == "id":
+                    return row.id
+                elif sort_by == "created_at":
+                    return row.created_at or ""
+                elif sort_by == "updated_at":
+                    return row.updated_at or ""
+                elif sort_by == "rerank_score":
+                    return (
+                        row.rerank_score
+                        if row.rerank_score is not None
+                        else float("inf")
+                    )
+                else:
+                    # Assume data field
+                    value = row.data.get(sort_by)
+                    if value is None:
+                        return ""
+                    return str(value)
+
+            ordered_rows.sort(key=sort_key, reverse=reverse)
+
+        limited_rows = ordered_rows[:top_k]
+
+        return RecordSearchResponse(
+            query=cleaned_query, top_k=top_k, records=limited_rows
+        )
     finally:
         conn.close()
 
