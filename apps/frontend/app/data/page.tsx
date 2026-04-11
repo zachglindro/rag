@@ -18,6 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { SidebarInset } from "@/components/ui/sidebar"
 import {
@@ -203,6 +210,9 @@ export default function DataPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
   const [dirtyCellCount, setDirtyCellCount] = useState(0)
+  const [exportFormat, setExportFormat] = useState<"csv" | "xlsx">("csv")
+  const [isExporting, setIsExporting] = useState(false)
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
@@ -634,6 +644,35 @@ export default function DataPage() {
     }
   }
 
+  const handleExportData = async () => {
+    setIsExporting(true)
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/export-data?format=${exportFormat}`
+      )
+      if (!response.ok) {
+        throw new Error("Export failed")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `export_data.${exportFormat}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+
+      toast.success(`Exported data as ${exportFormat.toUpperCase()}`)
+      setIsExportDialogOpen(false)
+    } catch {
+      toast.error("Failed to export data")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <>
       <AppSidebar />
@@ -684,38 +723,6 @@ export default function DataPage() {
             </div>
           </div>
 
-          {!isLoading && !error && totalCount > 0 && (
-            <div className="rounded-lg border p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                {!isEditMode && (
-                  <Button onClick={enterEditMode} disabled={isMutating}>
-                    Edit
-                  </Button>
-                )}
-                {isEditMode && (
-                  <>
-                    <Button
-                      onClick={handleSaveSpreadsheetChanges}
-                      disabled={!hasPendingChanges || isMutating}
-                    >
-                      Save Changes
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={exitEditMode}
-                      disabled={isMutating}
-                    >
-                      Cancel
-                    </Button>
-                    <p className="text-sm text-muted-foreground">
-                      Edit mode is active. Right-click a row for row actions.
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
           {isLoading && (
             <div className="rounded-lg border p-6 text-sm text-muted-foreground">
               Loading records...
@@ -739,6 +746,46 @@ export default function DataPage() {
               <Button className="mt-4" asChild>
                 <Link href="/add">Add Data</Link>
               </Button>
+            </div>
+          )}
+
+          {!isLoading && !error && totalCount > 0 && (
+            <div className="rounded-lg border p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {!isEditMode && (
+                  <>
+                    <Button onClick={enterEditMode} disabled={isMutating}>
+                      Edit
+                    </Button>
+                    <Button
+                      onClick={() => setIsExportDialogOpen(true)}
+                      disabled={isMutating}
+                    >
+                      Export
+                    </Button>
+                  </>
+                )}
+                {isEditMode && (
+                  <>
+                    <Button
+                      onClick={handleSaveSpreadsheetChanges}
+                      disabled={!hasPendingChanges || isMutating}
+                    >
+                      Save Changes
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={exitEditMode}
+                      disabled={isMutating}
+                    >
+                      Cancel
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Edit mode is active. Right-click a row for row actions.
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -849,6 +896,40 @@ export default function DataPage() {
                   Delete
                 </Button>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={isExportDialogOpen}
+            onOpenChange={setIsExportDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Export Data</DialogTitle>
+                <DialogDescription>
+                  Select the export format and download the data.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={exportFormat}
+                  onValueChange={(value: "csv" | "xlsx") =>
+                    setExportFormat(value)
+                  }
+                  disabled={isExporting}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select export format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="csv">CSV</SelectItem>
+                    <SelectItem value="xlsx">XLSX</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleExportData} disabled={isExporting}>
+                  {isExporting ? "Exporting..." : "Export"}
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
