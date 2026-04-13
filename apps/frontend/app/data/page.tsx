@@ -72,7 +72,6 @@ interface RecordSearchResponse {
 }
 
 const BACKEND_URL = "http://localhost:8000"
-const PAGE_SIZE = 25
 const BOOLEAN_TRUE_VALUES = new Set(["true", "1", "yes"])
 const BOOLEAN_FALSE_VALUES = new Set(["false", "0", "no"])
 
@@ -219,6 +218,8 @@ export default function DataPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
   const hasLoadedInitiallyRef = useRef(false)
 
+  const [pageSize, setPageSize] = useState(25)
+
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
   const fetchData = useCallback(async () => {
@@ -254,7 +255,7 @@ export default function DataPage() {
         const [recordsResponse, metadataResponse, countResponse] =
           await Promise.all([
             fetch(
-              `${BACKEND_URL}/records?skip=${skip}&limit=${PAGE_SIZE}&sort_by=${encodeURIComponent(sortColumn)}&sort_order=${sortDirection}`
+              `${BACKEND_URL}/records?skip=${skip}&limit=${pageSize}&sort_by=${encodeURIComponent(sortColumn)}&sort_order=${sortDirection}`
             ),
             fetch(`${BACKEND_URL}/column-metadata`),
             fetch(`${BACKEND_URL}/records/count`),
@@ -292,11 +293,29 @@ export default function DataPage() {
         setIsRefreshing(false)
       }
     }
-  }, [appliedSearchQuery, isSearchMode, skip, sortColumn, sortDirection])
+  }, [
+    appliedSearchQuery,
+    isSearchMode,
+    skip,
+    sortColumn,
+    sortDirection,
+    pageSize,
+  ])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    const stored = localStorage.getItem("pageSize")
+    if (stored) {
+      setPageSize(parseInt(stored, 10))
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem("pageSize", pageSize.toString())
+  }, [pageSize])
 
   const visibleColumns = useMemo(() => {
     if (metadata.length > 0) {
@@ -334,8 +353,8 @@ export default function DataPage() {
 
   const hasPreviousPage = skip > 0
   const hasNextPage = skip + rows.length < totalCount
-  const currentPage = Math.floor(skip / PAGE_SIZE) + 1
-  const totalPages = totalCount > 0 ? Math.ceil(totalCount / PAGE_SIZE) : 1
+  const currentPage = Math.floor(skip / pageSize) + 1
+  const totalPages = totalCount > 0 ? Math.ceil(totalCount / pageSize) : 1
 
   const toEditableCellValue = useCallback((value: unknown): string => {
     if (value === null || value === undefined) {
@@ -480,7 +499,7 @@ export default function DataPage() {
 
   const refreshAfterMutation = async (isDeleteAction: boolean) => {
     if (isDeleteAction && !isSearchMode && rows.length === 1 && skip > 0) {
-      setSkip((previous) => Math.max(previous - PAGE_SIZE, 0))
+      setSkip((previous) => Math.max(previous - pageSize, 0))
       return
     }
 
@@ -849,6 +868,55 @@ export default function DataPage() {
                 </div>
               )}
 
+              {!isSearchMode && (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </div>
+                    <Select
+                      value={pageSize.toString()}
+                      onValueChange={(value) => {
+                        setPageSize(parseInt(value, 10))
+                        setSkip(0)
+                      }}
+                      disabled={isMutating || isEditMode}
+                    >
+                      <SelectTrigger className="w-[100px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[10, 25, 50, 100]
+                          .filter((size) => size <= totalCount)
+                          .map((size) => (
+                            <SelectItem key={size} value={size.toString()}>
+                              {size}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={!hasPreviousPage || isEditMode || isMutating}
+                      onClick={() =>
+                        setSkip((previous) => Math.max(previous - pageSize, 0))
+                      }
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={!hasNextPage || isEditMode || isMutating}
+                      onClick={() => setSkip((previous) => previous + pageSize)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
                 <Table>
                   <TableHeader>
@@ -911,7 +979,7 @@ export default function DataPage() {
                       variant="outline"
                       disabled={!hasPreviousPage || isEditMode || isMutating}
                       onClick={() =>
-                        setSkip((previous) => Math.max(previous - PAGE_SIZE, 0))
+                        setSkip((previous) => Math.max(previous - pageSize, 0))
                       }
                     >
                       Previous
@@ -919,9 +987,7 @@ export default function DataPage() {
                     <Button
                       variant="outline"
                       disabled={!hasNextPage || isEditMode || isMutating}
-                      onClick={() =>
-                        setSkip((previous) => previous + PAGE_SIZE)
-                      }
+                      onClick={() => setSkip((previous) => previous + pageSize)}
                     >
                       Next
                     </Button>
