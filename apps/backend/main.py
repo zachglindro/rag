@@ -567,7 +567,7 @@ async def get_records(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
     sort_by: str = Query(default="id"),
-    sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
+    sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
 ):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -852,7 +852,7 @@ async def search_records(
     query: str = Query(..., min_length=1),
     top_k: int = Query(default=10, ge=1, le=100),
     sort_by: str = Query(default=""),
-    sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
+    sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
 ):
     cleaned_query = query.strip()
     if not cleaned_query:
@@ -1181,7 +1181,7 @@ async def search_records_keyword(
     query: str = Query(..., min_length=1),
     top_k: int = Query(default=10, ge=1, le=100),
     sort_by: str = Query(default=""),
-    sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
+    sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
 ):
     cleaned_query = query.strip()
     if not cleaned_query:
