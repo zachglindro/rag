@@ -36,9 +36,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import Link from "next/link"
-import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { ChevronUp, ChevronDown } from "lucide-react"
+import { ChevronUp, ChevronDown, Loader2 } from "lucide-react"
 
 interface RecordRow {
   id: number
@@ -201,6 +201,7 @@ export default function DataPage() {
   const [searchInput, setSearchInput] = useState("")
   const [appliedSearchQuery, setAppliedSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [draftCells, setDraftCells] = useState<
@@ -216,12 +217,19 @@ export default function DataPage() {
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [sortColumn, setSortColumn] = useState<string>("id")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
+  const hasLoadedInitiallyRef = useRef(false)
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
   const fetchData = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
+    const isInitialLoad = !hasLoadedInitiallyRef.current
+
+    if (isInitialLoad) {
+      setIsLoading(true)
+      setError(null)
+    } else {
+      setIsRefreshing(true)
+    }
 
     try {
       if (isSearchMode) {
@@ -265,14 +273,24 @@ export default function DataPage() {
         setTotalCount(countData.count)
       }
     } catch (fetchError) {
-      setError(
+      const message =
         fetchError instanceof Error ? fetchError.message : "Unknown error"
-      )
-      setRows([])
-      setMetadata([])
-      setTotalCount(0)
+
+      if (isInitialLoad) {
+        setError(message)
+        setRows([])
+        setMetadata([])
+        setTotalCount(0)
+      } else {
+        toast.error(`Failed to refresh data: ${message}`)
+      }
     } finally {
-      setIsLoading(false)
+      if (isInitialLoad) {
+        setIsLoading(false)
+        hasLoadedInitiallyRef.current = true
+      } else {
+        setIsRefreshing(false)
+      }
     }
   }, [appliedSearchQuery, isSearchMode, skip, sortColumn, sortDirection])
 
@@ -812,6 +830,13 @@ export default function DataPage() {
 
           {!isLoading && !error && totalCount > 0 && (
             <div className="flex w-full min-w-0 flex-col gap-4">
+              {isRefreshing && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Refreshing records...
+                </div>
+              )}
+
               {isSearchMode ? (
                 <div className="text-sm text-muted-foreground">
                   Semantic search for &quot;{appliedSearchQuery}&quot; returned{" "}
