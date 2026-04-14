@@ -1196,7 +1196,11 @@ async def search_records(
         raise HTTPException(status_code=500, detail="Failed to embed query")
 
     rerank_candidate_count = 20
+    combined_record_ids: set[int] = set()
+    distance_by_record_id: dict[int, float | None] = {}
+    bm25_score_by_record_id: dict[int, float | None] = {}
 
+    # Get candidates from semantic search (vector DB)
     try:
         retrieval = vector_db.query_embeddings(
             query_embeddings=[query_embedding],
@@ -1211,19 +1215,13 @@ async def search_records(
     ranked_ids = raw_ids[0] if raw_ids else []
     ranked_distances = raw_distances[0] if raw_distances else []
 
-    if not ranked_ids:
-        return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=[])
-
-    ordered_record_ids: list[int] = []
-    distance_by_record_id: dict[int, float | None] = {}
     for idx, raw_record_id in enumerate(ranked_ids):
         try:
             record_id = int(raw_record_id)
         except (TypeError, ValueError):
             continue
 
-        if record_id in distance_by_record_id:
-            continue
+        combined_record_ids.add(record_id)
 
         distance_value = None
         if idx < len(ranked_distances):
@@ -1231,15 +1229,44 @@ async def search_records(
             if isinstance(raw_distance, int | float):
                 distance_value = float(raw_distance)
 
-        ordered_record_ids.append(record_id)
         distance_by_record_id[record_id] = distance_value
 
-    if not ordered_record_ids:
-        return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=[])
-
+    # Get candidates from keyword search (FTS) if available
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='records_fts'
+        """)
+        fts_available = cursor.fetchone() is not None
+
+        if fts_available:
+            try:
+                cursor.execute(
+                    """
+                    SELECT record_id, bm25(records_fts)
+                    FROM records_fts
+                    WHERE content MATCH ?
+                    ORDER BY bm25(records_fts)
+                    LIMIT ?
+                """,
+                    (cleaned_query, rerank_candidate_count),
+                )
+                fts_results = cursor.fetchall()
+
+                for record_id, bm25_score in fts_results:
+                    combined_record_ids.add(record_id)
+                    bm25_score_by_record_id[record_id] = float(bm25_score)
+            except Exception:
+                # If FTS search fails, continue with just semantic results
+                pass
+
+        if not combined_record_ids:
+            return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=[])
+
+        # Fetch all combined records
+        ordered_record_ids = sorted(combined_record_ids)
         placeholders = ",".join("?" for _ in ordered_record_ids)
         cursor.execute(
             f"""
@@ -1265,7 +1292,7 @@ async def search_records(
         for row in rows
     }
 
-    # Build rerank candidates from the top vector-retrieved records only.
+    # Build rerank candidates from all combined records
     rerank_candidates: list[dict[str, Any]] = []
     for record_id in ordered_record_ids:
         if record_id not in rows_by_id:
