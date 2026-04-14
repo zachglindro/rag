@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 
@@ -61,7 +62,7 @@ def build_natural_language_description(
     row: dict[str, Any],
     column_order: list[str] | None = None,
 ) -> str:
-    usable_items: list[tuple[str, str]] = []
+    usable_items: dict[str, str] = {}
 
     for key in _ordered_keys(row, column_order=column_order):
         value = row.get(key)
@@ -72,17 +73,9 @@ def build_natural_language_description(
         if not formatted:
             continue
 
-        usable_items.append((key, formatted))
+        usable_items[key] = formatted
 
     if not usable_items:
-        return "No trait information provided for this record."
+        return json.dumps({"error": "No trait information provided for this record."})
 
-    first_key, first_value = usable_items[0]
-    first_label = _display_name(first_key)
-    sentence_parts = [f"Record with {first_label} {first_value}"]
-
-    for key, value in usable_items[1:]:
-        label = _display_name(key)
-        sentence_parts.append(f"{label} {value}")
-
-    return "; ".join(sentence_parts) + "."
+    return json.dumps(usable_items)
