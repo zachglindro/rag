@@ -59,6 +59,7 @@ Key guidelines:
 - Maintain a professional, supportive tone suitable for researchers with varying technical expertise.""",
             "routing": """You are a search query generator.
 Your task is to generate a concise semantic search query for the database based on the user's message.
+The database contains the following columns: {database_columns}
 If the user's message requires information from the database (questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset), provide a concise query.
 If the message is purely social/meta conversation that clearly does not require dataset facts (for example: hello, thanks, rewrite this sentence, explain your process, or general non-database chit-chat), output 'none'.
 Strip command wrappers and filler words such as: 'search for', 'find', 'look up', 'show me', 'can you', 'please', 'what is', 'tell me about'.
@@ -97,8 +98,14 @@ No markdown. No extra text.""",
         max_tokens: int = 1024,
         task: str = "general",
         stream: bool = False,
+        database_columns: list[str] | None = None,
     ):
         system_prompt = self.system_prompts.get(task, self.system_prompts["general"])
+
+        # Inject database columns into routing prompt if provided
+        if task == "routing" and database_columns:
+            columns_str = ", ".join(database_columns)
+            system_prompt = system_prompt.format(database_columns=columns_str)
 
         # Prepend system message if not present
         if not messages or messages[0].get("role") != "system":
@@ -214,11 +221,9 @@ Key guidelines:
 - Maintain a professional, supportive tone suitable for researchers with varying technical expertise.""",
             "routing": """You are a search query generator.
 Your task is to generate a concise semantic search query for the database based on the user's message.
-If the user's message requires information from the database (questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset), provide a concise query.
-If the message is purely social/meta conversation that clearly does not require dataset facts (for example: hello, thanks, rewrite this sentence, explain your process, or general non-database chit-chat), output 'none'.
+The database contains the following columns: {database_columns}
 Strip command wrappers and filler words such as: 'search for', 'find', 'look up', 'show me', 'can you', 'please', 'what is', 'tell me about'.
-Keep only the core entities, constraints, filters, comparison targets, and metrics needed for retrieval.
-Output ONLY valid JSON: {'query': 'search term or none'}
+Output ONLY valid JSON: {'query': 'search term'}
 No markdown. No extra text.""",
         }
 
@@ -253,11 +258,14 @@ No markdown. No extra text.""",
         max_tokens: int = 1024,
         task: str = "general",
         stream: bool = False,
+        database_columns: list[str] | None = None,
     ):
         system_prompt = self.system_prompts.get(task, self.system_prompts["general"])
 
-        if not messages or messages[0].get("role") != "system":
-            messages = [{"role": "system", "content": system_prompt}] + messages
+        # Inject database columns into routing prompt if provided
+        if task == "routing" and database_columns:
+            columns_str = ", ".join(database_columns)
+            system_prompt = system_prompt.format(database_columns=columns_str)
 
         continuation_prompt = (
             "Continue exactly where you stopped. Start with the next word only, "
@@ -382,6 +390,7 @@ Key guidelines:
 - Maintain a professional, supportive tone suitable for researchers with varying technical expertise.""",
             "routing": """You are a search query generator.
 Your task is to generate a concise semantic search query for the database based on the user's message.
+The database contains the following columns: {database_columns}
 If the user's message requires information from the database (questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset), provide a concise query.
 If the message is purely social/meta conversation that clearly does not require dataset facts (for example: hello, thanks, rewrite this sentence, explain your process, or general non-database chit-chat), output 'none'.
 Strip command wrappers and filler words such as: 'search for', 'find', 'look up', 'show me', 'can you', 'please', 'what is', 'tell me about'.
@@ -395,8 +404,19 @@ No markdown. No extra text.""",
         if callable(close_method):
             close_method()
 
-    def _build_prompt(self, messages: list[dict[str, str]], task: str) -> str:
+    def _build_prompt(
+        self,
+        messages: list[dict[str, str]],
+        task: str,
+        database_columns: list[str] | None = None,
+    ) -> str:
         system_prompt = self.system_prompts.get(task, self.system_prompts["general"])
+
+        # Inject database columns into routing prompt if provided
+        if task == "routing" and database_columns:
+            columns_str = ", ".join(database_columns)
+            system_prompt = system_prompt.format(database_columns=columns_str)
+
         content_lines = [f"SYSTEM: {system_prompt}"]
 
         for message in messages:
@@ -435,8 +455,9 @@ No markdown. No extra text.""",
         max_tokens: int = 1024,
         task: str = "general",
         stream: bool = False,
+        database_columns: list[str] | None = None,
     ):
-        prompt = self._build_prompt(messages, task)
+        prompt = self._build_prompt(messages, task, database_columns)
 
         if stream:
             stream_response = self.client.models.generate_content_stream(
