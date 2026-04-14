@@ -17,22 +17,14 @@ const ROUTER_MAX_TOKENS = 80
 const BASE_RESPONSE_MAX_TOKENS = 512
 const RETRIEVAL_RESPONSE_MAX_TOKENS = 320
 
-const TOOL_ROUTER_SYSTEM_PROMPT = [
-  "You are a tool-routing assistant.",
-  "Your primary goal is to decide whether to call search_database.",
-  "When you call search_database, the query must be a concise semantic search string, not a copy of the user's full sentence.",
+const SEARCH_QUERY_SYSTEM_PROMPT = [
+  "You are a search query generator.",
+  "Your task is to generate a concise semantic search query for the database based on the user's message.",
+  "If the user's message requires information from the database (questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset), provide a concise query.",
+  "If the message is purely social/meta conversation that clearly does not require dataset facts (for example: hello, thanks, rewrite this sentence, explain your process, or general non-database chit-chat), output 'none'.",
   "Strip command wrappers and filler words such as: 'search for', 'find', 'look up', 'show me', 'can you', 'please', 'what is', 'tell me about'.",
   "Keep only the core entities, constraints, filters, comparison targets, and metrics needed for retrieval.",
-  "Examples: user='search for xyz' => query='xyz'; user='can you find cereals with protein above 10' => query='cereals protein above 10'.",
-  "Use search_database by default for any user request that could depend on inventory/database facts.",
-  "This includes: questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset.",
-  "Also use search_database for follow-up questions that reference prior data (for example: 'which is best?', 'compare those', 'what about the first one?', 'why?').",
-  "Only use 'none' for purely social/meta conversation that clearly does not require dataset facts (for example: hello, thanks, rewrite this sentence, explain your process, or general non-database chit-chat).",
-  "Never choose 'none' just because the user phrasing is ambiguous. If there is any reasonable chance retrieval is needed, use search_database.",
-  "If you are unsure, use search_database.",
-  "Output ONLY valid JSON with one of these shapes:",
-  '{"tool":"none"}',
-  '{"tool":"search_database","query":"<optimized semantic search query>"}',
+  "Output ONLY valid JSON: {'query': 'search term or none'}",
   "No markdown. No extra text.",
 ].join("\n")
 
@@ -68,15 +60,6 @@ type RagRetrievalResult = {
   records: RetrievedRecord[]
   completed: boolean
 }
-
-type ToolDecision =
-  | {
-      tool: "none"
-    }
-  | {
-      tool: "search_database"
-      query: string
-    }
 
 function createMessage(role: MessageRole, content: string): ChatMessage {
   return {
@@ -188,32 +171,22 @@ function extractFirstJsonObject(text: string): string | null {
   return candidate.slice(firstBrace, lastBrace + 1)
 }
 
-function parseToolDecision(raw: string): ToolDecision {
+function parseToolDecision(raw: string): string {
   const jsonBlock = extractFirstJsonObject(raw)
   if (!jsonBlock) {
-    return /search_database/i.test(raw)
-      ? { tool: "search_database", query: "" }
-      : { tool: "none" }
+    return "none"
   }
 
   try {
-    const parsed = JSON.parse(jsonBlock) as {
-      tool?: unknown
-      query?: unknown
-    }
-    if (parsed.tool === "search_database") {
-      return {
-        tool: "search_database",
-        query: typeof parsed.query === "string" ? parsed.query.trim() : "",
-      }
+    const parsed = JSON.parse(jsonBlock) as { query?: unknown }
+    if (typeof parsed.query === "string") {
+      return parsed.query.trim()
     }
   } catch {
-    return /search_database/i.test(raw)
-      ? { tool: "search_database", query: "" }
-      : { tool: "none" }
+    // Ignore
   }
 
-  return { tool: "none" }
+  return "none"
 }
 
 async function streamGenerateTokens(
@@ -335,24 +308,22 @@ async function streamGenerateTokens(
   return accumulatedContent
 }
 
-async function decideRetrievalToolUse(
+async function getSearchQuery(
   conversationMessages: Array<{ role: string; content: string }>,
   signal?: AbortSignal,
   log?: (message: string) => void
-): Promise<ToolDecision> {
+): Promise<string> {
   const lastUserMessage = [...conversationMessages]
     .reverse()
     .find((message) => message.role === "user")
     ?.content?.trim()
 
-  const fallbackSearchDecision: ToolDecision = {
-    tool: "search_database",
-    query: lastUserMessage && lastUserMessage.length > 0 ? lastUserMessage : "",
-  }
+  const fallbackQuery =
+    lastUserMessage && lastUserMessage.length > 0 ? lastUserMessage : ""
 
   const recentMessages = conversationMessages.slice(-8)
   const routingMessages = [
-    { role: "system", content: TOOL_ROUTER_SYSTEM_PROMPT },
+    { role: "system", content: SEARCH_QUERY_SYSTEM_PROMPT },
     ...recentMessages,
   ]
 
@@ -362,27 +333,27 @@ async function decideRetrievalToolUse(
   log?.(`ROUTER INPUT TEXT:\n${inputText}`)
 
   try {
-    const decisionRaw = await streamGenerateTokens(
+    const queryRaw = await streamGenerateTokens(
       routingMessages,
       ROUTER_MAX_TOKENS,
       signal
     )
 
-    if (!decisionRaw.trim()) {
-      log?.("ROUTER OUTPUT TEXT: [empty response; fallback=search_database]")
-      return fallbackSearchDecision
+    if (!queryRaw.trim()) {
+      log?.("ROUTER OUTPUT TEXT: [empty response; fallback=last user message]")
+      return fallbackQuery
     }
 
-    log?.(`ROUTER OUTPUT TEXT:\n${decisionRaw}`)
-    return parseToolDecision(decisionRaw)
+    log?.(`ROUTER OUTPUT TEXT:\n${queryRaw}`)
+    return parseToolDecision(queryRaw)
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error
     }
 
     // Prefer retrieval on router failures so data questions still use grounding.
-    log?.("ROUTER OUTPUT TEXT: [router error; fallback=search_database]")
-    return fallbackSearchDecision
+    log?.("ROUTER OUTPUT TEXT: [router error; fallback=last user message]")
+    return fallbackQuery
   }
 }
 
@@ -629,7 +600,7 @@ export default function Page() {
         content: message.content,
       }))
 
-      const toolDecision = await decideRetrievalToolUse(
+      const searchQuery = await getSearchQuery(
         conversationMessages,
         abortController.signal,
         (log: string) => setDebugLogs((prev: string[]) => [...prev, log])
@@ -639,12 +610,8 @@ export default function Page() {
         return
       }
 
-      const shouldRetrieve = toolDecision.tool === "search_database"
-      const retrievalQuery =
-        shouldRetrieve && toolDecision.query.trim().length > 0
-          ? toolDecision.query
-          : nextContent
-
+      const shouldRetrieve = searchQuery !== "none"
+      const retrievalQuery = shouldRetrieve ? searchQuery : ""
       const retrieval = shouldRetrieve
         ? await retrieveRagContext(retrievalQuery, abortController.signal)
         : { context: null, records: [], completed: true }
