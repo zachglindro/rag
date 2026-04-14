@@ -239,12 +239,21 @@ export default function Settings() {
                 <Button onClick={() => setIsExportDialogOpen(true)}>
                   Export Database
                 </Button>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Export your database data in CSV or XLSX format for backup or
+                  analysis.
+                </p>
               </div>
 
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="destructive">Reset Database</Button>
+                  <Button variant="destructive" className="mt-4">
+                    Reset Database
+                  </Button>
                 </DialogTrigger>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Permanently delete all data in the database.
+                </p>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Reset Database</DialogTitle>
