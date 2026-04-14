@@ -129,6 +129,10 @@ class MappingSuggestion(BaseModel):
     confidence: float
 
 
+class DeleteColumnRequest(BaseModel):
+    column_name: str
+
+
 class GenerateRequest(BaseModel):
     messages: list[dict[str, str]]
     max_tokens: int = 1024
@@ -356,6 +360,133 @@ async def add_column(request: ColumnRequest):
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.delete("/columns")
+async def delete_column(request: DeleteColumnRequest):
+    column_name = request.column_name
+    if column_name == "id":
+        raise HTTPException(status_code=400, detail="Cannot delete the 'id' column")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    embedder_instance = get_embedder()
+    vector_db = get_vectordb()
+
+    # Store original metadata for rollback
+    cursor.execute(
+        "SELECT * FROM column_metadata WHERE column_name = ?",
+        (column_name,),
+    )
+    original_metadata = cursor.fetchone()
+    if original_metadata is None:
+        raise HTTPException(status_code=404, detail=f"Column '{column_name}' not found")
+
+    # Store original data for all records (for rollback)
+    cursor.execute("SELECT id, data FROM records")
+    original_records = cursor.fetchall()
+
+    vector_updated = False
+
+    try:
+        conn.execute("BEGIN")
+
+        # Delete from column_metadata
+        cursor.execute(
+            "DELETE FROM column_metadata WHERE column_name = ?",
+            (column_name,),
+        )
+
+        # Remove the column from all records' data JSON
+        cursor.execute(f"""
+            UPDATE records 
+            SET data = json_remove(data, '$.{column_name}')
+        """)
+
+        # Regenerate descriptions and embeddings for all records
+        cursor.execute("SELECT id, data FROM records")
+        updated_records = cursor.fetchall()
+
+        new_descriptions = []
+        new_embeddings = []
+        ids_to_update = []
+
+        for record_id, data_json in updated_records:
+            data = parse_record_data(data_json)
+            new_description = build_natural_language_description(data)
+            new_embedding = embedder_instance.embed(new_description)
+            if not new_embedding:
+                raise RuntimeError(f"Failed to embed record {record_id}")
+            new_descriptions.append(new_description)
+            new_embeddings.append(new_embedding)
+            ids_to_update.append(str(record_id))
+
+        # Update vector DB
+        vector_db.upsert_documents(
+            ids=ids_to_update,
+            documents=new_descriptions,
+            embeddings=new_embeddings,
+            metadatas=[{"record_id": int(id)} for id in ids_to_update],
+        )
+        vector_updated = True
+
+        # Update records with new descriptions
+        for i, (record_id, _) in enumerate(updated_records):
+            cursor.execute(
+                "UPDATE records SET natural_language_description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (new_descriptions[i], record_id),
+            )
+
+        conn.commit()
+        return {"status": "success", "deleted_column": column_name}
+    except Exception as e:
+        conn.rollback()
+
+        # Restore metadata
+        if original_metadata:
+            cursor.execute(
+                """
+                INSERT INTO column_metadata 
+                (column_name, display_name, data_type, is_required, default_value, "order", description) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                original_metadata,
+            )
+
+        # Restore records' data
+        for record_id, old_data_json in original_records:
+            cursor.execute(
+                "UPDATE records SET data = ? WHERE id = ?",
+                (old_data_json, record_id),
+            )
+
+        # Restore vector DB if updated
+        if vector_updated:
+            try:
+                rollback_descriptions = []
+                rollback_embeddings = []
+                rollback_ids = []
+                for record_id, data_json in original_records:
+                    data = parse_record_data(data_json)
+                    desc = build_natural_language_description(data)
+                    emb = embedder_instance.embed(desc)
+                    if emb:
+                        rollback_descriptions.append(desc)
+                        rollback_embeddings.append(emb)
+                        rollback_ids.append(str(record_id))
+                vector_db.upsert_documents(
+                    ids=rollback_ids,
+                    documents=rollback_descriptions,
+                    embeddings=rollback_embeddings,
+                    metadatas=[{"record_id": int(id)} for id in rollback_ids],
+                )
+            except Exception:
+                pass  # Vector DB rollback failed, but continue
+
+        conn.commit()
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
     finally:
         conn.close()
 

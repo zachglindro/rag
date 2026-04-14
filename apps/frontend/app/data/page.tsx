@@ -220,6 +220,13 @@ export default function DataPage() {
 
   const [pageSize, setPageSize] = useState(25)
 
+  const [columnPendingDelete, setColumnPendingDelete] = useState<{
+    key: string
+    label: string
+  } | null>(null)
+  const [isColumnDeleteDialogOpen, setIsColumnDeleteDialogOpen] =
+    useState(false)
+
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
   const fetchData = useCallback(async () => {
@@ -336,6 +343,10 @@ export default function DataPage() {
 
     return Array.from(discoveredKeys).map((key) => ({ key, label: key }))
   }, [metadata, rows])
+
+  const allColumns = useMemo(() => {
+    return [{ key: "id", label: "ID" }, ...visibleColumns]
+  }, [visibleColumns])
 
   const handleSort = useCallback(
     (columnKey: string) => {
@@ -672,6 +683,18 @@ export default function DataPage() {
     setIsDeleteDialogOpen(true)
   }, [])
 
+  const openColumnDeleteDialog = useCallback(
+    (column: { key: string; label: string }) => {
+      if (column.key === "id") {
+        toast.error("Cannot delete the ID column")
+        return
+      }
+      setColumnPendingDelete(column)
+      setIsColumnDeleteDialogOpen(true)
+    },
+    []
+  )
+
   const handleConfirmDelete = async () => {
     if (!recordPendingDelete) {
       return
@@ -697,6 +720,39 @@ export default function DataPage() {
       await refreshAfterMutation(true)
     } catch {
       toast.error("Failed to delete record")
+    } finally {
+      setIsMutating(false)
+    }
+  }
+
+  const handleConfirmColumnDelete = async () => {
+    if (!columnPendingDelete) {
+      return
+    }
+
+    setIsMutating(true)
+    try {
+      const response = await fetch(`${BACKEND_URL}/columns`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ column_name: columnPendingDelete.key }),
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || "Failed to delete column")
+      }
+
+      toast.success(`Column '${columnPendingDelete.label}' deleted`)
+      setIsColumnDeleteDialogOpen(false)
+      setColumnPendingDelete(null)
+      await fetchData() // Refresh data and metadata
+    } catch (error) {
+      toast.error(
+        `Failed to delete column: ${error instanceof Error ? error.message : "Unknown error"}`
+      )
     } finally {
       setIsMutating(false)
     }
@@ -921,32 +977,42 @@ export default function DataPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead
-                        className="w-20 cursor-pointer"
-                        onClick={() => handleSort("id")}
-                      >
-                        ID
-                        {sortColumn === "id" &&
-                          (sortDirection === "asc" ? (
-                            <ChevronUp className="ml-1 inline h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="ml-1 inline h-4 w-4" />
-                          ))}
-                      </TableHead>
-                      {visibleColumns.map((column) => (
-                        <TableHead
-                          key={column.key}
-                          className="cursor-pointer"
-                          onClick={() => handleSort(column.key)}
-                        >
-                          {column.label}
-                          {sortColumn === column.key &&
-                            (sortDirection === "asc" ? (
-                              <ChevronUp className="ml-1 inline h-4 w-4" />
-                            ) : (
-                              <ChevronDown className="ml-1 inline h-4 w-4" />
-                            ))}
-                        </TableHead>
+                      {allColumns.map((column) => (
+                        <ContextMenu key={column.key}>
+                          <ContextMenuTrigger asChild>
+                            <TableHead
+                              className={
+                                column.key === "id"
+                                  ? "w-20 cursor-pointer"
+                                  : "cursor-pointer"
+                              }
+                              onClick={() => handleSort(column.key)}
+                            >
+                              {column.label}
+                              {sortColumn === column.key &&
+                                (sortDirection === "asc" ? (
+                                  <ChevronUp className="ml-1 inline h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="ml-1 inline h-4 w-4" />
+                                ))}
+                            </TableHead>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent>
+                            <ContextMenuLabel>
+                              Column {column.label}
+                            </ContextMenuLabel>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem>Add</ContextMenuItem>
+                            <ContextMenuItem>Rename</ContextMenuItem>
+                            <ContextMenuItem
+                              variant="destructive"
+                              onSelect={() => openColumnDeleteDialog(column)}
+                              disabled={isEditMode || isMutating}
+                            >
+                              Delete
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
                       ))}
                     </TableRow>
                   </TableHeader>
@@ -1029,6 +1095,41 @@ export default function DataPage() {
                   disabled={isMutating}
                 >
                   Delete
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={isColumnDeleteDialogOpen}
+            onOpenChange={setIsColumnDeleteDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Column</DialogTitle>
+                <DialogDescription>
+                  This will permanently delete the &quot;
+                  {columnPendingDelete?.label}&quot; column from all records and
+                  metadata. This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsColumnDeleteDialogOpen(false)}
+                  disabled={isMutating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleConfirmColumnDelete}
+                  disabled={isMutating}
+                >
+                  {isMutating && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {isMutating ? "Deleting..." : "Delete"}
                 </Button>
               </DialogFooter>
             </DialogContent>
