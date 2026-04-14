@@ -14,8 +14,8 @@ const GENERATE_URL = `${BACKEND_URL}/generate`
 const SEARCH_RECORDS_URL = `${BACKEND_URL}/semantic-search/records`
 const RAG_TOP_K = 5
 const ROUTER_MAX_TOKENS = 80
-const BASE_RESPONSE_MAX_TOKENS = 512
-const RETRIEVAL_RESPONSE_MAX_TOKENS = 320
+const BASE_RESPONSE_MAX_TOKENS = 1024
+const RETRIEVAL_RESPONSE_MAX_TOKENS = 1024
 
 type MessageRole = "user" | "assistant"
 

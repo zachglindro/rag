@@ -1,5 +1,6 @@
 import difflib
 import io
+import importlib
 import json
 import sqlite3
 import asyncio
@@ -32,9 +33,13 @@ LOCAL_MODEL_REGISTRY = {
     "qwen3.5-0.8b": Path(__file__).resolve().parents[2] / "models" / "qwen3.5-0.8b",
 }
 
-# Online model registry: maps model IDs to provider model names
+# Online model registry: maps model IDs to provider descriptors
 ONLINE_MODEL_REGISTRY = {
-    "groq": "openai/gpt-oss-120b",
+    "groq": {"provider": "groq", "model_name": "openai/gpt-oss-120b"},
+    "gemini-online": {
+        "provider": "gemini",
+        "model_name": "gemini-3-flash-preview",
+    },
 }
 
 MODEL_REGISTRY = {
@@ -47,6 +52,7 @@ MODEL_LABELS = {
     "qwen3-0.6b": "Qwen 3 (Fast)",
     "qwen3.5-0.8b": "Qwen 3.5 (Slow)",
     "groq": "Groq",
+    "gemini-online": "Gemini Online",
 }
 
 # Cache of loaded LLM instances
@@ -66,8 +72,21 @@ def is_online_model(model_id: str) -> bool:
 
 def load_model(model_id: str):
     if is_online_model(model_id):
-        provider_model_id = ONLINE_MODEL_REGISTRY[model_id]
-        return GroqLLM(model_name=provider_model_id)
+        provider_config = ONLINE_MODEL_REGISTRY[model_id]
+        provider = provider_config["provider"]
+        provider_model_id = provider_config["model_name"]
+
+        if provider == "groq":
+            return GroqLLM(model_name=provider_model_id)
+
+        if provider == "gemini":
+            llm_module = importlib.import_module("rag.llm")
+            gemini_llm_cls = getattr(llm_module, "GeminiLLM", None)
+            if gemini_llm_cls is None:
+                raise RuntimeError("GeminiLLM class is not available in rag.llm")
+            return gemini_llm_cls(model_name=provider_model_id)
+
+        raise RuntimeError(f"Unsupported online provider: {provider}")
 
     return GemmaLLM(str(LOCAL_MODEL_REGISTRY[model_id]))
 
@@ -1597,15 +1616,20 @@ async def search_records_keyword(
 @app.get("/settings/model", response_model=ModelSettingsResponse)
 async def get_model_settings():
     available_models = []
-    for model_id, path_or_name in MODEL_REGISTRY.items():
+    for model_id, model_value in MODEL_REGISTRY.items():
         try:
             label = MODEL_LABELS.get(model_id, model_id.replace("-", " ").title())
             source = "online" if is_online_model(model_id) else "local"
+            path_or_name = (
+                model_value["model_name"]
+                if isinstance(model_value, dict)
+                else str(model_value)
+            )
             available_models.append(
                 ModelInfo(
                     id=model_id,
                     label=label,
-                    path=str(path_or_name),
+                    path=path_or_name,
                     source=source,
                     loaded=model_id in loaded_llms,
                 )

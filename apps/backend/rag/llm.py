@@ -3,6 +3,7 @@ import inspect
 import os
 
 import torch
+from google import genai
 from groq import Groq
 from typing import Any
 from transformers import (
@@ -10,6 +11,15 @@ from transformers import (
     AutoProcessor,
     TextIteratorStreamer,
 )
+
+
+__all__ = [
+    "GemmaLLM",
+    "GroqLLM",
+    "GeminiLLM",
+    "QwenLLM",
+    "OpenRouterFreeLLM",
+]
 
 
 class GemmaLLM:
@@ -337,6 +347,119 @@ No markdown. No extra text.""",
             conversation.append({"role": "user", "content": continuation_prompt})
 
         return "".join(response_parts).strip()
+
+
+class GeminiLLM:
+    def __init__(
+        self,
+        model_name: str = "gemini-3-flash-preview",
+        api_key: str | None = None,
+    ):
+        key_source = api_key if api_key is not None else os.getenv("GEMINI_API_KEY")
+        if key_source is None:
+            key_source = ""
+
+        resolved_api_key = key_source.strip()
+        if not resolved_api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Configure it before selecting Gemini Online."
+            )
+
+        self.api_key = resolved_api_key
+        self.model_name = model_name
+        self.client = genai.Client(api_key=self.api_key)
+
+        self.system_prompts = {
+            "general": """You are an AI assistant for the Institute of Plant Breeding, specialized in maize phenotypic trait data and parental line selection for plant breeding research. Your primary role is to help researchers, lab technicians, and breeders efficiently query and analyze phenotypic data using natural language, overcoming the limitations of traditional keyword-based searches in spreadsheets. You understand concepts like semantic similarity, dense embeddings, and retrieval-augmented generation (RAG), and you draw from knowledge of maize traits.
+
+Key guidelines:
+
+- Respond in a clear, concise, and helpful manner. Use natural language to explain concepts, suggest queries, or provide insights based on typical maize breeding scenarios.
+- When users describe traits or queries (e.g., "varieties resistant to lodging with purple tassels"), interpret them semantically-consider synonyms, related terms, and conceptual meanings.
+- Provide factual, evidence-based information grounded in plant breeding principles. Avoid hallucinations; if uncertain, suggest consulting domain experts or additional data.
+- Assist with tasks like formulating natural language queries, explaining trait relationships, or simulating search results based on common maize data patterns (e.g., from synthetic datasets mirroring fields like Local Name, Kernel Type, Plant Height).
+- Promote efficiency: Help users transition from exact keyword matching to conceptual searches, and highlight how semantic tools can improve parental line selection.
+- Maintain a professional, supportive tone suitable for researchers with varying technical expertise.""",
+            "routing": """You are a search query generator.
+Your task is to generate a concise semantic search query for the database based on the user's message.
+If the user's message requires information from the database (questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset), provide a concise query.
+If the message is purely social/meta conversation that clearly does not require dataset facts (for example: hello, thanks, rewrite this sentence, explain your process, or general non-database chit-chat), output 'none'.
+Strip command wrappers and filler words such as: 'search for', 'find', 'look up', 'show me', 'can you', 'please', 'what is', 'tell me about'.
+Keep only the core entities, constraints, filters, comparison targets, and metrics needed for retrieval.
+Output ONLY valid JSON: {'query': 'search term or none'}
+No markdown. No extra text.""",
+        }
+
+    def cleanup(self):
+        close_method = getattr(self.client, "close", None)
+        if callable(close_method):
+            close_method()
+
+    def _build_prompt(self, messages: list[dict[str, str]], task: str) -> str:
+        system_prompt = self.system_prompts.get(task, self.system_prompts["general"])
+        content_lines = [f"SYSTEM: {system_prompt}"]
+
+        for message in messages:
+            role = message.get("role", "user").upper()
+            content = message.get("content", "")
+            content_lines.append(f"{role}: {content}")
+
+        return "\n\n".join(content_lines)
+
+    def _extract_stream_text(self, chunk: Any) -> str:
+        text_value = getattr(chunk, "text", None)
+        if isinstance(text_value, str):
+            return text_value
+
+        candidates = getattr(chunk, "candidates", None)
+        if not candidates:
+            return ""
+
+        first_candidate = candidates[0]
+        content = getattr(first_candidate, "content", None)
+        parts = getattr(content, "parts", None)
+        if not parts:
+            return ""
+
+        texts: list[str] = []
+        for part in parts:
+            part_text = getattr(part, "text", None)
+            if isinstance(part_text, str) and part_text:
+                texts.append(part_text)
+
+        return "".join(texts)
+
+    def generate_response(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int = 1024,
+        task: str = "general",
+        stream: bool = False,
+    ):
+        prompt = self._build_prompt(messages, task)
+
+        if stream:
+            stream_response = self.client.models.generate_content_stream(
+                model=self.model_name,
+                contents=prompt,
+                config={"max_output_tokens": max_tokens},
+            )
+
+            for chunk in stream_response:
+                text = self._extract_stream_text(chunk)
+                if text:
+                    yield text
+            return
+
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config={"max_output_tokens": max_tokens},
+        )
+        response_text = getattr(response, "text", None)
+        if isinstance(response_text, str) and response_text.strip():
+            return response_text.strip()
+        return ""
 
 
 # Backward-compatible alias for existing imports/usages.
