@@ -136,6 +136,7 @@ class DeleteColumnRequest(BaseModel):
 class GenerateRequest(BaseModel):
     messages: list[dict[str, str]]
     max_tokens: int = 1024
+    task: str = "general"
 
 
 class GenerateResponse(BaseModel):
@@ -1761,6 +1762,7 @@ async def generate_response_endpoint(
             token_iterator = llm_instance.generate_response(
                 request.messages,
                 request.max_tokens,
+                request.task,
                 stream=True,
             )
 

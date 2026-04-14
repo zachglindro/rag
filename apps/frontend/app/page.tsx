@@ -17,17 +17,6 @@ const ROUTER_MAX_TOKENS = 80
 const BASE_RESPONSE_MAX_TOKENS = 512
 const RETRIEVAL_RESPONSE_MAX_TOKENS = 320
 
-const SEARCH_QUERY_SYSTEM_PROMPT = [
-  "You are a search query generator.",
-  "Your task is to generate a concise semantic search query for the database based on the user's message.",
-  "If the user's message requires information from the database (questions about records, traits, values, IDs, comparisons, filtering, sorting, ranking, counts, trends, summaries, missing data, and any request about specific cereals/crops/items in the dataset), provide a concise query.",
-  "If the message is purely social/meta conversation that clearly does not require dataset facts (for example: hello, thanks, rewrite this sentence, explain your process, or general non-database chit-chat), output 'none'.",
-  "Strip command wrappers and filler words such as: 'search for', 'find', 'look up', 'show me', 'can you', 'please', 'what is', 'tell me about'.",
-  "Keep only the core entities, constraints, filters, comparison targets, and metrics needed for retrieval.",
-  "Output ONLY valid JSON: {'query': 'search term or none'}",
-  "No markdown. No extra text.",
-].join("\n")
-
 type MessageRole = "user" | "assistant"
 
 type ChatMessage = {
@@ -192,6 +181,7 @@ function parseToolDecision(raw: string): string {
 async function streamGenerateTokens(
   requestMessages: Array<{ role: string; content: string }>,
   maxTokens: number,
+  task: string = "general",
   signal?: AbortSignal,
   onToken?: (token: string) => void
 ): Promise<string> {
@@ -204,6 +194,7 @@ async function streamGenerateTokens(
     body: JSON.stringify({
       messages: requestMessages,
       max_tokens: maxTokens,
+      task: task,
     }),
   })
 
@@ -322,10 +313,7 @@ async function getSearchQuery(
     lastUserMessage && lastUserMessage.length > 0 ? lastUserMessage : ""
 
   const recentMessages = conversationMessages.slice(-8)
-  const routingMessages = [
-    { role: "system", content: SEARCH_QUERY_SYSTEM_PROMPT },
-    ...recentMessages,
-  ]
+  const routingMessages = recentMessages
 
   const inputText = routingMessages
     .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
@@ -336,6 +324,7 @@ async function getSearchQuery(
     const queryRaw = await streamGenerateTokens(
       routingMessages,
       ROUTER_MAX_TOKENS,
+      "routing",
       signal
     )
 
@@ -666,6 +655,7 @@ export default function Page() {
       const accumulatedContent = await streamGenerateTokens(
         requestMessages,
         responseMaxTokens,
+        "general",
         abortController.signal,
         (token) => {
           if (activeRequestIdRef.current !== requestId) {
