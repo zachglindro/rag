@@ -2,6 +2,9 @@ from pathlib import Path
 from typing import Any, Mapping, cast
 import math
 
+chromadb: Any
+_CHROMADB_IMPORT_ERROR: Exception | None
+
 try:
     import chromadb
 except Exception as exc:  # pragma: no cover - environment-specific import failures
@@ -96,6 +99,9 @@ class _InMemoryClient:
 
 class ChromaVectorDB:
     def __init__(self, persist_directory: str | None = None):
+        self.client: Any
+        self.collection: Any
+
         default_persist_dir = Path(__file__).resolve().parents[1] / "chroma_db"
         resolved_persist_dir = (
             Path(persist_directory).expanduser().resolve()
@@ -120,7 +126,7 @@ class ChromaVectorDB:
 
         try:
             self.client = chromadb.PersistentClient(path=self.persist_directory)
-            self.collection: Any = self.client.get_or_create_collection(
+            self.collection = self.client.get_or_create_collection(
                 name="trait_embeddings"
             )
         except Exception as exc:
