@@ -227,6 +227,14 @@ export default function DataPage() {
   const [isColumnDeleteDialogOpen, setIsColumnDeleteDialogOpen] =
     useState(false)
 
+  const [columnPendingRename, setColumnPendingRename] = useState<{
+    key: string
+    label: string
+  } | null>(null)
+  const [isColumnRenameDialogOpen, setIsColumnRenameDialogOpen] =
+    useState(false)
+  const [newName, setNewName] = useState("")
+
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
   const fetchData = useCallback(async () => {
@@ -695,6 +703,19 @@ export default function DataPage() {
     []
   )
 
+  const openColumnRenameDialog = useCallback(
+    (column: { key: string; label: string }) => {
+      if (column.key === "id") {
+        toast.error("Cannot rename the ID column")
+        return
+      }
+      setColumnPendingRename(column)
+      setNewName(column.label)
+      setIsColumnRenameDialogOpen(true)
+    },
+    []
+  )
+
   const handleConfirmDelete = async () => {
     if (!recordPendingDelete) {
       return
@@ -752,6 +773,74 @@ export default function DataPage() {
     } catch (error) {
       toast.error(
         `Failed to delete column: ${error instanceof Error ? error.message : "Unknown error"}`
+      )
+    } finally {
+      setIsMutating(false)
+    }
+  }
+
+  const handleConfirmColumnRename = async () => {
+    if (!columnPendingRename) {
+      return
+    }
+
+    const trimmedName = newName.trim()
+    if (!trimmedName) {
+      toast.error("Name cannot be empty")
+      return
+    }
+
+    const newColumnName = trimmedName.replace(/\s+/g, "_").toLowerCase()
+
+    setIsMutating(true)
+    try {
+      // Fetch current metadata to preserve other fields
+      const metadataResponse = await fetch(`${BACKEND_URL}/column-metadata`)
+      if (!metadataResponse.ok) {
+        throw new Error("Failed to fetch column metadata")
+      }
+      const metadata: ColumnMetadataRow[] = await metadataResponse.json()
+      const currentMeta = metadata.find(
+        (m) => m.column_name === columnPendingRename.key
+      )
+      if (!currentMeta) {
+        throw new Error("Column metadata not found")
+      }
+
+      const renameRequest = {
+        old_column_name: columnPendingRename.key,
+        new_column: {
+          column_name: newColumnName,
+          display_name: trimmedName,
+          data_type: currentMeta.data_type,
+          is_required: currentMeta.is_required,
+          default_value: currentMeta.default_value || "null",
+          order: currentMeta.order || 0,
+          description: currentMeta.description || "",
+        },
+      }
+
+      const response = await fetch(`${BACKEND_URL}/columns`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(renameRequest),
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || "Failed to rename column")
+      }
+
+      toast.success(`Column renamed to '${trimmedName}'`)
+      setIsColumnRenameDialogOpen(false)
+      setColumnPendingRename(null)
+      setNewName("")
+      await fetchData() // Refresh data and metadata
+    } catch (error) {
+      toast.error(
+        `Failed to rename column: ${error instanceof Error ? error.message : "Unknown error"}`
       )
     } finally {
       setIsMutating(false)
@@ -1003,7 +1092,12 @@ export default function DataPage() {
                             </ContextMenuLabel>
                             <ContextMenuSeparator />
                             <ContextMenuItem>Add</ContextMenuItem>
-                            <ContextMenuItem>Rename</ContextMenuItem>
+                            <ContextMenuItem
+                              onSelect={() => openColumnRenameDialog(column)}
+                              disabled={isEditMode || isMutating}
+                            >
+                              Rename
+                            </ContextMenuItem>
                             <ContextMenuItem
                               variant="destructive"
                               onSelect={() => openColumnDeleteDialog(column)}
@@ -1130,6 +1224,52 @@ export default function DataPage() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   {isMutating ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={isColumnRenameDialogOpen}
+            onOpenChange={setIsColumnRenameDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Rename Column</DialogTitle>
+                <DialogDescription>
+                  Rename the &quot;{columnPendingRename?.label}&quot; column.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="new-name" className="text-right">
+                    New Name
+                  </label>
+                  <Input
+                    id="new-name"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    className="col-span-3"
+                    placeholder="Enter new column name"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsColumnRenameDialogOpen(false)}
+                  disabled={isMutating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmColumnRename}
+                  disabled={isMutating || !newName.trim()}
+                >
+                  {isMutating && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {isMutating ? "Renaming..." : "Rename"}
                 </Button>
               </DialogFooter>
             </DialogContent>

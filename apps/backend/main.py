@@ -491,6 +491,182 @@ async def delete_column(request: DeleteColumnRequest):
         conn.close()
 
 
+class RenameColumnRequest(BaseModel):
+    old_column_name: str
+    new_column: ColumnRequest
+
+
+@app.put("/columns")
+async def rename_column(request: RenameColumnRequest):
+    old_column_name = request.old_column_name
+    new_column_name = request.new_column.column_name
+    if old_column_name == "id":
+        raise HTTPException(status_code=400, detail="Cannot rename the 'id' column")
+
+    if request.new_column.column_name == "id":
+        raise HTTPException(status_code=400, detail="Cannot rename column to 'id'")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    embedder_instance = get_embedder()
+    vector_db = get_vectordb()
+
+    # Check if old column exists
+    cursor.execute(
+        "SELECT * FROM column_metadata WHERE column_name = ?",
+        (old_column_name,),
+    )
+    original_metadata = cursor.fetchone()
+    if original_metadata is None:
+        raise HTTPException(
+            status_code=404, detail=f"Column '{old_column_name}' not found"
+        )
+
+    # Check if new column name already exists (unless it's the same)
+    if request.new_column.column_name != old_column_name:
+        cursor.execute(
+            "SELECT column_name FROM column_metadata WHERE column_name = ?",
+            (request.new_column.column_name,),
+        )
+        if cursor.fetchone():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Column '{request.new_column.column_name}' already exists",
+            )
+
+    # Store original data for all records (for rollback)
+    cursor.execute("SELECT id, data FROM records")
+    original_records = cursor.fetchall()
+
+    vector_updated = False
+
+    try:
+        conn.execute("BEGIN")
+
+        # Update column_metadata
+        cursor.execute(
+            """
+            UPDATE column_metadata 
+            SET column_name = ?, display_name = ?, data_type = ?, is_required = ?, default_value = ?, "order" = ?, description = ?
+            WHERE column_name = ?
+            """,
+            (
+                request.new_column.column_name,
+                request.new_column.display_name,
+                request.new_column.data_type,
+                request.new_column.is_required,
+                request.new_column.default_value,
+                request.new_column.order,
+                request.new_column.description,
+                old_column_name,
+            ),
+        )
+
+        # Rename the key in all records' data JSON if column name changed
+        if request.new_column.column_name != old_column_name:
+            cursor.execute(f"""
+                UPDATE records 
+                SET data = json_set(json_remove(data, '$.{old_column_name}'), '$.{request.new_column.column_name}', json_extract(data, '$.{old_column_name}'))
+            """)
+
+        # Regenerate descriptions and embeddings for all records
+        cursor.execute("SELECT id, data FROM records")
+        updated_records = cursor.fetchall()
+
+        new_descriptions = []
+        new_embeddings = []
+        ids_to_update = []
+
+        for record_id, data_json in updated_records:
+            data = parse_record_data(data_json)
+            new_description = build_natural_language_description(data)
+            new_embedding = embedder_instance.embed(new_description)
+            if not new_embedding:
+                raise RuntimeError(f"Failed to embed record {record_id}")
+            new_descriptions.append(new_description)
+            new_embeddings.append(new_embedding)
+            ids_to_update.append(str(record_id))
+
+        # Update vector DB
+        vector_db.upsert_documents(
+            ids=ids_to_update,
+            documents=new_descriptions,
+            embeddings=new_embeddings,
+            metadatas=[{"record_id": int(id)} for id in ids_to_update],
+        )
+        vector_updated = True
+
+        # Update records with new descriptions
+        for i, (record_id, _) in enumerate(updated_records):
+            cursor.execute(
+                "UPDATE records SET natural_language_description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (new_descriptions[i], record_id),
+            )
+
+        conn.commit()
+        return {
+            "status": "success",
+            "renamed_column": old_column_name,
+            "new_name": request.new_column.column_name,
+        }
+    except Exception as e:
+        conn.rollback()
+
+        # Restore metadata
+        cursor.execute(
+            """
+            UPDATE column_metadata 
+            SET column_name = ?, display_name = ?, data_type = ?, is_required = ?, default_value = ?, "order" = ?, description = ?
+            WHERE column_name = ?
+            """,
+            (
+                original_metadata[0],  # column_name
+                original_metadata[1],  # display_name
+                original_metadata[2],  # data_type
+                original_metadata[3],  # is_required
+                original_metadata[4],  # default_value
+                original_metadata[5],  # order
+                original_metadata[6],  # description
+                new_column_name,  # where clause uses new name if updated
+            ),
+        )
+
+        # Restore records' data
+        for record_id, old_data_json in original_records:
+            cursor.execute(
+                "UPDATE records SET data = ? WHERE id = ?",
+                (old_data_json, record_id),
+            )
+
+        # Restore vector DB if updated
+        if vector_updated:
+            try:
+                rollback_descriptions = []
+                rollback_embeddings = []
+                rollback_ids = []
+                for record_id, data_json in original_records:
+                    data = parse_record_data(data_json)
+                    desc = build_natural_language_description(data)
+                    emb = embedder_instance.embed(desc)
+                    if emb:
+                        rollback_descriptions.append(desc)
+                        rollback_embeddings.append(emb)
+                        rollback_ids.append(str(record_id))
+                vector_db.upsert_documents(
+                    ids=rollback_ids,
+                    documents=rollback_descriptions,
+                    embeddings=rollback_embeddings,
+                    metadatas=[{"record_id": int(id)} for id in rollback_ids],
+                )
+            except Exception:
+                pass  # Vector DB rollback failed, but continue
+
+        conn.commit()
+        raise HTTPException(status_code=500, detail=f"Rename failed: {str(e)}")
+    finally:
+        conn.close()
+
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     if not file.filename:
