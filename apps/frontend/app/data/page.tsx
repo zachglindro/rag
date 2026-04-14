@@ -71,6 +71,13 @@ interface RecordSearchResponse {
   records: RecordRow[]
 }
 
+interface FilterCondition {
+  id: string
+  columnKey: string
+  operator: string
+  value: string
+}
+
 const BACKEND_URL = "http://localhost:8000"
 const BOOLEAN_TRUE_VALUES = new Set(["true", "1", "yes"])
 const BOOLEAN_FALSE_VALUES = new Set(["false", "0", "no"])
@@ -234,6 +241,12 @@ export default function DataPage() {
   const [isColumnRenameDialogOpen, setIsColumnRenameDialogOpen] =
     useState(false)
   const [newName, setNewName] = useState("")
+
+  const [filters, setFilters] = useState<FilterCondition[]>([])
+  const [filterColumnKey, setFilterColumnKey] = useState<string>("")
+  const [filterOperator, setFilterOperator] = useState<string>("contains")
+  const [filterValue, setFilterValue] = useState<string>("")
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
@@ -496,6 +509,79 @@ export default function DataPage() {
 
     return byRow
   }, [rows, visibleColumns, toEditableCellValue])
+
+  const applyRowFilters = useCallback(
+    (recordRows: RecordRow[]): RecordRow[] => {
+      if (filters.length === 0) {
+        return recordRows
+      }
+
+      return recordRows.filter((row) => {
+        // All filters must match (AND logic)
+        for (const filter of filters) {
+          const cellValue = row.data?.[filter.columnKey]
+          const operator = filter.operator
+          const filterValue = filter.value
+
+          if (!filterValue.trim()) continue
+
+          let matches = false
+
+          try {
+            if (operator === "contains") {
+              // Case-insensitive substring match
+              const cellStringValue = stringifyValue(cellValue).toLowerCase()
+              const filterLower = filterValue.toLowerCase()
+              matches = cellStringValue.includes(filterLower)
+            } else if (operator === "=") {
+              // Exact match
+              const cellString = stringifyValue(cellValue).toLowerCase()
+              const filterLower = filterValue.toLowerCase()
+              matches = cellString === filterLower
+            } else if (
+              operator === ">" ||
+              operator === "<" ||
+              operator === ">=" ||
+              operator === "<="
+            ) {
+              // Numeric comparisons
+              const numericValue =
+                cellValue !== null && cellValue !== undefined
+                  ? Number(cellValue)
+                  : NaN
+              const filterNumber = Number(filterValue)
+
+              if (!isNaN(numericValue) && !isNaN(filterNumber)) {
+                if (operator === ">") {
+                  matches = numericValue > filterNumber
+                } else if (operator === "<") {
+                  matches = numericValue < filterNumber
+                } else if (operator === ">=") {
+                  matches = numericValue >= filterNumber
+                } else if (operator === "<=") {
+                  matches = numericValue <= filterNumber
+                }
+              }
+            }
+          } catch {
+            matches = false
+          }
+
+          if (!matches) {
+            return false
+          }
+        }
+
+        return true
+      })
+    },
+    [filters]
+  )
+
+  const filteredRows = useMemo(
+    () => applyRowFilters(rows),
+    [rows, applyRowFilters]
+  )
 
   const applySearch = () => {
     const nextQuery = searchInput.trim()
@@ -876,6 +962,45 @@ export default function DataPage() {
     }
   }
 
+  const handleAddFilter = () => {
+    if (!filterColumnKey.trim()) {
+      toast.error("Please select a column")
+      return
+    }
+
+    if (!filterValue.trim()) {
+      toast.error("Please enter a filter value")
+      return
+    }
+
+    const newFilter: FilterCondition = {
+      id: `${Date.now()}-${Math.random()}`,
+      columnKey: filterColumnKey,
+      operator: filterOperator,
+      value: filterValue,
+    }
+
+    setFilters((prev) => [...prev, newFilter])
+
+    setFilterColumnKey("")
+    setFilterOperator("contains")
+    setFilterValue("")
+    setIsFilterDialogOpen(false)
+    toast.success(
+      `Filter added: ${filterColumnKey} ${filterOperator} "${filterValue}"`
+    )
+  }
+
+  const handleRemoveFilter = (filterId: string) => {
+    setFilters((prev) => prev.filter((f) => f.id !== filterId))
+    toast.success("Filter removed")
+  }
+
+  const handleClearAllFilters = () => {
+    setFilters([])
+    toast.success("All filters cleared")
+  }
+
   return (
     <>
       <AppSidebar />
@@ -925,6 +1050,78 @@ export default function DataPage() {
               </div>
             </div>
           </div>
+
+          {filters.length > 0 && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    Active Filters ({filters.length})
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {filters.map((filter) => {
+                    const column = visibleColumns.find(
+                      (c) => c.key === filter.columnKey
+                    )
+                    const columnLabel = column?.label || filter.columnKey
+
+                    return (
+                      <div
+                        key={filter.id}
+                        className="flex items-center gap-2 rounded-full border border-blue-100 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-800 dark:bg-slate-900"
+                      >
+                        <span className="font-medium text-blue-700 dark:text-blue-300">
+                          {columnLabel}
+                        </span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {filter.operator}
+                        </span>
+                        <span className="font-mono text-gray-600 dark:text-gray-300">
+                          {filter.value}
+                        </span>
+                        <button
+                          onClick={() => handleRemoveFilter(filter.id)}
+                          className="ml-1 font-bold text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400"
+                          aria-label="Remove filter"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsFilterDialogOpen(true)}
+                  >
+                    Add Another
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleClearAllFilters}
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {filters.length === 0 && !isEditMode && totalCount > 0 && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsFilterDialogOpen(true)}
+              >
+                + Add Filter
+              </Button>
+            </div>
+          )}
 
           {isLoading && (
             <div className="rounded-lg border p-6 text-sm text-muted-foreground">
@@ -1111,7 +1308,7 @@ export default function DataPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rows.map((row) => (
+                    {filteredRows.map((row) => (
                       <DataTableRow
                         key={row.id}
                         row={row}
@@ -1128,6 +1325,12 @@ export default function DataPage() {
                   </TableBody>
                 </Table>
               </div>
+
+              {filteredRows.length === 0 && filters.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                  No records match the current filters.
+                </div>
+              )}
 
               {!isSearchMode && (
                 <div className="flex items-center justify-between gap-3">
@@ -1306,6 +1509,103 @@ export default function DataPage() {
                   {isExporting ? "Exporting..." : "Export"}
                 </Button>
               </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={isFilterDialogOpen}
+            onOpenChange={setIsFilterDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Filter</DialogTitle>
+                <DialogDescription>
+                  Add filters to narrow down records. Multiple filters use AND
+                  logic.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="filter-column" className="text-right text-sm">
+                    Column
+                  </label>
+                  <Select
+                    value={filterColumnKey}
+                    onValueChange={setFilterColumnKey}
+                  >
+                    <SelectTrigger className="col-span-3" id="filter-column">
+                      <SelectValue placeholder="Select a column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {visibleColumns.map((column) => (
+                        <SelectItem key={column.key} value={column.key}>
+                          {column.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label
+                    htmlFor="filter-operator"
+                    className="text-right text-sm"
+                  >
+                    Operator
+                  </label>
+                  <Select
+                    value={filterOperator}
+                    onValueChange={setFilterOperator}
+                  >
+                    <SelectTrigger className="col-span-3" id="filter-operator">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contains">Contains (text)</SelectItem>
+                      <SelectItem value="=">Equals</SelectItem>
+                      <SelectItem value=">">Greater than (number)</SelectItem>
+                      <SelectItem value="<">Less than (number)</SelectItem>
+                      <SelectItem value=">=">&gt;= Greater or equal</SelectItem>
+                      <SelectItem value="<=">&lt;= Less or equal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="filter-value" className="text-right text-sm">
+                    Value
+                  </label>
+                  <Input
+                    id="filter-value"
+                    value={filterValue}
+                    onChange={(e) => setFilterValue(e.target.value)}
+                    className="col-span-3"
+                    placeholder={
+                      filterOperator.match(/[><=]/)
+                        ? "Enter a number"
+                        : "Enter filter value"
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        handleAddFilter()
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsFilterDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAddFilter}
+                  disabled={!filterColumnKey.trim() || !filterValue.trim()}
+                >
+                  Add Filter
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
