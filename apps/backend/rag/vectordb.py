@@ -80,7 +80,7 @@ class _InMemoryCollection:
 
 
 class _InMemoryClient:
-    def __init__(self):
+    def __init__(self) -> None:
         self._collections: dict[str, _InMemoryCollection] = {}
 
     def get_or_create_collection(self, name: str) -> _InMemoryCollection:
@@ -88,7 +88,7 @@ class _InMemoryClient:
             self._collections[name] = _InMemoryCollection(name=name)
         return self._collections[name]
 
-    def delete_collection(self, name: str):
+    def delete_collection(self, name: str) -> None:
         self._collections.pop(name, None)
 
     def create_collection(self, name: str) -> _InMemoryCollection:
