@@ -26,6 +26,9 @@ load_dotenv()
 
 DB_PATH = Path(__file__).parent / "db.sqlite3"
 
+# Minimum rerank score threshold for filtering search results
+MINIMUM_RERANK_SCORE = 0.01
+
 # Local model registry: maps model IDs to local paths
 LOCAL_MODEL_REGISTRY = {
     "gemma-4-e2b-it": Path(__file__).resolve().parents[2] / "models" / "gemma-4-E2B-it",
@@ -1306,10 +1309,18 @@ async def search_records(
         reranked_ids = [
             record_id for record_id in ordered_record_ids if record_id in rows_by_id
         ]
+        # No scores available, skip filtering
+        filtered_ids = reranked_ids
+    else:
+        # Filter by rerank_score >= MINIMUM_RERANK_SCORE
+        filtered_ids = []
+        for rid in reranked_ids:
+            score = rerank_score_by_record_id.get(rid)
+            if score is not None and score >= MINIMUM_RERANK_SCORE:
+                filtered_ids.append(rid)
 
-    limited_ids = reranked_ids[:top_k]
     ordered_rows = []
-    for record_id in limited_ids:
+    for record_id in filtered_ids:
         row = rows_by_id[record_id]
         row.rerank_score = rerank_score_by_record_id.get(record_id)
         ordered_rows.append(row)
@@ -1336,7 +1347,9 @@ async def search_records(
 
         ordered_rows.sort(key=sort_key, reverse=reverse)
 
-    return RecordSearchResponse(query=cleaned_query, top_k=top_k, records=ordered_rows)
+    return RecordSearchResponse(
+        query=cleaned_query, top_k=len(ordered_rows), records=ordered_rows
+    )
 
 
 @app.post("/reset-database")
@@ -1529,7 +1542,7 @@ async def search_records_keyword(
             )
 
         # Perform FTS search with BM25
-        candidate_limit = max(top_k, 20)
+        candidate_limit = 100
         cursor.execute(
             """
             SELECT record_id, bm25(records_fts)
