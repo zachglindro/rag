@@ -1,14 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import {
-  Home,
-  BarChart2,
-  Database,
-  PlusCircle,
-  Settings,
-  Sprout,
-} from "lucide-react"
+import Image from "next/image"
+import { Home, BarChart2, Database, PlusCircle, Settings } from "lucide-react"
 
 import {
   Sidebar,
@@ -21,6 +15,7 @@ import {
   SidebarMenuButton,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import icon from "@/app/icon.png"
 
 const navItems = [
   { title: "Home", icon: Home, href: "/" },
@@ -33,7 +28,11 @@ const navItems = [
 function SidebarHeaderContent() {
   return (
     <div className="flex items-center gap-2 px-2 py-2 group-data-[state=collapsed]:justify-center">
-      <Sprout className="h-5 w-5 shrink-0 text-primary group-data-[state=collapsed]:hidden" />
+      <Image
+        src={icon}
+        alt="Institute of Plant Breeding"
+        className="h-5 w-5 shrink-0 group-data-[state=collapsed]:hidden"
+      />
       <span className="truncate text-sm font-semibold group-data-[state=collapsed]:hidden">
         Cereals Inventory
       </span>
