@@ -12,6 +12,9 @@ from transformers import (
     TextIteratorStreamer,
 )
 
+# Enable/disable logging for model inputs and outputs
+LOGGING = True
+
 
 __all__ = [
     "GemmaLLM",
@@ -125,6 +128,11 @@ No markdown. No extra text.""",
                 add_generation_prompt=True,
             )
 
+        if LOGGING:
+            print("\n=== GEMMA INPUT TEXT ===")
+            print(text)
+            print("========================\n")
+
         inputs = self.processor(text=text, return_tensors="pt").to(self.model.device)
         model_inputs = self._filter_supported_model_inputs(dict(inputs))
 
@@ -154,9 +162,15 @@ No markdown. No extra text.""",
             )
             thread.start()
 
+            if LOGGING:
+                print("\n=== GEMMA STREAMING OUTPUT ===")
             # Yield tokens as they come
             for token in streamer:
+                if LOGGING:
+                    print(token, end="", flush=True)
                 yield token
+            if LOGGING:
+                print("\n==============================\n")
 
         else:
             # Non-streaming logic (existing code)
@@ -183,8 +197,16 @@ No markdown. No extra text.""",
                 if isinstance(parsed, dict):
                     answer = parsed.get("response") or parsed.get("text")
                     if isinstance(answer, str) and answer.strip():
+                        if LOGGING:
+                            print("\n=== GEMMA OUTPUT ===")
+                            print(answer.strip())
+                            print("====================\n")
                         return answer.strip()
 
+            if LOGGING:
+                print("\n=== GEMMA OUTPUT ===")
+                print(response.strip())
+                print("====================\n")
             return response.strip()
 
 
@@ -267,6 +289,14 @@ No markdown. No extra text.""",
             columns_str = ", ".join(database_columns)
             system_prompt = system_prompt.format(database_columns=columns_str)
 
+        if LOGGING:
+            print("\n=== GROQ INPUT (System Prompt) ===")
+            print(system_prompt)
+            print("=== GROQ INPUT (Messages) ===")
+            for msg in messages:
+                print(f"{msg['role'].upper()}: {msg['content']}")
+            print("==================================\n")
+
         continuation_prompt = (
             "Continue exactly where you stopped. Start with the next word only, "
             "without repeating prior text."
@@ -288,6 +318,9 @@ No markdown. No extra text.""",
                     stream=True,
                 )
 
+                if LOGGING and attempt == 0:
+                    print("\n=== GROQ STREAMING OUTPUT ===")
+
                 finish_reason = ""
                 chunk_texts: list[str] = []
                 for chunk in stream_response:
@@ -308,6 +341,8 @@ No markdown. No extra text.""",
                     text = self._extract_text(content)
                     if text:
                         chunk_texts.append(text)
+                        if LOGGING:
+                            print(text, end="", flush=True)
                         yield text
 
                 partial_text = "".join(chunk_texts).strip()
@@ -319,6 +354,8 @@ No markdown. No extra text.""",
 
                 conversation.append({"role": "user", "content": continuation_prompt})
 
+            if LOGGING:
+                print("\n============================\n")
             return
 
         conversation = list(messages)
@@ -354,7 +391,12 @@ No markdown. No extra text.""",
 
             conversation.append({"role": "user", "content": continuation_prompt})
 
-        return "".join(response_parts).strip()
+        full_response = "".join(response_parts).strip()
+        if LOGGING:
+            print("\n=== GROQ OUTPUT ===")
+            print(full_response)
+            print("===================\n")
+        return full_response
 
 
 class GeminiLLM:
@@ -459,6 +501,11 @@ No markdown. No extra text.""",
     ):
         prompt = self._build_prompt(messages, task, database_columns)
 
+        if LOGGING:
+            print("\n=== GEMINI INPUT PROMPT ===")
+            print(prompt)
+            print("============================\n")
+
         if stream:
             stream_response = self.client.models.generate_content_stream(
                 model=self.model_name,
@@ -466,10 +513,18 @@ No markdown. No extra text.""",
                 config={"max_output_tokens": max_tokens},
             )
 
+            if LOGGING:
+                print("\n=== GEMINI STREAMING OUTPUT ===")
+
             for chunk in stream_response:
                 text = self._extract_stream_text(chunk)
                 if text:
+                    if LOGGING:
+                        print(text, end="", flush=True)
                     yield text
+
+            if LOGGING:
+                print("\n================================\n")
             return
 
         response = self.client.models.generate_content(
@@ -479,6 +534,10 @@ No markdown. No extra text.""",
         )
         response_text = getattr(response, "text", None)
         if isinstance(response_text, str) and response_text.strip():
+            if LOGGING:
+                print("\n=== GEMINI OUTPUT ===")
+                print(response_text.strip())
+                print("=====================\n")
             return response_text.strip()
         return ""
 

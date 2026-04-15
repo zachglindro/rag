@@ -853,6 +853,10 @@ export default function Page() {
                     )
                     const hasRetrievedRecords =
                       !isUser && (message.retrievedRecords?.length ?? 0) > 0
+                    const hadRetrievalAttempt =
+                      !isUser &&
+                      message.retrievalComplete === true &&
+                      message.retrievalQuery !== undefined
 
                     return (
                       <div
@@ -881,10 +885,12 @@ export default function Page() {
                             message.content
                           ) : (
                             <div className="space-y-3">
-                              {hasRetrievedRecords && (
+                              {hadRetrievalAttempt && (
                                 <div className="space-y-2">
                                   <div className="text-xs font-medium text-muted-foreground">
-                                    Retrieved relevant records
+                                    {hasRetrievedRecords
+                                      ? "Retrieved relevant records"
+                                      : "Search attempted"}
                                   </div>
                                   {message.retrievalQuery && (
                                     <div className="text-xs text-muted-foreground">
@@ -892,48 +898,54 @@ export default function Page() {
                                       &quot;
                                     </div>
                                   )}
-                                  <div className="max-h-72 overflow-auto rounded-md border">
-                                    <table className="w-full min-w-[560px] border-collapse text-xs">
-                                      <thead className="sticky top-0 bg-muted">
-                                        <tr>
-                                          <th className="border-b px-2 py-1.5 text-left font-medium">
-                                            ID
-                                          </th>
-                                          {recordColumns.map((column) => (
-                                            <th
-                                              key={`${message.id}-col-${column}`}
-                                              className="border-b px-2 py-1.5 text-left font-medium"
-                                            >
-                                              {column}
+                                  {hasRetrievedRecords ? (
+                                    <div className="max-h-72 overflow-auto rounded-md border">
+                                      <table className="w-full min-w-[560px] border-collapse text-xs">
+                                        <thead className="sticky top-0 bg-muted">
+                                          <tr>
+                                            <th className="border-b px-2 py-1.5 text-left font-medium">
+                                              ID
                                             </th>
-                                          ))}
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {message.retrievedRecords?.map(
-                                          (record) => (
-                                            <tr
-                                              key={`${message.id}-row-${record.id}`}
-                                            >
-                                              <td className="border-b px-2 py-1.5 align-top font-medium">
-                                                {record.id}
-                                              </td>
-                                              {recordColumns.map((column) => (
-                                                <td
-                                                  key={`${message.id}-row-${record.id}-${column}`}
-                                                  className="border-b px-2 py-1.5 align-top"
-                                                >
-                                                  {stringifyValue(
-                                                    record.data?.[column]
-                                                  )}
+                                            {recordColumns.map((column) => (
+                                              <th
+                                                key={`${message.id}-col-${column}`}
+                                                className="border-b px-2 py-1.5 text-left font-medium"
+                                              >
+                                                {column}
+                                              </th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {message.retrievedRecords?.map(
+                                            (record) => (
+                                              <tr
+                                                key={`${message.id}-row-${record.id}`}
+                                              >
+                                                <td className="border-b px-2 py-1.5 align-top font-medium">
+                                                  {record.id}
                                                 </td>
-                                              ))}
-                                            </tr>
-                                          )
-                                        )}
-                                      </tbody>
-                                    </table>
-                                  </div>
+                                                {recordColumns.map((column) => (
+                                                  <td
+                                                    key={`${message.id}-row-${record.id}-${column}`}
+                                                    className="border-b px-2 py-1.5 align-top"
+                                                  >
+                                                    {stringifyValue(
+                                                      record.data?.[column]
+                                                    )}
+                                                  </td>
+                                                ))}
+                                              </tr>
+                                            )
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : (
+                                    <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                                      No matching records found in the database.
+                                    </div>
+                                  )}
                                 </div>
                               )}
 
