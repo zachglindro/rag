@@ -64,7 +64,7 @@ Key guidelines:
             "routing": """You are a search query generator.
 Your task is to generate a concise query for the database based on the user's message.
 The database contains the following columns: {database_columns}
-Your query should as concise, short, and focused as possible. It should contain the minimum number of words necessary for the search.
+Your query should as concise, short, and focused as possible. It should ideally contain only the column to be searched and the search term.
 Output ONLY valid JSON: {'query': 'search term'}
 No markdown. No extra text.""",
         }

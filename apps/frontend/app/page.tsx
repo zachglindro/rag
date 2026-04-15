@@ -362,7 +362,11 @@ async function retrieveRagContext(
 
     const data: RecordSearchResponse = await response.json()
     if (!data.records.length) {
-      return { context: null, records: [], completed: true }
+      return {
+        context: "No matching records found in the database for the given query.",
+        records: [],
+        completed: true
+      }
     }
 
     const formattedRecords = data.records
