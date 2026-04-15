@@ -27,7 +27,7 @@ load_dotenv()
 DB_PATH = Path(__file__).parent / "db.sqlite3"
 
 # Minimum rerank score threshold for filtering search results
-MINIMUM_RERANK_SCORE = 0.01
+MINIMUM_RERANK_SCORE = 0.001
 
 # Local model registry: maps model IDs to local paths
 LOCAL_MODEL_REGISTRY = {
