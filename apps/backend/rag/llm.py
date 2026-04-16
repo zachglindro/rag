@@ -13,7 +13,7 @@ from transformers import (
 )
 
 # Enable/disable logging for model inputs and outputs
-LOGGING = True
+LOGGING = False
 
 SYSTEM_PROMPTS = {
     "general": """You are an AI assistant for the Institute of Plant Breeding, specialized in maize phenotypic trait data and parental line selection for plant breeding research. Your primary role is to help the user efficiently query and analyze phenotypic data using natural language, overcoming the limitations of traditional keyword-based searches in spreadsheets. You understand concepts like semantic similarity, dense embeddings, and retrieval-augmented generation (RAG), and you draw from knowledge of maize traits.
