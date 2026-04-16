@@ -19,6 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { useState, useEffect } from "react"
 import { Loader2, Check } from "lucide-react"
@@ -55,6 +57,15 @@ export default function Settings() {
       return localStorage.getItem("enableDebugging") === "true"
     }
     return false
+  })
+  const [searchType, setSearchType] = useState<"semantic" | "keyword">(() => {
+    if (typeof window !== "undefined") {
+      return (
+        (localStorage.getItem("searchType") as "semantic" | "keyword") ||
+        "semantic"
+      )
+    }
+    return "semantic"
   })
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [exportFormat, setExportFormat] = useState<"csv" | "xlsx">("csv")
@@ -134,6 +145,11 @@ export default function Settings() {
   const handleToggleDebugging = (checked: boolean) => {
     setEnableDebugging(checked)
     localStorage.setItem("enableDebugging", checked ? "true" : "false")
+  }
+
+  const handleSearchTypeChange = (value: "semantic" | "keyword") => {
+    setSearchType(value)
+    localStorage.setItem("searchType", value)
   }
 
   const handleExportData = async () => {
@@ -231,6 +247,43 @@ export default function Settings() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+            </div>
+
+            <div>
+              <h2>Search Settings</h2>
+              <p className="text-sm text-muted-foreground">
+                Choose the search method for chat and data pages.
+              </p>
+              <div className="mt-4">
+                <RadioGroup
+                  value={searchType}
+                  onValueChange={(value) =>
+                    handleSearchTypeChange(value as "semantic" | "keyword")
+                  }
+                  className="flex flex-col gap-3"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="semantic" id="semantic" />
+                    <Label htmlFor="semantic" className="cursor-pointer">
+                      Semantic Search
+                      <p className="text-xs font-normal text-muted-foreground">
+                        Uses AI to find records based on meaning. Best for
+                        natural language questions.
+                      </p>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="keyword" id="keyword" />
+                    <Label htmlFor="keyword" className="cursor-pointer">
+                      Keyword Search
+                      <p className="text-xs font-normal text-muted-foreground">
+                        Matches exact words and phrases. Best for finding
+                        specific identifiers or terms.
+                      </p>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
             </div>
 
             <div>

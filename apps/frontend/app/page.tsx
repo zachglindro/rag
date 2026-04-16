@@ -11,7 +11,6 @@ import ReactMarkdown from "react-markdown"
 
 const BACKEND_URL = "http://localhost:8000"
 const GENERATE_URL = `${BACKEND_URL}/generate`
-const SEARCH_RECORDS_URL = `${BACKEND_URL}/semantic-search/records`
 const RAG_TOP_K = 5
 const ROUTER_MAX_TOKENS = 80
 const BASE_RESPONSE_MAX_TOKENS = 1024
@@ -348,11 +347,17 @@ async function getSearchQuery(
 
 async function retrieveRagContext(
   query: string,
+  searchType: "semantic" | "keyword",
   signal?: AbortSignal
 ): Promise<RagRetrievalResult> {
   try {
+    const endpoint =
+      searchType === "keyword"
+        ? `${BACKEND_URL}/keyword-search/records`
+        : `${BACKEND_URL}/semantic-search/records`
+
     const response = await fetch(
-      `${SEARCH_RECORDS_URL}?query=${encodeURIComponent(query)}&top_k=${RAG_TOP_K}`,
+      `${endpoint}?query=${encodeURIComponent(query)}&top_k=${RAG_TOP_K}`,
       { signal }
     )
 
@@ -363,9 +368,10 @@ async function retrieveRagContext(
     const data: RecordSearchResponse = await response.json()
     if (!data.records.length) {
       return {
-        context: "No matching records found in the database for the given query.",
+        context:
+          "No matching records found in the database for the given query.",
         records: [],
-        completed: true
+        completed: true,
       }
     }
 
@@ -466,6 +472,15 @@ export default function Page() {
     }
     return false
   })
+  const [searchType, setSearchType] = useState<"semantic" | "keyword">(() => {
+    if (typeof window !== "undefined") {
+      return (
+        (localStorage.getItem("searchType") as "semantic" | "keyword") ||
+        "semantic"
+      )
+    }
+    return "semantic"
+  })
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const isLoadingRef = useRef(false)
@@ -506,6 +521,9 @@ export default function Page() {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "enableDebugging") {
         setEnableDebugging(e.newValue === "true")
+      }
+      if (e.key === "searchType") {
+        setSearchType((e.newValue as "semantic" | "keyword") || "semantic")
       }
     }
 
@@ -606,7 +624,11 @@ export default function Page() {
       const shouldRetrieve = searchQuery !== "none"
       const retrievalQuery = shouldRetrieve ? searchQuery : ""
       const retrieval = shouldRetrieve
-        ? await retrieveRagContext(retrievalQuery, abortController.signal)
+        ? await retrieveRagContext(
+            retrievalQuery,
+            searchType,
+            abortController.signal
+          )
         : { context: null, records: [], completed: true }
 
       if (activeRequestIdRef.current !== requestId) {

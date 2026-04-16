@@ -206,6 +206,15 @@ export default function DataPage() {
   const [skip, setSkip] = useState(0)
   const [searchInput, setSearchInput] = useState("")
   const [appliedSearchQuery, setAppliedSearchQuery] = useState("")
+  const [searchType, setSearchType] = useState<"semantic" | "keyword">(() => {
+    if (typeof window !== "undefined") {
+      return (
+        (localStorage.getItem("searchType") as "semantic" | "keyword") ||
+        "semantic"
+      )
+    }
+    return "semantic"
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -262,15 +271,22 @@ export default function DataPage() {
 
     try {
       if (isSearchMode) {
+        const endpoint =
+          searchType === "keyword"
+            ? `${BACKEND_URL}/keyword-search/records`
+            : `${BACKEND_URL}/semantic-search/records`
+
         const [searchResponse, metadataResponse] = await Promise.all([
           fetch(
-            `${BACKEND_URL}/semantic-search/records?query=${encodeURIComponent(appliedSearchQuery)}&top_k=50&sort_by=${encodeURIComponent(sortColumn)}&sort_order=${sortDirection}`
+            `${endpoint}?query=${encodeURIComponent(appliedSearchQuery)}&top_k=50&sort_by=${encodeURIComponent(sortColumn)}&sort_order=${sortDirection}`
           ),
           fetch(`${BACKEND_URL}/column-metadata`),
         ])
 
         if (!searchResponse.ok || !metadataResponse.ok) {
-          throw new Error("Failed to run semantic search")
+          throw new Error(
+            `Failed to run ${searchType === "keyword" ? "keyword" : "semantic"} search`
+          )
         }
 
         const searchData: RecordSearchResponse = await searchResponse.json()
@@ -328,7 +344,21 @@ export default function DataPage() {
     sortColumn,
     sortDirection,
     pageSize,
+    searchType,
   ])
+
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "searchType") {
+        setSearchType((e.newValue as "semantic" | "keyword") || "semantic")
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+    }
+  }, [])
 
   useEffect(() => {
     fetchData()
