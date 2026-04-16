@@ -228,13 +228,18 @@ function DataPageContent() {
   const highlightIdString = searchParams.get("highlight")
   const highlightId = highlightIdString ? parseInt(highlightIdString, 10) : null
 
+  const initialQuery = searchParams.get("query") || ""
+  const initialType =
+    (searchParams.get("type") as "semantic" | "keyword") || null
+
   const [rows, setRows] = useState<RecordRow[]>([])
   const [metadata, setMetadata] = useState<ColumnMetadataRow[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [skip, setSkip] = useState(0)
-  const [searchInput, setSearchInput] = useState("")
-  const [appliedSearchQuery, setAppliedSearchQuery] = useState("")
+  const [searchInput, setSearchInput] = useState(initialQuery)
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState(initialQuery)
   const [searchType, setSearchType] = useState<"semantic" | "keyword">(() => {
+    if (initialType) return initialType
     if (typeof window !== "undefined") {
       return (
         (localStorage.getItem("searchType") as "semantic" | "keyword") ||

@@ -4,7 +4,15 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
-import { Bot, Database, Loader2, Send, Square, User } from "lucide-react"
+import {
+  Bot,
+  Database,
+  ExternalLink,
+  Loader2,
+  Send,
+  Square,
+  User,
+} from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -28,6 +36,7 @@ type ChatMessage = {
   retrievedRecords?: RetrievedRecord[]
   retrievalComplete?: boolean
   retrievalQuery?: string
+  retrievalSearchType?: "semantic" | "keyword"
 }
 
 type RetrievedRecord = {
@@ -645,6 +654,7 @@ export default function Page() {
                 retrievedRecords: retrieval.records,
                 retrievalComplete: retrieval.completed,
                 retrievalQuery: shouldRetrieve ? retrievalQuery : undefined,
+                retrievalSearchType: shouldRetrieve ? searchType : undefined,
               }
             : msg
         )
@@ -921,9 +931,24 @@ export default function Page() {
                                       : "Search attempted"}
                                   </div>
                                   {message.retrievalQuery && (
-                                    <div className="text-xs text-muted-foreground">
-                                      Query: &quot;{message.retrievalQuery}
-                                      &quot;
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="text-xs text-muted-foreground">
+                                        Query: &quot;{message.retrievalQuery}
+                                        &quot;
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 gap-1 px-2 text-[10px]"
+                                        onClick={() =>
+                                          router.push(
+                                            `/data?query=${encodeURIComponent(message.retrievalQuery || "")}&type=${message.retrievalSearchType || "semantic"}`
+                                          )
+                                        }
+                                      >
+                                        <ExternalLink className="h-3 w-3" />
+                                        View all
+                                      </Button>
                                     </div>
                                   )}
                                   {hasRetrievedRecords ? (
