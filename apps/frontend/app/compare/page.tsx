@@ -439,31 +439,27 @@ export default function ComparePage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              <TableHead>Score</TableHead>
                               <TableHead>ID</TableHead>
                               {allColumns.map((col) => (
                                 <TableHead key={col}>{col}</TableHead>
                               ))}
-                              <TableHead>Description</TableHead>
-                              <TableHead>Score</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {semanticRecords.map((record) => (
                               <TableRow key={record.id}>
+                                <TableCell>
+                                  {record.rerank_score != null
+                                    ? record.rerank_score.toFixed(3)
+                                    : "-"}
+                                </TableCell>
                                 <TableCell>{record.id}</TableCell>
                                 {allColumns.map((col) => (
                                   <TableCell key={col}>
                                     {stringifyValue(record.data[col])}
                                   </TableCell>
                                 ))}
-                                <TableCell className="max-w-xs truncate">
-                                  {record.natural_language_description || "-"}
-                                </TableCell>
-                                <TableCell>
-                                  {record.rerank_score != null
-                                    ? record.rerank_score.toFixed(3)
-                                    : "-"}
-                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -502,31 +498,27 @@ export default function ComparePage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              <TableHead>Score</TableHead>
                               <TableHead>ID</TableHead>
                               {allColumns.map((col) => (
                                 <TableHead key={col}>{col}</TableHead>
                               ))}
-                              <TableHead>Description</TableHead>
-                              <TableHead>Score</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {keywordRecords.map((record) => (
                               <TableRow key={record.id}>
+                                <TableCell>
+                                  {record.rerank_score != null
+                                    ? record.rerank_score.toFixed(3)
+                                    : "-"}
+                                </TableCell>
                                 <TableCell>{record.id}</TableCell>
                                 {allColumns.map((col) => (
                                   <TableCell key={col}>
                                     {stringifyValue(record.data[col])}
                                   </TableCell>
                                 ))}
-                                <TableCell className="max-w-xs truncate">
-                                  {record.natural_language_description || "-"}
-                                </TableCell>
-                                <TableCell>
-                                  {record.rerank_score != null
-                                    ? record.rerank_score.toFixed(3)
-                                    : "-"}
-                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
