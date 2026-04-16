@@ -36,7 +36,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import Link from "next/link"
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  Suspense,
+} from "react"
 import { toast } from "sonner"
 import { ChevronUp, ChevronDown, Loader2 } from "lucide-react"
 
@@ -130,6 +139,7 @@ interface DataTableRowProps {
   onUpdateDraftCell: (rowId: number, columnKey: string, value: string) => void
   onContextEditRow: (row: RecordRow) => void
   onOpenDeleteDialog: (row: RecordRow) => void
+  isHighlighted?: boolean
 }
 
 const DataTableRow = memo(function DataTableRow({
@@ -142,11 +152,25 @@ const DataTableRow = memo(function DataTableRow({
   onUpdateDraftCell,
   onContextEditRow,
   onOpenDeleteDialog,
+  isHighlighted,
 }: DataTableRowProps) {
+  const rowRef = useRef<HTMLTableRowElement>(null)
+
+  useEffect(() => {
+    if (isHighlighted && rowRef.current) {
+      rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  }, [isHighlighted])
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <TableRow>
+        <TableRow
+          ref={rowRef}
+          className={
+            isHighlighted ? "bg-primary/10 transition-colors duration-1000" : ""
+          }
+        >
           <TableCell className="font-medium">{row.id}</TableCell>
           {visibleColumns.map((column) => {
             const originalValue = toEditableCellValue(row.data?.[column.key])
@@ -199,7 +223,11 @@ const DataTableRow = memo(function DataTableRow({
   )
 })
 
-export default function DataPage() {
+function DataPageContent() {
+  const searchParams = useSearchParams()
+  const highlightIdString = searchParams.get("highlight")
+  const highlightId = highlightIdString ? parseInt(highlightIdString, 10) : null
+
   const [rows, setRows] = useState<RecordRow[]>([])
   const [metadata, setMetadata] = useState<ColumnMetadataRow[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -270,11 +298,52 @@ export default function DataPage() {
     }
 
     try {
-      if (isSearchMode) {
+      if (highlightId !== null && isInitialLoad) {
+        // If we have a highlight ID, fetch that specific record first
+        const [recordResponse, metadataResponse] = await Promise.all([
+          fetch(`${BACKEND_URL}/records/${highlightId}`),
+          fetch(`${BACKEND_URL}/column-metadata`),
+        ])
+
+        if (!recordResponse.ok || !metadataResponse.ok) {
+          throw new Error("Failed to load highlighted record")
+        }
+
+        const recordData: RecordRow = await recordResponse.json()
+        const metadataData: ColumnMetadataRow[] = await metadataResponse.json()
+
+        setRows([recordData])
+        setMetadata(metadataData)
+        setTotalCount(1)
+        // We set search query to empty but show only this record to simulate a search-like focus
+        setAppliedSearchQuery(`id:${highlightId}`)
+        setSearchInput(`id:${highlightId}`)
+      } else if (isSearchMode) {
         const endpoint =
           searchType === "keyword"
             ? `${BACKEND_URL}/keyword-search/records`
             : `${BACKEND_URL}/semantic-search/records`
+
+        // Handle special id: prefix for manual ID search
+        if (appliedSearchQuery.startsWith("id:")) {
+          const id = parseInt(appliedSearchQuery.slice(3), 10)
+          if (!isNaN(id)) {
+            const [recordResponse, metadataResponse] = await Promise.all([
+              fetch(`${BACKEND_URL}/records/${id}`),
+              fetch(`${BACKEND_URL}/column-metadata`),
+            ])
+
+            if (recordResponse.ok && metadataResponse.ok) {
+              const recordData: RecordRow = await recordResponse.json()
+              const metadataData: ColumnMetadataRow[] =
+                await metadataResponse.json()
+              setRows([recordData])
+              setMetadata(metadataData)
+              setTotalCount(1)
+              return
+            }
+          }
+        }
 
         const [searchResponse, metadataResponse] = await Promise.all([
           fetch(
@@ -345,6 +414,7 @@ export default function DataPage() {
     sortDirection,
     pageSize,
     searchType,
+    highlightId,
   ])
 
   useEffect(() => {
@@ -1230,8 +1300,9 @@ export default function DataPage() {
 
               {isSearchMode ? (
                 <div className="text-sm text-muted-foreground">
-                  Semantic search for &quot;{appliedSearchQuery}&quot; returned{" "}
-                  {rows.length} results.
+                  {searchType === "keyword" ? "Keyword" : "Semantic"} search for
+                  &quot;{appliedSearchQuery}&quot; returned {rows.length}{" "}
+                  results.
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">
@@ -1350,6 +1421,7 @@ export default function DataPage() {
                         onUpdateDraftCell={updateDraftCell}
                         onContextEditRow={handleContextEditRow}
                         onOpenDeleteDialog={openDeleteDialog}
+                        isHighlighted={row.id === highlightId}
                       />
                     ))}
                   </TableBody>
@@ -1641,5 +1713,19 @@ export default function DataPage() {
         </div>
       </SidebarInset>
     </>
+  )
+}
+
+export default function DataPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <DataPageContent />
+    </Suspense>
   )
 }

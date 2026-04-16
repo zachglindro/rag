@@ -6,6 +6,7 @@ import { SidebarInset } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
 import { Bot, Database, Loader2, Send, Square, User } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 
@@ -461,6 +462,7 @@ const markdownComponents = {
 }
 
 export default function Page() {
+  const router = useRouter()
   const [inputValue, setInputValue] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -947,6 +949,12 @@ export default function Page() {
                                             (record) => (
                                               <tr
                                                 key={`${message.id}-row-${record.id}`}
+                                                className="cursor-pointer transition-colors hover:bg-muted/50"
+                                                onClick={() =>
+                                                  router.push(
+                                                    `/data?highlight=${record.id}`
+                                                  )
+                                                }
                                               >
                                                 <td className="border-b px-2 py-1.5 align-top font-medium">
                                                   {record.id}
