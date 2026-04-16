@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { SidebarInset } from "@/components/ui/sidebar"
@@ -869,6 +870,14 @@ export default function Page() {
           ) : messages.length === 0 ? (
             <div className="flex flex-1 items-center px-4 sm:px-8">
               <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-8">
+                <Image
+                  src="/cropped-IPB-logo.webp"
+                  alt="IPB Logo"
+                  width={180}
+                  height={180}
+                  priority
+                  className="h-auto w-auto"
+                />
                 <h1 className="text-center text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
                   Cereal Crops Search
                 </h1>
