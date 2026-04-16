@@ -1305,8 +1305,8 @@ function DataPageContent() {
 
               {isSearchMode ? (
                 <div className="text-sm text-muted-foreground">
-                  {searchType === "keyword" ? "Keyword" : "Semantic"} search for
-                  &quot;{appliedSearchQuery}&quot; returned {rows.length}{" "}
+                  {searchType === "keyword" ? "Keyword " : "Semantic "} search
+                  for &quot;{appliedSearchQuery}&quot; returned {rows.length}{" "}
                   results.
                 </div>
               ) : (
