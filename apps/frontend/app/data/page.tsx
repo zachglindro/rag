@@ -238,16 +238,9 @@ function DataPageContent() {
   const [skip, setSkip] = useState(0)
   const [searchInput, setSearchInput] = useState(initialQuery)
   const [appliedSearchQuery, setAppliedSearchQuery] = useState(initialQuery)
-  const [searchType, setSearchType] = useState<"semantic" | "keyword">(() => {
-    if (initialType) return initialType
-    if (typeof window !== "undefined") {
-      return (
-        (localStorage.getItem("searchType") as "semantic" | "keyword") ||
-        "semantic"
-      )
-    }
-    return "semantic"
-  })
+  const [searchType, setSearchType] = useState<"semantic" | "keyword">(
+    initialType || "semantic"
+  )
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -268,6 +261,17 @@ function DataPageContent() {
   const hasLoadedInitiallyRef = useRef(false)
 
   const [pageSize, setPageSize] = useState(25)
+
+  useEffect(() => {
+    if (!initialType) {
+      const stored = localStorage.getItem("searchType") as
+        | "semantic"
+        | "keyword"
+      if (stored) {
+        setSearchType(stored)
+      }
+    }
+  }, [initialType])
 
   const [columnPendingDelete, setColumnPendingDelete] = useState<{
     key: string
@@ -1243,7 +1247,7 @@ function DataPageContent() {
             </div>
           )}
 
-          {!isLoading && !error && totalCount === 0 && (
+          {!isLoading && !error && totalCount === 0 && !isSearchMode && (
             <div className="rounded-lg border p-6">
               <p className="text-sm text-muted-foreground">
                 There is currently no data in the database.
@@ -1254,7 +1258,7 @@ function DataPageContent() {
             </div>
           )}
 
-          {!isLoading && !error && totalCount > 0 && (
+          {!isLoading && !error && (totalCount > 0 || isSearchMode) && (
             <div className="rounded-lg border p-4">
               <div className="flex flex-wrap items-center gap-2">
                 {!isEditMode && (
@@ -1294,7 +1298,7 @@ function DataPageContent() {
             </div>
           )}
 
-          {!isLoading && !error && totalCount > 0 && (
+          {!isLoading && !error && (totalCount > 0 || isSearchMode) && (
             <div className="flex w-full min-w-0 flex-col gap-4">
               {isRefreshing && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1429,15 +1433,23 @@ function DataPageContent() {
                         isHighlighted={row.id === highlightId}
                       />
                     ))}
+                    {filteredRows.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={allColumns.length}
+                          className="h-24 text-center text-muted-foreground"
+                        >
+                          {isSearchMode && rows.length === 0
+                            ? "No results found for your search."
+                            : filters.length > 0
+                              ? "No records match the current filters."
+                              : "No records to display."}
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
-
-              {filteredRows.length === 0 && filters.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                  No records match the current filters.
-                </div>
-              )}
 
               {!isSearchMode && (
                 <div className="flex items-center justify-between gap-3">

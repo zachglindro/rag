@@ -32,6 +32,7 @@ function SidebarHeaderContent() {
         src={icon}
         alt="Institute of Plant Breeding"
         className="h-5 w-5 shrink-0 group-data-[state=collapsed]:hidden"
+        priority
       />
       <span className="truncate text-sm font-semibold group-data-[state=collapsed]:hidden">
         Cereals Inventory
