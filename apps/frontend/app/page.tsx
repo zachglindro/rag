@@ -5,6 +5,14 @@ import { Button } from "@/components/ui/button"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
   Bot,
   Database,
   ExternalLink,
@@ -925,17 +933,18 @@ export default function Page() {
                             <div className="space-y-3">
                               {hadRetrievalAttempt && (
                                 <div className="space-y-2">
-                                  <div className="text-xs font-medium text-muted-foreground">
-                                    {hasRetrievedRecords
-                                      ? "Retrieved relevant records"
-                                      : "Search attempted"}
-                                  </div>
-                                  {message.retrievalQuery && (
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="text-xs text-muted-foreground">
-                                        Query: &quot;{message.retrievalQuery}
-                                        &quot;
-                                      </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                      {hasRetrievedRecords
+                                        ? "Retrieved relevant records"
+                                        : "Search attempted"}
+                                      {hasRetrievedRecords && (
+                                        <span className="text-[10px] font-normal italic opacity-60">
+                                          (scroll to explore)
+                                        </span>
+                                      )}
+                                    </div>
+                                    {message.retrievalQuery && (
                                       <Button
                                         variant="ghost"
                                         size="sm"
@@ -949,56 +958,62 @@ export default function Page() {
                                         <ExternalLink className="h-3 w-3" />
                                         View all
                                       </Button>
+                                    )}
+                                  </div>
+                                  {message.retrievalQuery && (
+                                    <div className="text-xs text-muted-foreground">
+                                      Query: &quot;{message.retrievalQuery}
+                                      &quot;
                                     </div>
                                   )}
                                   {hasRetrievedRecords ? (
-                                    <div className="max-h-72 overflow-auto rounded-md border">
-                                      <table className="w-full min-w-[560px] border-collapse text-xs">
-                                        <thead className="sticky top-0 bg-muted">
-                                          <tr>
-                                            <th className="border-b px-2 py-1.5 text-left font-medium">
+                                    <div className="max-h-72 overflow-auto rounded-md border shadow-inner">
+                                      <Table className="min-w-[560px]">
+                                        <TableHeader className="sticky top-0 z-10 bg-muted">
+                                          <TableRow>
+                                            <TableHead className="h-8 px-2 py-1 text-[11px] font-semibold">
                                               ID
-                                            </th>
+                                            </TableHead>
                                             {recordColumns.map((column) => (
-                                              <th
+                                              <TableHead
                                                 key={`${message.id}-col-${column}`}
-                                                className="border-b px-2 py-1.5 text-left font-medium"
+                                                className="h-8 px-2 py-1 text-[11px] font-semibold"
                                               >
                                                 {column}
-                                              </th>
+                                              </TableHead>
                                             ))}
-                                          </tr>
-                                        </thead>
-                                        <tbody>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
                                           {message.retrievedRecords?.map(
                                             (record) => (
-                                              <tr
+                                              <TableRow
                                                 key={`${message.id}-row-${record.id}`}
-                                                className="cursor-pointer transition-colors hover:bg-muted/50"
+                                                className="cursor-pointer text-[11px]"
                                                 onClick={() =>
                                                   router.push(
                                                     `/data?highlight=${record.id}`
                                                   )
                                                 }
                                               >
-                                                <td className="border-b px-2 py-1.5 align-top font-medium">
+                                                <TableCell className="px-2 py-1.5 font-medium">
                                                   {record.id}
-                                                </td>
+                                                </TableCell>
                                                 {recordColumns.map((column) => (
-                                                  <td
+                                                  <TableCell
                                                     key={`${message.id}-row-${record.id}-${column}`}
-                                                    className="border-b px-2 py-1.5 align-top"
+                                                    className="px-2 py-1.5"
                                                   >
                                                     {stringifyValue(
                                                       record.data?.[column]
                                                     )}
-                                                  </td>
+                                                  </TableCell>
                                                 ))}
-                                              </tr>
+                                              </TableRow>
                                             )
                                           )}
-                                        </tbody>
-                                      </table>
+                                        </TableBody>
+                                      </Table>
                                     </div>
                                   ) : (
                                     <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
