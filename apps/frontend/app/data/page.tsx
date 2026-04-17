@@ -94,12 +94,12 @@ const BOOLEAN_FALSE_VALUES = new Set(["false", "0", "no"])
 
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) {
-    return "-"
+    return ""
   }
 
   if (typeof value === "string") {
     const trimmed = value.trim()
-    return trimmed.length > 0 ? value : "-"
+    return trimmed.length > 0 ? value : ""
   }
 
   if (typeof value === "number" || typeof value === "boolean") {

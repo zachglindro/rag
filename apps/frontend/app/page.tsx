@@ -126,12 +126,12 @@ function formatRagRecord(record: RetrievedRecord, index: number): string {
 
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) {
-    return "-"
+    return ""
   }
 
   if (typeof value === "string") {
     const trimmed = value.trim()
-    return trimmed.length > 0 ? value : "-"
+    return trimmed.length > 0 ? value : ""
   }
 
   if (typeof value === "number" || typeof value === "boolean") {
