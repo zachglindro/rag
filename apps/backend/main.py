@@ -1554,6 +1554,11 @@ async def search_records_keyword(
     if not cleaned_query:
         raise HTTPException(status_code=400, detail="Query must not be empty")
 
+    # Sanitize for FTS5: split into words and wrap each in double quotes
+    # This prevents syntax errors from characters like , . - etc.
+    words = [word.replace('"', " ") for word in cleaned_query.split()]
+    fts_query = " ".join(f'"{word}"' for word in words)
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
@@ -1578,7 +1583,7 @@ async def search_records_keyword(
             ORDER BY bm25(records_fts)
             LIMIT ?
         """,
-            (cleaned_query, candidate_limit),
+            (fts_query, candidate_limit),
         )
 
         fts_results = cursor.fetchall()
