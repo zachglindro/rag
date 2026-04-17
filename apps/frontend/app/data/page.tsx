@@ -48,6 +48,7 @@ import {
 } from "react"
 import { toast } from "sonner"
 import { ChevronUp, ChevronDown, Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface RecordRow {
   id: number
@@ -134,11 +135,16 @@ interface DataTableRowProps {
   visibleColumns: VisibleColumn[]
   isEditMode: boolean
   isMutating: boolean
+  isSelectionMode: boolean
+  isSelected: boolean
+  onToggleSelection: (rowId: number) => void
   rowDraft: Record<string, string> | undefined
   toEditableCellValue: (value: unknown) => string
   onUpdateDraftCell: (rowId: number, columnKey: string, value: string) => void
   onContextEditRow: (row: RecordRow) => void
   onOpenDeleteDialog: (row: RecordRow) => void
+  onOpenBulkDeleteDialog: () => void
+  onOpenExportDialog: (scope: "all" | "selected") => void
   isHighlighted?: boolean
 }
 
@@ -147,11 +153,16 @@ const DataTableRow = memo(function DataTableRow({
   visibleColumns,
   isEditMode,
   isMutating,
+  isSelectionMode,
+  isSelected,
+  onToggleSelection,
   rowDraft,
   toEditableCellValue,
   onUpdateDraftCell,
   onContextEditRow,
   onOpenDeleteDialog,
+  onOpenBulkDeleteDialog,
+  onOpenExportDialog,
   isHighlighted,
 }: DataTableRowProps) {
   const rowRef = useRef<HTMLTableRowElement>(null)
@@ -162,15 +173,32 @@ const DataTableRow = memo(function DataTableRow({
     }
   }, [isHighlighted])
 
+  const showBulkMenu = isSelectionMode && isSelected
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <TableRow
           ref={rowRef}
-          className={
-            isHighlighted ? "bg-primary/10 transition-colors duration-1000" : ""
-          }
+          className={cn(
+            isHighlighted
+              ? "bg-primary/10 transition-colors duration-1000"
+              : "",
+            isSelected ? "bg-muted" : ""
+          )}
+          data-state={isSelected ? "selected" : undefined}
         >
+          {isSelectionMode && (
+            <TableCell className="w-[40px]">
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggleSelection(row.id)}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                disabled={isMutating}
+              />
+            </TableCell>
+          )}
           <TableCell className="font-medium">{row.id}</TableCell>
           {visibleColumns.map((column) => {
             const originalValue = toEditableCellValue(row.data?.[column.key])
@@ -203,21 +231,43 @@ const DataTableRow = memo(function DataTableRow({
         </TableRow>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuLabel>Row {row.id}</ContextMenuLabel>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={() => onContextEditRow(row)}
-          disabled={isMutating}
-        >
-          Edit
-        </ContextMenuItem>
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() => onOpenDeleteDialog(row)}
-          disabled={isMutating}
-        >
-          Delete
-        </ContextMenuItem>
+        {showBulkMenu ? (
+          <>
+            <ContextMenuLabel>Bulk Actions</ContextMenuLabel>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onSelect={() => onOpenExportDialog("selected")}
+              disabled={isMutating}
+            >
+              Export Selected
+            </ContextMenuItem>
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={onOpenBulkDeleteDialog}
+              disabled={isMutating}
+            >
+              Delete Selected
+            </ContextMenuItem>
+          </>
+        ) : (
+          <>
+            <ContextMenuLabel>Row {row.id}</ContextMenuLabel>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onSelect={() => onContextEditRow(row)}
+              disabled={isMutating}
+            >
+              Edit
+            </ContextMenuItem>
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={() => onOpenDeleteDialog(row)}
+              disabled={isMutating}
+            >
+              Delete
+            </ContextMenuItem>
+          </>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   )
@@ -261,6 +311,153 @@ function DataPageContent() {
   const hasLoadedInitiallyRef = useRef(false)
 
   const [pageSize, setPageSize] = useState(25)
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set())
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+  const [exportScope, setExportScope] = useState<"all" | "selected">("all")
+
+  const [filters, setFilters] = useState<FilterCondition[]>([])
+  const [filterColumnKey, setFilterColumnKey] = useState<string>("")
+  const [filterOperator, setFilterOperator] = useState<string>("contains")
+  const [filterValue, setFilterValue] = useState<string>("")
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
+
+  const applyRowFilters = useCallback(
+    (recordRows: RecordRow[]): RecordRow[] => {
+      if (filters.length === 0) {
+        return recordRows
+      }
+
+      return recordRows.filter((row) => {
+        // All filters must match (AND logic)
+        for (const filter of filters) {
+          const cellValue = row.data?.[filter.columnKey]
+          const operator = filter.operator
+          const filterValue = filter.value
+
+          if (!filterValue.trim()) continue
+
+          let matches = false
+
+          try {
+            if (operator === "contains") {
+              // Case-insensitive substring match
+              const cellStringValue = stringifyValue(cellValue).toLowerCase()
+              const filterLower = filterValue.toLowerCase()
+              matches = cellStringValue.includes(filterLower)
+            } else if (operator === "=") {
+              // Exact match
+              const cellString = stringifyValue(cellValue).toLowerCase()
+              const filterLower = filterValue.toLowerCase()
+              matches = cellString === filterLower
+            } else if (
+              operator === ">" ||
+              operator === "<" ||
+              operator === ">=" ||
+              operator === "<="
+            ) {
+              // Numeric comparisons
+              const numericValue =
+                cellValue !== null && cellValue !== undefined
+                  ? Number(cellValue)
+                  : NaN
+              const filterNumber = Number(filterValue)
+
+              if (!isNaN(numericValue) && !isNaN(filterNumber)) {
+                if (operator === ">") {
+                  matches = numericValue > filterNumber
+                } else if (operator === "<") {
+                  matches = numericValue < filterNumber
+                } else if (operator === ">=") {
+                  matches = numericValue >= filterNumber
+                } else if (operator === "<=") {
+                  matches = numericValue <= filterNumber
+                }
+              }
+            }
+          } catch {
+            matches = false
+          }
+
+          if (!matches) {
+            return false
+          }
+        }
+
+        return true
+      })
+    },
+    [filters]
+  )
+
+  const filteredRows = useMemo(
+    () => applyRowFilters(rows),
+    [rows, applyRowFilters]
+  )
+
+  const toggleRowSelection = useCallback((rowId: number) => {
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(rowId)) {
+        next.delete(rowId)
+      } else {
+        next.add(rowId)
+      }
+      return next
+    })
+  }, [])
+
+  const isAllFilteredSelected = useMemo(() => {
+    return (
+      filteredRows.length > 0 &&
+      filteredRows.every((row) => selectedRowIds.has(row.id))
+    )
+  }, [filteredRows, selectedRowIds])
+
+  const toggleSelectAll = useCallback(() => {
+    if (isAllFilteredSelected) {
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev)
+        filteredRows.forEach((row) => next.delete(row.id))
+        return next
+      })
+    } else {
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev)
+        filteredRows.forEach((row) => next.add(row.id))
+        return next
+      })
+    }
+  }, [filteredRows, isAllFilteredSelected])
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedRowIds.size === 0) return
+
+    setIsMutating(true)
+    try {
+      const response = await fetch(`${BACKEND_URL}/records/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ids: Array.from(selectedRowIds) }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Bulk delete failed")
+      }
+
+      const result = await response.json()
+      toast.success(`Deleted ${result.deleted_count} records`)
+      setSelectedRowIds(new Set())
+      setIsBulkDeleteDialogOpen(false)
+      await refreshAfterMutation(true)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete records")
+    } finally {
+      setIsMutating(false)
+    }
+  }
 
   useEffect(() => {
     if (!initialType) {
@@ -287,12 +484,6 @@ function DataPageContent() {
   const [isColumnRenameDialogOpen, setIsColumnRenameDialogOpen] =
     useState(false)
   const [newName, setNewName] = useState("")
-
-  const [filters, setFilters] = useState<FilterCondition[]>([])
-  const [filterColumnKey, setFilterColumnKey] = useState<string>("")
-  const [filterOperator, setFilterOperator] = useState<string>("contains")
-  const [filterValue, setFilterValue] = useState<string>("")
-  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
@@ -618,79 +809,6 @@ function DataPageContent() {
 
     return byRow
   }, [rows, visibleColumns, toEditableCellValue])
-
-  const applyRowFilters = useCallback(
-    (recordRows: RecordRow[]): RecordRow[] => {
-      if (filters.length === 0) {
-        return recordRows
-      }
-
-      return recordRows.filter((row) => {
-        // All filters must match (AND logic)
-        for (const filter of filters) {
-          const cellValue = row.data?.[filter.columnKey]
-          const operator = filter.operator
-          const filterValue = filter.value
-
-          if (!filterValue.trim()) continue
-
-          let matches = false
-
-          try {
-            if (operator === "contains") {
-              // Case-insensitive substring match
-              const cellStringValue = stringifyValue(cellValue).toLowerCase()
-              const filterLower = filterValue.toLowerCase()
-              matches = cellStringValue.includes(filterLower)
-            } else if (operator === "=") {
-              // Exact match
-              const cellString = stringifyValue(cellValue).toLowerCase()
-              const filterLower = filterValue.toLowerCase()
-              matches = cellString === filterLower
-            } else if (
-              operator === ">" ||
-              operator === "<" ||
-              operator === ">=" ||
-              operator === "<="
-            ) {
-              // Numeric comparisons
-              const numericValue =
-                cellValue !== null && cellValue !== undefined
-                  ? Number(cellValue)
-                  : NaN
-              const filterNumber = Number(filterValue)
-
-              if (!isNaN(numericValue) && !isNaN(filterNumber)) {
-                if (operator === ">") {
-                  matches = numericValue > filterNumber
-                } else if (operator === "<") {
-                  matches = numericValue < filterNumber
-                } else if (operator === ">=") {
-                  matches = numericValue >= filterNumber
-                } else if (operator === "<=") {
-                  matches = numericValue <= filterNumber
-                }
-              }
-            }
-          } catch {
-            matches = false
-          }
-
-          if (!matches) {
-            return false
-          }
-        }
-
-        return true
-      })
-    },
-    [filters]
-  )
-
-  const filteredRows = useMemo(
-    () => applyRowFilters(rows),
-    [rows, applyRowFilters]
-  )
 
   const applySearch = () => {
     const nextQuery = searchInput.trim()
@@ -1045,24 +1163,30 @@ function DataPageContent() {
   const handleExportData = async () => {
     setIsExporting(true)
     try {
-      const response = await fetch(
-        `${BACKEND_URL}/export-data?format=${exportFormat}`
-      )
+      let url = `${BACKEND_URL}/export-data?format=${exportFormat}`
+      if (exportScope === "selected" && selectedRowIds.size > 0) {
+        const ids = Array.from(selectedRowIds).join(",")
+        url += `&ids=${ids}`
+      }
+
+      const response = await fetch(url)
       if (!response.ok) {
         throw new Error("Export failed")
       }
 
       const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
+      const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement("a")
-      link.href = url
-      link.download = `export_data.${exportFormat}`
+      link.href = downloadUrl
+      link.download = `export_data_${exportScope}.${exportFormat}`
       document.body.appendChild(link)
       link.click()
       link.remove()
-      window.URL.revokeObjectURL(url)
+      window.URL.revokeObjectURL(downloadUrl)
 
-      toast.success(`Exported data as ${exportFormat.toUpperCase()}`)
+      toast.success(
+        `Exported ${exportScope === "selected" ? selectedRowIds.size : "all"} records as ${exportFormat.toUpperCase()}`
+      )
       setIsExportDialogOpen(false)
     } catch {
       toast.error("Failed to export data")
@@ -1109,6 +1233,11 @@ function DataPageContent() {
     setFilters([])
     toast.success("All filters cleared")
   }
+
+  const openExportDialog = useCallback((scope: "all" | "selected") => {
+    setExportScope(scope)
+    setIsExportDialogOpen(true)
+  }, [])
 
   return (
     <>
@@ -1267,10 +1396,16 @@ function DataPageContent() {
                       Edit
                     </Button>
                     <Button
-                      onClick={() => setIsExportDialogOpen(true)}
+                      variant={isSelectionMode ? "secondary" : "outline"}
+                      onClick={() => {
+                        setIsSelectionMode(!isSelectionMode)
+                        if (isSelectionMode) {
+                          setSelectedRowIds(new Set())
+                        }
+                      }}
                       disabled={isMutating}
                     >
-                      Export
+                      {isSelectionMode ? "Cancel Selection" : "Select"}
                     </Button>
                   </>
                 )}
@@ -1373,6 +1508,19 @@ function DataPageContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {isSelectionMode && (
+                        <TableHead className="w-[40px]">
+                          <input
+                            type="checkbox"
+                            checked={
+                              filteredRows.length > 0 &&
+                              selectedRowIds.size === filteredRows.length
+                            }
+                            onChange={toggleSelectAll}
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                        </TableHead>
+                      )}
                       {allColumns.map((column) => (
                         <ContextMenu key={column.key}>
                           <ContextMenuTrigger asChild>
@@ -1425,18 +1573,27 @@ function DataPageContent() {
                         visibleColumns={visibleColumns}
                         isEditMode={isEditMode}
                         isMutating={isMutating}
+                        isSelectionMode={isSelectionMode}
+                        isSelected={selectedRowIds.has(row.id)}
+                        onToggleSelection={toggleRowSelection}
                         rowDraft={draftCells[row.id]}
                         toEditableCellValue={toEditableCellValue}
                         onUpdateDraftCell={updateDraftCell}
                         onContextEditRow={handleContextEditRow}
                         onOpenDeleteDialog={openDeleteDialog}
+                        onOpenBulkDeleteDialog={() =>
+                          setIsBulkDeleteDialogOpen(true)
+                        }
+                        onOpenExportDialog={openExportDialog}
                         isHighlighted={row.id === highlightId}
                       />
                     ))}
                     {filteredRows.length === 0 && (
                       <TableRow>
                         <TableCell
-                          colSpan={allColumns.length}
+                          colSpan={
+                            allColumns.length + (isSelectionMode ? 1 : 0)
+                          }
                           className="h-24 text-center text-muted-foreground"
                         >
                           {isSearchMode && rows.length === 0
@@ -1628,6 +1785,40 @@ function DataPageContent() {
                   {isExporting ? "Exporting..." : "Export"}
                 </Button>
               </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={isBulkDeleteDialogOpen}
+            onOpenChange={setIsBulkDeleteDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Bulk Delete Records</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete {selectedRowIds.size} selected
+                  records? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsBulkDeleteDialogOpen(false)}
+                  disabled={isMutating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleConfirmBulkDelete}
+                  disabled={isMutating}
+                >
+                  {isMutating && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {isMutating ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 

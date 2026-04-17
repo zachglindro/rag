@@ -1682,8 +1682,52 @@ async def get_model_settings():
     )
 
 
+class BulkDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@app.post("/records/bulk-delete")
+async def bulk_delete_records(request: BulkDeleteRequest):
+    if not request.ids:
+        raise HTTPException(status_code=400, detail="No IDs provided")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    vector_db = get_vectordb()
+
+    try:
+        # Check which IDs actually exist
+        placeholders = ",".join("?" for _ in request.ids)
+        cursor.execute(
+            f"SELECT id FROM records WHERE id IN ({placeholders})", request.ids
+        )
+        existing_ids = [row[0] for row in cursor.fetchall()]
+
+        if not existing_ids:
+            return {"status": "success", "deleted_count": 0}
+
+        conn.execute("BEGIN")
+        placeholders_existing = ",".join("?" for _ in existing_ids)
+        cursor.execute(
+            f"DELETE FROM records WHERE id IN ({placeholders_existing})", existing_ids
+        )
+
+        vector_db.delete_by_ids([str(rid) for rid in existing_ids])
+
+        conn.commit()
+        return {"status": "success", "deleted_count": len(existing_ids)}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Bulk delete failed: {str(e)}")
+    finally:
+        conn.close()
+
+
 @app.get("/export-data")
-async def export_data(format: str = Query(..., pattern="^(csv|xlsx)$")):
+async def export_data(
+    format: str = Query(..., pattern="^(csv|xlsx)$"),
+    ids: str = Query(None),  # Comma-separated list of IDs
+):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -1697,13 +1741,28 @@ async def export_data(format: str = Query(..., pattern="^(csv|xlsx)$")):
         )
         metadata_rows = cursor.fetchall()
 
-        cursor.execute(
-            """
-            SELECT id, data, natural_language_description, created_at, updated_at
-            FROM records
-            ORDER BY id ASC
-            """
-        )
+        if ids:
+            id_list = [
+                int(id_str.strip()) for id_str in ids.split(",") if id_str.strip()
+            ]
+            placeholders = ",".join("?" for _ in id_list)
+            cursor.execute(
+                f"""
+                SELECT id, data, natural_language_description, created_at, updated_at
+                FROM records
+                WHERE id IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                id_list,
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT id, data, natural_language_description, created_at, updated_at
+                FROM records
+                ORDER BY id ASC
+                """
+            )
         records = cursor.fetchall()
 
         export_rows, ordered_export_columns = build_export_rows(records, metadata_rows)
