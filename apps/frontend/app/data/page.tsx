@@ -273,6 +273,71 @@ const DataTableRow = memo(function DataTableRow({
   )
 })
 
+interface SearchSectionProps {
+  initialValue: string
+  onSearch: (value: string) => void
+  onClear: () => void
+  isEditMode: boolean
+  isMutating: boolean
+  isSearchMode: boolean
+}
+
+const SearchSection = memo(function SearchSection({
+  initialValue,
+  onSearch,
+  onClear,
+  isEditMode,
+  isMutating,
+  isSearchMode,
+}: SearchSectionProps) {
+  const [inputValue, setInputValue] = useState(initialValue)
+
+  useEffect(() => {
+    setInputValue(initialValue)
+  }, [initialValue])
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      onSearch(inputValue)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Input
+          value={inputValue}
+          onChange={(event) => setInputValue(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Search"
+          aria-label="Semantic search query"
+          disabled={isEditMode || isMutating}
+        />
+        <div className="flex gap-2">
+          <Button
+            onClick={() => onSearch(inputValue)}
+            disabled={
+              inputValue.trim().length === 0 || isEditMode || isMutating
+            }
+          >
+            Search
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onClear}
+            disabled={
+              (!isSearchMode && inputValue.trim().length === 0) || isMutating
+            }
+          >
+            Clear
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+})
+
 function DataPageContent() {
   const searchParams = useSearchParams()
   const highlightIdString = searchParams.get("highlight")
@@ -286,7 +351,6 @@ function DataPageContent() {
   const [metadata, setMetadata] = useState<ColumnMetadataRow[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [skip, setSkip] = useState(0)
-  const [searchInput, setSearchInput] = useState(initialQuery)
   const [appliedSearchQuery, setAppliedSearchQuery] = useState(initialQuery)
   const [searchType, setSearchType] = useState<"semantic" | "keyword">(
     initialType || "semantic"
@@ -517,7 +581,6 @@ function DataPageContent() {
         setTotalCount(1)
         // We set search query to empty but show only this record to simulate a search-like focus
         setAppliedSearchQuery(`id:${highlightId}`)
-        setSearchInput(`id:${highlightId}`)
       } else if (isSearchMode) {
         const endpoint =
           searchType === "keyword"
@@ -810,24 +873,27 @@ function DataPageContent() {
     return byRow
   }, [rows, visibleColumns, toEditableCellValue])
 
-  const applySearch = () => {
-    const nextQuery = searchInput.trim()
+  const openBulkDeleteDialog = useCallback(() => {
+    setIsBulkDeleteDialogOpen(true)
+  }, [])
+
+  const handleApplySearch = useCallback((value: string) => {
+    const nextQuery = value.trim()
     setSkip(0)
     setAppliedSearchQuery(nextQuery)
-  }
+  }, [])
 
-  const clearSearch = () => {
+  const handleClearSearch = useCallback(() => {
     if (isEditMode) {
       toast.error("Exit edit mode before changing the search query")
       return
     }
 
-    setSearchInput("")
     setAppliedSearchQuery("")
     setSkip(0)
     setSortColumn("id")
     setSortDirection("asc")
-  }
+  }, [isEditMode])
 
   const refreshAfterMutation = async (isDeleteAction: boolean) => {
     if (isDeleteAction && !isSearchMode && rows.length === 1 && skip > 0) {
@@ -1251,43 +1317,14 @@ function DataPageContent() {
             </p>
           </div>
 
-          <div className="rounded-lg border p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault()
-                    applySearch()
-                  }
-                }}
-                placeholder="Search"
-                aria-label="Semantic search query"
-                disabled={isEditMode || isMutating}
-              />
-              <div className="flex gap-2">
-                <Button
-                  onClick={applySearch}
-                  disabled={
-                    searchInput.trim().length === 0 || isEditMode || isMutating
-                  }
-                >
-                  Search
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={clearSearch}
-                  disabled={
-                    (!isSearchMode && searchInput.trim().length === 0) ||
-                    isMutating
-                  }
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-          </div>
+          <SearchSection
+            initialValue={appliedSearchQuery}
+            onSearch={handleApplySearch}
+            onClear={handleClearSearch}
+            isEditMode={isEditMode}
+            isMutating={isMutating}
+            isSearchMode={isSearchMode}
+          />
 
           {filters.length > 0 && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950">
@@ -1581,9 +1618,7 @@ function DataPageContent() {
                         onUpdateDraftCell={updateDraftCell}
                         onContextEditRow={handleContextEditRow}
                         onOpenDeleteDialog={openDeleteDialog}
-                        onOpenBulkDeleteDialog={() =>
-                          setIsBulkDeleteDialogOpen(true)
-                        }
+                        onOpenBulkDeleteDialog={openBulkDeleteDialog}
                         onOpenExportDialog={openExportDialog}
                         isHighlighted={row.id === highlightId}
                       />
