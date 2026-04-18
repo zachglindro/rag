@@ -155,6 +155,51 @@ interface DataTableRowProps {
   isHighlighted?: boolean
 }
 
+const EditableCell = memo(function EditableCell({
+  rowId,
+  columnKey,
+  initialValue,
+  onUpdateDraftCell,
+  isMutating,
+  changed,
+}: {
+  rowId: number
+  columnKey: string
+  initialValue: string
+  onUpdateDraftCell: (rowId: number, columnKey: string, value: string) => void
+  isMutating: boolean
+  changed: boolean
+}) {
+  const [value, setValue] = useState(initialValue)
+
+  const handleCommit = useCallback(() => {
+    onUpdateDraftCell(rowId, columnKey, value)
+  }, [rowId, columnKey, value, onUpdateDraftCell])
+
+  return (
+    <TableCell>
+      <div className="w-[300px]">
+        <Textarea
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onBlur={handleCommit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              handleCommit()
+            }
+          }}
+          className={cn(
+            "min-h-[40px] resize-none",
+            changed ? "border-amber-500" : ""
+          )}
+          disabled={isMutating}
+        />
+      </div>
+    </TableCell>
+  )
+})
+
 const DataTableRow = memo(function DataTableRow({
   row,
   visibleColumns,
@@ -231,25 +276,15 @@ const DataTableRow = memo(function DataTableRow({
 
             if (isEditMode) {
               return (
-                <TableCell key={`${row.id}-${column.key}`}>
-                  <div className="w-[300px]">
-                    <Textarea
-                      value={cellValue}
-                      onChange={(event) =>
-                        onUpdateDraftCell(
-                          row.id,
-                          column.key,
-                          event.target.value
-                        )
-                      }
-                      className={cn(
-                        "min-h-[40px] resize-none",
-                        changed ? "border-amber-500" : ""
-                      )}
-                      disabled={isMutating}
-                    />
-                  </div>
-                </TableCell>
+                <EditableCell
+                  key={`${row.id}-${column.key}`}
+                  rowId={row.id}
+                  columnKey={column.key}
+                  initialValue={cellValue}
+                  onUpdateDraftCell={onUpdateDraftCell}
+                  isMutating={isMutating}
+                  changed={changed}
+                />
               )
             }
 
