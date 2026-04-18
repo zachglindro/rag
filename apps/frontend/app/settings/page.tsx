@@ -1,5 +1,6 @@
 "use client"
 
+import { useTheme } from "next-themes"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
@@ -47,6 +48,7 @@ interface ModelSettingsResponse {
 }
 
 export default function Settings() {
+  const { theme, setTheme } = useTheme()
   const { sidebarOrder: sidebarItems, setSidebarOrder: setSidebarItems } =
     useSidebarSettings()
   const [mounted, setMounted] = useState(false)
@@ -339,6 +341,28 @@ export default function Settings() {
                 ) : (
                   <div className="h-20 animate-pulse rounded bg-muted"></div>
                 )}
+              </div>
+            </div>
+
+            <div>
+              <h2>Theme</h2>
+              <p className="text-sm text-muted-foreground">
+                Choose the appearance of the application.
+              </p>
+              <div className="mt-4">
+                <Select
+                  value={theme}
+                  onValueChange={(value) => setTheme(value)}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select theme" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="system">System</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
