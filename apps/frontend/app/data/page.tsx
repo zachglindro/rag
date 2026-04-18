@@ -1664,9 +1664,7 @@ function DataPageContent() {
                             </TableHead>
                           </ContextMenuTrigger>
                           <ContextMenuContent>
-                            <ContextMenuLabel>
-                              Column {column.label}
-                            </ContextMenuLabel>
+                            <ContextMenuLabel>{column.label}</ContextMenuLabel>
                             <ContextMenuSeparator />
                             <ContextMenuItem>Add</ContextMenuItem>
                             <ContextMenuItem
