@@ -120,13 +120,18 @@ export function AppSidebar() {
   const [sidebarItems, setSidebarItems] = React.useState(navItems)
 
   React.useEffect(() => {
-    const enabledTitles = sidebarOrder.filter(s => s.enabled).map(s => s.title)
-    
+    const enabledTitles = sidebarOrder
+      .filter((s) => s.enabled)
+      .map((s) => s.title)
+
     const newOrder = [
       ...sidebarOrder
-        .map(s => navItems.find(n => n.title === s.title))
-        .filter((n): n is typeof navItems[0] => !!n && enabledTitles.includes(n.title)),
-      navItems.find(n => n.title === "Settings")!
+        .map((s) => navItems.find((n) => n.title === s.title))
+        .filter(
+          (n): n is (typeof navItems)[0] =>
+            !!n && enabledTitles.includes(n.title)
+        ),
+      navItems.find((n) => n.title === "Settings")!,
     ]
     setSidebarItems(newOrder)
   }, [sidebarOrder])

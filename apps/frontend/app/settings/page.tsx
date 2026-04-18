@@ -47,7 +47,8 @@ interface ModelSettingsResponse {
 }
 
 export default function Settings() {
-  const { sidebarOrder: sidebarItems, setSidebarOrder: setSidebarItems } = useSidebarSettings()
+  const { sidebarOrder: sidebarItems, setSidebarOrder: setSidebarItems } =
+    useSidebarSettings()
   const [mounted, setMounted] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
@@ -77,9 +78,11 @@ export default function Settings() {
   }, [])
 
   const toggleSidebarItem = (title: string) => {
-    setSidebarItems(sidebarItems.map((item) =>
-      item.title === title ? { ...item, enabled: !item.enabled } : item
-    ))
+    setSidebarItems(
+      sidebarItems.map((item) =>
+        item.title === title ? { ...item, enabled: !item.enabled } : item
+      )
+    )
   }
 
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
@@ -308,20 +311,33 @@ export default function Settings() {
               </p>
               <div className="mt-4 space-y-2">
                 {mounted ? (
-                  <Reorder.Group axis="y" values={sidebarItems} onReorder={setSidebarItems} className="w-full max-w-sm space-y-2">
+                  <Reorder.Group
+                    axis="y"
+                    values={sidebarItems}
+                    onReorder={setSidebarItems}
+                    className="w-full max-w-sm space-y-2"
+                  >
                     {sidebarItems.map((item) => (
-                      <Reorder.Item key={item.title} value={item} className="flex items-center gap-2 bg-background p-2 border rounded-md cursor-grab active:cursor-grabbing">
+                      <Reorder.Item
+                        key={item.title}
+                        value={item}
+                        className="flex cursor-grab items-center gap-2 rounded-md border bg-background p-2 active:cursor-grabbing"
+                      >
                         <Switch
                           checked={item.enabled}
                           onCheckedChange={() => toggleSidebarItem(item.title)}
                         />
-                        <span className={`text-sm ${!item.enabled ? 'text-muted-foreground' : ''}`}>{item.title}</span>
+                        <span
+                          className={`text-sm ${!item.enabled ? "text-muted-foreground" : ""}`}
+                        >
+                          {item.title}
+                        </span>
                         <Grip className="ml-auto h-4 w-4 text-muted-foreground" />
                       </Reorder.Item>
                     ))}
                   </Reorder.Group>
                 ) : (
-                  <div className="h-20 animate-pulse bg-muted rounded"></div>
+                  <div className="h-20 animate-pulse rounded bg-muted"></div>
                 )}
               </div>
             </div>
