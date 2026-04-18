@@ -138,6 +138,7 @@ class ColumnMapping(BaseModel):
 class IngestRequest(BaseModel):
     rows: list[dict[str, Any]]
     mappings: list[ColumnMapping]
+    user_name: str | None = None
 
 
 class IngestResponse(BaseModel):
@@ -171,6 +172,8 @@ class RecordRow(BaseModel):
     natural_language_description: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+    created_by: str | None = None
+    updated_by: str | None = None
 
 
 class RecordListResponse(BaseModel):
@@ -195,6 +198,7 @@ class RecordCountResponse(BaseModel):
 
 class UpdateRecordRequest(BaseModel):
     data: dict[str, Any]
+    user_name: str | None = None
 
 
 class RetrievedRecordRow(RecordRow):
@@ -297,13 +301,21 @@ def build_export_rows(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     ordered_column_names = [str(row[0]) for row in metadata_rows if row and row[0]]
     discovered_columns: set[str] = set(ordered_column_names)
-    normalized_records: list[tuple[int, dict[str, Any], Any, Any, Any]] = []
+    normalized_records: list[tuple[int, dict[str, Any], Any, Any, Any, Any, Any]] = []
 
     for record in records:
         record_id = int(record[0])
         record_data = parse_record_data(record[1])
         normalized_records.append(
-            (record_id, record_data, record[2], record[3], record[4])
+            (
+                record_id,
+                record_data,
+                record[2],
+                record[3],
+                record[4],
+                record[5],
+                record[6],
+            )
         )
 
         for key in record_data.keys():
@@ -318,12 +330,16 @@ def build_export_rows(
         natural_description,
         created_at,
         updated_at,
+        created_by,
+        updated_by,
     ) in normalized_records:
         row: dict[str, Any] = {
             "id": record_id,
             "natural_language_description": natural_description,
             "created_at": created_at,
             "updated_at": updated_at,
+            "created_by": created_by,
+            "updated_by": updated_by,
         }
 
         for column_name in ordered_column_names:
@@ -341,6 +357,8 @@ def build_export_rows(
         "natural_language_description",
         "created_at",
         "updated_at",
+        "created_by",
+        "updated_by",
     ]
     return export_rows, ordered_export_columns
 
@@ -856,8 +874,13 @@ async def ingest_records(request: IngestRequest):
         inserted_count = 0
         for row_data, description in zip(transformed_rows, descriptions, strict=True):
             cursor.execute(
-                "INSERT INTO records (data, natural_language_description) VALUES (?, ?)",
-                (json.dumps(row_data), description),
+                "INSERT INTO records (data, natural_language_description, created_by, updated_by) VALUES (?, ?, ?, ?)",
+                (
+                    json.dumps(row_data),
+                    description,
+                    request.user_name,
+                    request.user_name,
+                ),
             )
             record_id = cursor.lastrowid
             if record_id is None:
@@ -915,7 +938,7 @@ async def get_records(
 
         cursor.execute(
             f"""
-            SELECT id, data, natural_language_description, created_at, updated_at
+            SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
             FROM records
             {order_clause}
             LIMIT ? OFFSET ?
@@ -992,7 +1015,7 @@ async def get_record(record_id: int):
     try:
         cursor.execute(
             """
-            SELECT id, data, natural_language_description, created_at, updated_at
+            SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
             FROM records
             WHERE id = ?
             """,
@@ -1052,10 +1075,10 @@ async def update_record(record_id: int, request: UpdateRecordRequest):
         cursor.execute(
             """
             UPDATE records
-            SET data = ?, natural_language_description = ?, updated_at = CURRENT_TIMESTAMP
+            SET data = ?, natural_language_description = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?
             WHERE id = ?
             """,
-            (json.dumps(request.data), new_description, record_id),
+            (json.dumps(request.data), new_description, request.user_name, record_id),
         )
 
         vector_db.upsert_documents(
@@ -1070,7 +1093,7 @@ async def update_record(record_id: int, request: UpdateRecordRequest):
 
         cursor.execute(
             """
-            SELECT id, data, natural_language_description, created_at, updated_at
+            SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
             FROM records
             WHERE id = ?
             """,
@@ -1270,7 +1293,7 @@ async def search_records(
         placeholders = ",".join("?" for _ in ordered_record_ids)
         cursor.execute(
             f"""
-            SELECT id, data, natural_language_description, created_at, updated_at
+            SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
             FROM records
             WHERE id IN ({placeholders})
             """,
@@ -1599,7 +1622,7 @@ async def search_records_keyword(
         placeholders = ",".join("?" for _ in record_ids)
         cursor.execute(
             f"""
-            SELECT id, data, natural_language_description, created_at, updated_at
+            SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
             FROM records
             WHERE id IN ({placeholders})
         """,
@@ -1753,7 +1776,7 @@ async def export_data(
             placeholders = ",".join("?" for _ in id_list)
             cursor.execute(
                 f"""
-                SELECT id, data, natural_language_description, created_at, updated_at
+                SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
                 FROM records
                 WHERE id IN ({placeholders})
                 ORDER BY id ASC
@@ -1763,7 +1786,7 @@ async def export_data(
         else:
             cursor.execute(
                 """
-                SELECT id, data, natural_language_description, created_at, updated_at
+                SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
                 FROM records
                 ORDER BY id ASC
                 """

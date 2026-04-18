@@ -44,7 +44,11 @@ export function IngestStep({ onComplete, rows, mappings }: IngestStepProps) {
         const response = await fetch("http://localhost:8000/ingest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows, mappings }),
+          body: JSON.stringify({
+            rows,
+            mappings,
+            user_name: localStorage.getItem("userName") || "Unknown",
+          }),
         })
 
         setProgress(50)

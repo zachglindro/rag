@@ -63,6 +63,8 @@ interface RecordRow {
   natural_language_description: string | null
   created_at: string | null
   updated_at: string | null
+  created_by: string | null
+  updated_by: string | null
   distance?: number | null
 }
 
@@ -235,12 +237,13 @@ const DataTableRow = memo(function DataTableRow({
     const isUpdated = updatedDate.getTime() > createdDate.getTime()
     const targetDate = isUpdated ? updatedDate : createdDate
     const prefix = isUpdated ? "Updated" : "Created"
+    const user = isUpdated ? row.updated_by : row.created_by
 
     return {
-      label: `${prefix}: ${targetDate.toLocaleDateString()}`,
-      full: `${prefix}: ${targetDate.toLocaleString()}`,
+      label: `${prefix}: ${targetDate.toLocaleDateString()}${user ? ` by ${user}` : ""}`,
+      full: `${prefix}: ${targetDate.toLocaleString()}${user ? ` by ${user}` : ""}`,
     }
-  }, [row.created_at, row.updated_at])
+  }, [row.created_at, row.updated_at, row.created_by, row.updated_by])
 
   return (
     <ContextMenu>
@@ -1110,7 +1113,10 @@ function DataPageContent() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ data: update.data }),
+          body: JSON.stringify({
+            data: update.data,
+            user_name: localStorage.getItem("userName") || "Unknown",
+          }),
         })
 
         if (!response.ok) {

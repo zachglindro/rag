@@ -10,7 +10,9 @@ def create_tables(cursor: sqlite3.Cursor) -> None:
             data TEXT NOT NULL,  -- JSON object
             natural_language_description TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            updated_by TEXT
         )
     """)
 

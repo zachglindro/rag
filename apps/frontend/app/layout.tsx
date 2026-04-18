@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { SidebarProvider as CustomSidebarProvider } from "@/contexts/sidebar-context"
 import { Toaster } from "@/components/ui/sonner"
+import { UserNamePrompt } from "@/components/user-name-prompt"
 import { cn } from "@/lib/utils"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
@@ -40,6 +41,7 @@ export default function RootLayout({
           </TooltipProvider>
         </ThemeProvider>
         <Toaster />
+        <UserNamePrompt />
       </body>
     </html>
   )
