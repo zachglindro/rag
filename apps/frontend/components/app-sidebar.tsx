@@ -115,6 +115,24 @@ function ThemeToggle() {
 }
 
 export function AppSidebar() {
+  const [sidebarItems, setSidebarItems] = React.useState(navItems)
+
+  React.useEffect(() => {
+    const saved = localStorage.getItem("sidebarOrder")
+    if (saved) {
+      const settings = JSON.parse(saved) as { title: string; enabled: boolean }[]
+      const enabledTitles = settings.filter(s => s.enabled).map(s => s.title)
+      
+      const newOrder = [
+        ...settings
+          .map(s => navItems.find(n => n.title === s.title))
+          .filter((n): n is typeof navItems[0] => !!n && enabledTitles.includes(n.title)),
+        navItems.find(n => n.title === "Settings")!
+      ]
+      setSidebarItems(newOrder)
+    }
+  }, [])
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -123,7 +141,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {navItems.map((item) => (
+            {sidebarItems.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild tooltip={item.title}>
                   <Link href={item.href} className="flex items-center gap-2">

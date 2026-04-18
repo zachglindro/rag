@@ -67,6 +67,46 @@ export default function Settings() {
     }
     return "semantic"
   })
+  const [mounted, setMounted] = useState(false)
+  const [sidebarItems, setSidebarItems] = useState<{ title: string; enabled: boolean }[]>([
+    { title: "Home", enabled: true },
+    { title: "Add", enabled: true },
+    { title: "Data", enabled: true },
+    { title: "Compare", enabled: true },
+  ])
+
+  useEffect(() => {
+    setMounted(true)
+    const saved = localStorage.getItem("sidebarOrder")
+    if (saved) {
+      setSidebarItems(JSON.parse(saved))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem("sidebarOrder", JSON.stringify(sidebarItems))
+    }
+  }, [sidebarItems, mounted])
+
+  const toggleSidebarItem = (title: string) => {
+    setSidebarItems((items) =>
+      items.map((item) =>
+        item.title === title ? { ...item, enabled: !item.enabled } : item
+      )
+    )
+  }
+
+  const moveSidebarItem = (index: number, direction: "up" | "down") => {
+    const newItems = [...sidebarItems]
+    if (direction === "up" && index > 0) {
+      ;[newItems[index], newItems[index - 1]] = [newItems[index - 1], newItems[index]]
+    } else if (direction === "down" && index < newItems.length - 1) {
+      ;[newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]]
+    }
+    setSidebarItems(newItems)
+  }
+
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [exportFormat, setExportFormat] = useState<"csv" | "xlsx">("csv")
   const [isExporting, setIsExporting] = useState(false)
@@ -283,6 +323,36 @@ export default function Settings() {
                     </Label>
                   </div>
                 </RadioGroup>
+              </div>
+            </div>
+
+            <div>
+              <h2>Sidebar Navigation</h2>
+              <p className="text-sm text-muted-foreground">
+                Reorder or hide items in the sidebar.
+              </p>
+              <div className="mt-4 space-y-2">
+                {sidebarItems.map((item, index) => (
+                  <div key={item.title} className="flex items-center gap-2">
+                    <Switch
+                      checked={item.enabled}
+                      onCheckedChange={() => toggleSidebarItem(item.title)}
+                    />
+                    <span className={`text-sm ${!item.enabled ? 'text-muted-foreground' : ''}`}>{item.title}</span>
+                    <div className="ml-auto flex gap-1">
+                      {mounted && (
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => moveSidebarItem(index, 'up')} disabled={index === 0}>
+                            ↑
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => moveSidebarItem(index, 'down')} disabled={index === sidebarItems.length - 1}>
+                            ↓
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
