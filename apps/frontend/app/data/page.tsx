@@ -49,6 +49,12 @@ import {
 import { toast } from "sonner"
 import { ChevronUp, ChevronDown, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface RecordRow {
   id: number
@@ -175,6 +181,21 @@ const DataTableRow = memo(function DataTableRow({
 
   const showBulkMenu = isSelectionMode && isSelected
 
+  const timestampInfo = useMemo(() => {
+    if (!row.created_at) return null
+    const createdDate = new Date(row.created_at)
+    const updatedDate = row.updated_at ? new Date(row.updated_at) : createdDate
+
+    const isUpdated = updatedDate.getTime() > createdDate.getTime()
+    const targetDate = isUpdated ? updatedDate : createdDate
+    const prefix = isUpdated ? "Updated" : "Created"
+
+    return {
+      label: `${prefix}: ${targetDate.toLocaleDateString()}`,
+      full: `${prefix}: ${targetDate.toLocaleString()}`,
+    }
+  }, [row.created_at, row.updated_at])
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -266,6 +287,23 @@ const DataTableRow = memo(function DataTableRow({
             >
               Delete
             </ContextMenuItem>
+            {timestampInfo && (
+              <>
+                <ContextMenuSeparator />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <ContextMenuLabel className="cursor-default text-xs font-normal text-muted-foreground">
+                        {timestampInfo.label}
+                      </ContextMenuLabel>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>{timestampInfo.full}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </>
+            )}
           </>
         )}
       </ContextMenuContent>
