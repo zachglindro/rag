@@ -814,7 +814,7 @@ function DataPageContent() {
   }, [metadata, rows])
 
   const allColumns = useMemo(() => {
-    return [{ key: "id", label: "ID" }, ...visibleColumns]
+    return visibleColumns
   }, [visibleColumns])
 
   const handleSort = useCallback(
