@@ -4,6 +4,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidebarProvider } from "@/components/ui/sidebar"
+import { SidebarProvider as CustomSidebarProvider } from "@/contexts/sidebar-context"
 import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils"
 
@@ -33,7 +34,9 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <TooltipProvider>
-            <SidebarProvider>{children}</SidebarProvider>
+            <CustomSidebarProvider>
+              <SidebarProvider>{children}</SidebarProvider>
+            </CustomSidebarProvider>
           </TooltipProvider>
         </ThemeProvider>
         <Toaster />

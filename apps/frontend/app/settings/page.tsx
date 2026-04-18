@@ -23,13 +23,15 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { useState, useEffect } from "react"
-import { Loader2, Check } from "lucide-react"
+import { Loader2, Check, Grip } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { useSidebarSettings } from "@/contexts/sidebar-context"
+import { Reorder } from "framer-motion"
 
 interface ModelInfo {
   id: string
@@ -45,6 +47,8 @@ interface ModelSettingsResponse {
 }
 
 export default function Settings() {
+  const { sidebarOrder: sidebarItems, setSidebarOrder: setSidebarItems } = useSidebarSettings()
+  const [mounted, setMounted] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
   const [selectedModelToSwitch, setSelectedModelToSwitch] = useState<string>("")
@@ -67,44 +71,15 @@ export default function Settings() {
     }
     return "semantic"
   })
-  const [mounted, setMounted] = useState(false)
-  const [sidebarItems, setSidebarItems] = useState<{ title: string; enabled: boolean }[]>([
-    { title: "Home", enabled: true },
-    { title: "Add", enabled: true },
-    { title: "Data", enabled: true },
-    { title: "Compare", enabled: true },
-  ])
 
   useEffect(() => {
     setMounted(true)
-    const saved = localStorage.getItem("sidebarOrder")
-    if (saved) {
-      setSidebarItems(JSON.parse(saved))
-    }
   }, [])
 
-  useEffect(() => {
-    if (mounted) {
-      localStorage.setItem("sidebarOrder", JSON.stringify(sidebarItems))
-    }
-  }, [sidebarItems, mounted])
-
   const toggleSidebarItem = (title: string) => {
-    setSidebarItems((items) =>
-      items.map((item) =>
-        item.title === title ? { ...item, enabled: !item.enabled } : item
-      )
-    )
-  }
-
-  const moveSidebarItem = (index: number, direction: "up" | "down") => {
-    const newItems = [...sidebarItems]
-    if (direction === "up" && index > 0) {
-      ;[newItems[index], newItems[index - 1]] = [newItems[index - 1], newItems[index]]
-    } else if (direction === "down" && index < newItems.length - 1) {
-      ;[newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]]
-    }
-    setSidebarItems(newItems)
+    setSidebarItems(sidebarItems.map((item) =>
+      item.title === title ? { ...item, enabled: !item.enabled } : item
+    ))
   }
 
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
@@ -332,27 +307,22 @@ export default function Settings() {
                 Reorder or hide items in the sidebar.
               </p>
               <div className="mt-4 space-y-2">
-                {sidebarItems.map((item, index) => (
-                  <div key={item.title} className="flex items-center gap-2">
-                    <Switch
-                      checked={item.enabled}
-                      onCheckedChange={() => toggleSidebarItem(item.title)}
-                    />
-                    <span className={`text-sm ${!item.enabled ? 'text-muted-foreground' : ''}`}>{item.title}</span>
-                    <div className="ml-auto flex gap-1">
-                      {mounted && (
-                        <>
-                          <Button variant="ghost" size="sm" onClick={() => moveSidebarItem(index, 'up')} disabled={index === 0}>
-                            ↑
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => moveSidebarItem(index, 'down')} disabled={index === sidebarItems.length - 1}>
-                            ↓
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                {mounted ? (
+                  <Reorder.Group axis="y" values={sidebarItems} onReorder={setSidebarItems} className="w-full max-w-sm space-y-2">
+                    {sidebarItems.map((item) => (
+                      <Reorder.Item key={item.title} value={item} className="flex items-center gap-2 bg-background p-2 border rounded-md cursor-grab active:cursor-grabbing">
+                        <Switch
+                          checked={item.enabled}
+                          onCheckedChange={() => toggleSidebarItem(item.title)}
+                        />
+                        <span className={`text-sm ${!item.enabled ? 'text-muted-foreground' : ''}`}>{item.title}</span>
+                        <Grip className="ml-auto h-4 w-4 text-muted-foreground" />
+                      </Reorder.Item>
+                    ))}
+                  </Reorder.Group>
+                ) : (
+                  <div className="h-20 animate-pulse bg-muted rounded"></div>
+                )}
               </div>
             </div>
 
