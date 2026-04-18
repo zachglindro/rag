@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { SidebarInset } from "@/components/ui/sidebar"
 import {
@@ -231,21 +232,32 @@ const DataTableRow = memo(function DataTableRow({
             if (isEditMode) {
               return (
                 <TableCell key={`${row.id}-${column.key}`}>
-                  <Input
-                    value={cellValue}
-                    onChange={(event) =>
-                      onUpdateDraftCell(row.id, column.key, event.target.value)
-                    }
-                    className={changed ? "border-amber-500" : ""}
-                    disabled={isMutating}
-                  />
+                  <div className="w-[300px]">
+                    <Textarea
+                      value={cellValue}
+                      onChange={(event) =>
+                        onUpdateDraftCell(
+                          row.id,
+                          column.key,
+                          event.target.value
+                        )
+                      }
+                      className={cn(
+                        "min-h-[40px] resize-none",
+                        changed ? "border-amber-500" : ""
+                      )}
+                      disabled={isMutating}
+                    />
+                  </div>
                 </TableCell>
               )
             }
 
             return (
               <TableCell key={`${row.id}-${column.key}`}>
-                {stringifyValue(row.data?.[column.key])}
+                <div className="max-w-[400px] break-words whitespace-normal">
+                  {stringifyValue(row.data?.[column.key])}
+                </div>
               </TableCell>
             )
           })}
