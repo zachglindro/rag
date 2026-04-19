@@ -954,6 +954,8 @@ async def get_records(
                 natural_language_description=row[2],
                 created_at=row[3],
                 updated_at=row[4],
+                created_by=row[5],
+                updated_by=row[6],
             )
             for row in rows
         ]
@@ -1031,6 +1033,8 @@ async def get_record(record_id: int):
             natural_language_description=row[2],
             created_at=row[3],
             updated_at=row[4],
+            created_by=row[5],
+            updated_by=row[6],
         )
     finally:
         conn.close()
@@ -1109,6 +1113,8 @@ async def update_record(record_id: int, request: UpdateRecordRequest):
             natural_language_description=updated_row[2],
             created_at=updated_row[3],
             updated_at=updated_row[4],
+            created_by=updated_row[5],
+            updated_by=updated_row[6],
         )
     except HTTPException:
         conn.rollback()
@@ -1310,6 +1316,8 @@ async def search_records(
             natural_language_description=row[2],
             created_at=row[3],
             updated_at=row[4],
+            created_by=row[5],
+            updated_by=row[6],
             distance=distance_by_record_id.get(row[0]),
         )
         for row in rows
@@ -1638,6 +1646,8 @@ async def search_records_keyword(
                 natural_language_description=row[2],
                 created_at=row[3],
                 updated_at=row[4],
+                created_by=row[5],
+                updated_by=row[6],
                 rerank_score=bm25_scores.get(row[0]),  # Using rerank_score for BM25
             )
             for row in rows
