@@ -367,7 +367,28 @@ def build_export_rows(
 async def add_column(request: ColumnRequest):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    embedder_instance = get_embedder()
+    vector_db = get_vectordb()
+
+    # Store original records for rollback if needed
+    cursor.execute("SELECT id, data FROM records")
+    original_records = cursor.fetchall()
+
+    vector_updated = False
+
     try:
+        conn.execute("BEGIN")
+
+        # Shift existing column orders to make room for the new one
+        cursor.execute(
+            """
+            UPDATE column_metadata 
+            SET "order" = "order" + 1 
+            WHERE "order" >= ?
+        """,
+            (request.order,),
+        )
+
         # Insert into column_metadata
         cursor.execute(
             """
@@ -392,14 +413,71 @@ async def add_column(request: ColumnRequest):
             SET data = json_set(data, '$."{request.column_name}"', {request.default_value})
         """)
 
+        # Regenerate descriptions and embeddings for all records
+        cursor.execute("SELECT id, data FROM records")
+        updated_records = cursor.fetchall()
+
+        new_descriptions = []
+        new_embeddings = []
+        ids_to_update = []
+
+        for record_id, data_json in updated_records:
+            data = parse_record_data(data_json)
+            new_description = build_natural_language_description(data)
+            new_embedding = embedder_instance.embed(new_description)
+            if not new_embedding:
+                raise RuntimeError(f"Failed to embed record {record_id}")
+            new_descriptions.append(new_description)
+            new_embeddings.append(new_embedding)
+            ids_to_update.append(str(record_id))
+
+        # Update vector DB
+        vector_db.upsert_documents(
+            ids=ids_to_update,
+            documents=new_descriptions,
+            embeddings=new_embeddings,
+            metadatas=[{"record_id": int(id)} for id in ids_to_update],
+        )
+        vector_updated = True
+
+        # Update records with new descriptions in SQLite
+        for i, (record_id, _) in enumerate(updated_records):
+            cursor.execute(
+                "UPDATE records SET natural_language_description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (new_descriptions[i], record_id),
+            )
+
         conn.commit()
         return {"message": f"Column '{request.column_name}' added successfully"}
     except sqlite3.IntegrityError:
+        conn.rollback()
         raise HTTPException(
             status_code=400, detail=f"Column '{request.column_name}' already exists"
         )
     except Exception as e:
         conn.rollback()
+        # Rollback vector DB if updated
+        if vector_updated:
+            try:
+                rollback_descriptions = []
+                rollback_embeddings = []
+                rollback_ids = []
+                for record_id, data_json in original_records:
+                    data = parse_record_data(data_json)
+                    desc = build_natural_language_description(data)
+                    emb = embedder_instance.embed(desc)
+                    if emb:
+                        rollback_descriptions.append(desc)
+                        rollback_embeddings.append(emb)
+                        rollback_ids.append(str(record_id))
+                vector_db.upsert_documents(
+                    ids=rollback_ids,
+                    documents=rollback_descriptions,
+                    embeddings=rollback_embeddings,
+                    metadatas=[{"record_id": int(id)} for id in rollback_ids],
+                )
+            except Exception:
+                pass
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()

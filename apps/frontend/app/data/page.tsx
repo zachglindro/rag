@@ -269,7 +269,7 @@ const DataTableRow = memo(function DataTableRow({
               />
             </TableCell>
           )}
-          <TableCell className="font-medium">{row.id}</TableCell>
+
           {visibleColumns.map((column) => {
             const originalValue = toEditableCellValue(row.data?.[column.key])
             const draftValue = rowDraft?.[column.key]
@@ -636,6 +636,15 @@ function DataPageContent() {
   const [isColumnRenameDialogOpen, setIsColumnRenameDialogOpen] =
     useState(false)
   const [newName, setNewName] = useState("")
+
+  const [columnPendingAdd, setColumnPendingAdd] = useState<{
+    key: string
+    label: string
+  } | null>(null)
+  const [isColumnAddDialogOpen, setIsColumnAddDialogOpen] = useState(false)
+  const [newColumnName, setNewColumnName] = useState("")
+  const [newColumnType, setNewColumnType] = useState("string")
+  const [newColumnDefaultValue, setNewColumnDefaultValue] = useState("null")
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
@@ -1186,6 +1195,17 @@ function DataPageContent() {
     []
   )
 
+  const openColumnAddDialog = useCallback(
+    (column: { key: string; label: string }) => {
+      setColumnPendingAdd(column)
+      setNewColumnName("")
+      setNewColumnType("string")
+      setNewColumnDefaultValue("")
+      setIsColumnAddDialogOpen(true)
+    },
+    []
+  )
+
   const handleConfirmDelete = async () => {
     if (!recordPendingDelete) {
       return
@@ -1311,6 +1331,74 @@ function DataPageContent() {
     } catch (error) {
       toast.error(
         `Failed to rename column: ${error instanceof Error ? error.message : "Unknown error"}`
+      )
+    } finally {
+      setIsMutating(false)
+    }
+  }
+
+  const handleConfirmColumnAdd = async () => {
+    if (!columnPendingAdd) return
+    const trimmedName = newColumnName.trim()
+    if (!trimmedName) {
+      toast.error("Column name cannot be empty")
+      return
+    }
+
+    setIsMutating(true)
+    try {
+      // Determine the order for the new column (to the right of the current one)
+      const targetIndex = metadata.findIndex(
+        (m) => m.column_name === columnPendingAdd.key
+      )
+      const targetMeta = metadata[targetIndex]
+      const newOrder = targetMeta
+        ? (targetMeta.order ?? 0) + 1
+        : metadata.length
+
+      // Format default value for backend (must be valid JSON)
+      let formattedDefault = newColumnDefaultValue.trim()
+      if (!formattedDefault || formattedDefault.toLowerCase() === "null") {
+        formattedDefault = "null"
+      } else if (newColumnType === "string" || newColumnType === "text") {
+        formattedDefault = JSON.stringify(formattedDefault)
+      } else if (newColumnType === "number") {
+        if (isNaN(Number(formattedDefault))) {
+          formattedDefault = "0"
+        }
+      }
+
+      const response = await fetch(`${BACKEND_URL}/columns`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          column_name: trimmedName,
+          display_name: trimmedName,
+          data_type: newColumnType,
+          is_required: false,
+          default_value: formattedDefault,
+          order: newOrder,
+          description: "",
+        }),
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || "Failed to add column")
+      }
+
+      toast.success(`Column '${trimmedName}' added successfully`)
+      setIsColumnAddDialogOpen(false)
+      setColumnPendingAdd(null)
+      setNewColumnName("")
+      setNewColumnType("string")
+      setNewColumnDefaultValue("null")
+      await fetchData()
+    } catch (error) {
+      toast.error(
+        `Failed to add column: ${error instanceof Error ? error.message : "Unknown error"}`
       )
     } finally {
       setIsMutating(false)
@@ -1672,7 +1760,12 @@ function DataPageContent() {
                           <ContextMenuContent>
                             <ContextMenuLabel>{column.label}</ContextMenuLabel>
                             <ContextMenuSeparator />
-                            <ContextMenuItem>Add</ContextMenuItem>
+                            <ContextMenuItem
+                              onSelect={() => openColumnAddDialog(column)}
+                              disabled={isEditMode || isMutating}
+                            >
+                              Add Column
+                            </ContextMenuItem>
                             <ContextMenuItem
                               onSelect={() => openColumnRenameDialog(column)}
                               disabled={isEditMode || isMutating}
@@ -1873,6 +1966,92 @@ function DataPageContent() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   {isMutating ? "Renaming..." : "Rename"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={isColumnAddDialogOpen}
+            onOpenChange={setIsColumnAddDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Column</DialogTitle>
+                <DialogDescription>
+                  Add a new column to the right of &quot;
+                  {columnPendingAdd?.label}&quot;.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="col-name" className="text-right text-sm">
+                    Name
+                  </label>
+                  <Input
+                    id="col-name"
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                    className="col-span-3"
+                    placeholder="Column name"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="col-type" className="text-right text-sm">
+                    Type
+                  </label>
+                  <Select
+                    value={newColumnType}
+                    onValueChange={setNewColumnType}
+                  >
+                    <SelectTrigger className="col-span-3" id="col-type">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="string">Text</SelectItem>
+                      <SelectItem value="number">Number</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <div className="text-right">
+                    <label
+                      htmlFor="col-default"
+                      className="text-sm font-medium"
+                    >
+                      Default
+                    </label>
+                    <p className="text-[10px] text-muted-foreground">
+                      For existing rows
+                    </p>
+                  </div>
+                  <Input
+                    id="col-default"
+                    value={newColumnDefaultValue}
+                    onChange={(e) => setNewColumnDefaultValue(e.target.value)}
+                    className="col-span-3"
+                    placeholder={
+                      newColumnType === "number" ? "123" : "Default value"
+                    }
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsColumnAddDialogOpen(false)}
+                  disabled={isMutating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmColumnAdd}
+                  disabled={isMutating || !newColumnName.trim()}
+                >
+                  {isMutating && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {isMutating ? "Adding..." : "Add Column"}
                 </Button>
               </DialogFooter>
             </DialogContent>
