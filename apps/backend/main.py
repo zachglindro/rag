@@ -269,7 +269,7 @@ def infer_column_data_type(values: list[Any]) -> str:
 
 
 def to_display_name(column_name: str) -> str:
-    return column_name.replace("_", " ").strip().title() or column_name
+    return column_name
 
 
 def parse_record_data(data_value: Any) -> dict[str, Any]:
@@ -389,7 +389,7 @@ async def add_column(request: ColumnRequest):
         # Update existing records to include the new field with default value
         cursor.execute(f"""
             UPDATE records 
-            SET data = json_set(data, '$.{request.column_name}', {request.default_value})
+            SET data = json_set(data, '$."{request.column_name}"', {request.default_value})
         """)
 
         conn.commit()
@@ -443,7 +443,7 @@ async def delete_column(request: DeleteColumnRequest):
         # Remove the column from all records' data JSON
         cursor.execute(f"""
             UPDATE records 
-            SET data = json_remove(data, '$.{column_name}')
+            SET data = json_remove(data, '$."{column_name}"')
         """)
 
         # Regenerate descriptions and embeddings for all records
@@ -607,7 +607,7 @@ async def rename_column(request: RenameColumnRequest):
         if request.new_column.column_name != old_column_name:
             cursor.execute(f"""
                 UPDATE records 
-                SET data = json_set(json_remove(data, '$.{old_column_name}'), '$.{request.new_column.column_name}', json_extract(data, '$.{old_column_name}'))
+                SET data = json_set(json_remove(data, '$."{old_column_name}"'), '$."{request.new_column.column_name}"', json_extract(data, '$."{old_column_name}"'))
             """)
 
         # Regenerate descriptions and embeddings for all records

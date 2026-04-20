@@ -800,7 +800,7 @@ function DataPageContent() {
     if (metadata.length > 0) {
       return metadata.map((column) => ({
         key: column.column_name,
-        label: column.display_name || column.column_name,
+        label: column.column_name,
       }))
     }
 
@@ -1260,7 +1260,7 @@ function DataPageContent() {
       return
     }
 
-    const newColumnName = trimmedName.replace(/\s+/g, "_").toLowerCase()
+    const newColumnName = trimmedName
 
     setIsMutating(true)
     try {
@@ -1281,7 +1281,7 @@ function DataPageContent() {
         old_column_name: columnPendingRename.key,
         new_column: {
           column_name: newColumnName,
-          display_name: trimmedName,
+          display_name: newColumnName,
           data_type: currentMeta.data_type,
           is_required: currentMeta.is_required,
           default_value: currentMeta.default_value || "null",

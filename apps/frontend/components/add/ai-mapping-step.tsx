@@ -106,7 +106,7 @@ export function AIMappingStep({
         const data = await response.json()
         const columns = data.map((col: ColumnMetadata) => ({
           value: col.column_name,
-          label: col.display_name,
+          label: col.column_name,
         }))
         setAvailableColumns(columns)
       } catch (error) {
