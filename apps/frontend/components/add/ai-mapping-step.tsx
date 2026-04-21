@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Check,
   ChevronsUpDown,
-  ChevronRight,
   ChevronDown,
+  ChevronRight,
   Loader2,
+  Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -69,6 +70,60 @@ export function AIMappingStep({
     { value: string; label: string }[]
   >([])
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false)
+  const [showMappedScrollHint, setShowMappedScrollHint] = useState(false)
+  const [showUnmappedScrollHint, setShowUnmappedScrollHint] = useState(false)
+
+  const mappedScrollRef = useRef<HTMLDivElement>(null)
+  const unmappedScrollRef = useRef<HTMLDivElement>(null)
+
+  const checkMappedScroll = useCallback(() => {
+    if (mappedScrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = mappedScrollRef.current
+      setShowMappedScrollHint(
+        scrollHeight > clientHeight &&
+          scrollTop + clientHeight < scrollHeight - 10
+      )
+    }
+  }, [])
+
+  const checkUnmappedScroll = useCallback(() => {
+    if (unmappedScrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } =
+        unmappedScrollRef.current
+      setShowUnmappedScrollHint(
+        scrollHeight > clientHeight &&
+          scrollTop + clientHeight < scrollHeight - 10
+      )
+    }
+  }, [])
+
+  const mappedMappings = mappings.filter(
+    (mapping) => mapping.mappedColumn !== ""
+  )
+  const unmappedMappings = mappings.filter(
+    (mapping) => mapping.mappedColumn === ""
+  )
+
+  const filteredMappedMappings = mappedMappings.filter((mapping) =>
+    toSearchableText(mapping.origColumn).includes(mappedSearch.toLowerCase())
+  )
+  const filteredUnmappedMappings = unmappedMappings.filter((mapping) =>
+    toSearchableText(mapping.origColumn).includes(unmappedSearch.toLowerCase())
+  )
+
+  useEffect(() => {
+    if (sectionStates.mapped) {
+      const handle = requestAnimationFrame(checkMappedScroll)
+      return () => cancelAnimationFrame(handle)
+    }
+  }, [sectionStates.mapped, filteredMappedMappings, checkMappedScroll])
+
+  useEffect(() => {
+    if (sectionStates.unmapped) {
+      const handle = requestAnimationFrame(checkUnmappedScroll)
+      return () => cancelAnimationFrame(handle)
+    }
+  }, [sectionStates.unmapped, filteredUnmappedMappings, checkUnmappedScroll])
 
   useEffect(() => {
     if (mappings.length > 0 && !suggestionsApplied) {
@@ -155,20 +210,6 @@ export function AIMappingStep({
       [origColumn]: !prev[origColumn],
     }))
   }
-
-  const mappedMappings = mappings.filter(
-    (mapping) => mapping.mappedColumn !== ""
-  )
-  const unmappedMappings = mappings.filter(
-    (mapping) => mapping.mappedColumn === ""
-  )
-
-  const filteredMappedMappings = mappedMappings.filter((mapping) =>
-    toSearchableText(mapping.origColumn).includes(mappedSearch.toLowerCase())
-  )
-  const filteredUnmappedMappings = unmappedMappings.filter((mapping) =>
-    toSearchableText(mapping.origColumn).includes(unmappedSearch.toLowerCase())
-  )
 
   const renderMappingRow = (mapping: ColumnMapping) => {
     const usedMappedColumns = mappings
@@ -292,13 +333,32 @@ export function AIMappingStep({
               </Button>
               {sectionStates.mapped && (
                 <div className="ml-6 flex flex-col gap-4">
-                  <Input
-                    placeholder="Search mapped columns..."
-                    value={mappedSearch}
-                    onChange={(e) => setMappedSearch(e.target.value)}
-                    className="mb-2"
-                  />
-                  {filteredMappedMappings.map(renderMappingRow)}
+                  <div className="relative">
+                    <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search mapped columns..."
+                      value={mappedSearch}
+                      onChange={(e) => setMappedSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <div className="group/scroll relative">
+                    <div
+                      ref={mappedScrollRef}
+                      onScroll={checkMappedScroll}
+                      className="flex max-h-[400px] flex-col gap-4 overflow-y-auto rounded-lg border bg-muted/10 p-4 pr-2"
+                    >
+                      {filteredMappedMappings.map(renderMappingRow)}
+                    </div>
+                    {showMappedScrollHint && (
+                      <>
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 rounded-b-lg bg-gradient-to-t from-background/80 to-transparent" />
+                        <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 animate-bounce text-muted-foreground transition-all">
+                          <ChevronDown className="h-4 w-4" />
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -325,13 +385,32 @@ export function AIMappingStep({
               </Button>
               {sectionStates.unmapped && (
                 <div className="ml-6 flex flex-col gap-4">
-                  <Input
-                    placeholder="Search unmapped columns..."
-                    value={unmappedSearch}
-                    onChange={(e) => setUnmappedSearch(e.target.value)}
-                    className="mb-2"
-                  />
-                  {filteredUnmappedMappings.map(renderMappingRow)}
+                  <div className="relative">
+                    <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search unmapped columns..."
+                      value={unmappedSearch}
+                      onChange={(e) => setUnmappedSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <div className="group/scroll relative">
+                    <div
+                      ref={unmappedScrollRef}
+                      onScroll={checkUnmappedScroll}
+                      className="flex max-h-[400px] flex-col gap-4 overflow-y-auto rounded-lg border bg-muted/10 p-4 pr-2"
+                    >
+                      {filteredUnmappedMappings.map(renderMappingRow)}
+                    </div>
+                    {showUnmappedScrollHint && (
+                      <>
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 rounded-b-lg bg-gradient-to-t from-background/80 to-transparent" />
+                        <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 animate-bounce text-muted-foreground transition-all">
+                          <ChevronDown className="h-4 w-4" />
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
