@@ -232,7 +232,7 @@ export default function Settings() {
       if (!response.ok) {
         throw new Error("Reset failed")
       }
-      toast.success("Database and embeddings reset successfully")
+      toast.success("Database reset successfully")
       setIsDialogOpen(false)
     } catch {
       toast.error("Failed to reset database")
@@ -664,8 +664,7 @@ export default function Settings() {
                           <DialogTitle>Reset Database</DialogTitle>
                           <DialogDescription>
                             This will permanently delete all data in the
-                            database and associated vector embeddings. This
-                            action cannot be undone.
+                            database. This action cannot be undone.
                           </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
