@@ -16,6 +16,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useEffect, useState, useMemo } from "react"
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -46,6 +54,10 @@ export function TemplatePreviewStep({
     Record<string, Record<string, unknown>>
   >({})
   const [isCheckingIds, setIsCheckingIds] = useState(false)
+  const [showAllConfirm, setShowAllConfirm] = useState<{
+    type: "new" | "update" | null
+    count: number
+  }>({ type: null, count: 0 })
 
   // Transform data using mappings, filtering unmapped columns
   const fullTransformedData = useMemo(() => {
@@ -257,15 +269,30 @@ export function TemplatePreviewStep({
           </div>
           {renderTable(updatedRecords, visibleRowsUpdate, true)}
           {visibleRowsUpdate < updatedRecords.length && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="self-center text-muted-foreground"
-              onClick={() => setVisibleRowsUpdate((v) => v + 20)}
-            >
-              Show more updates ({updatedRecords.length - visibleRowsUpdate}{" "}
-              remaining)
-            </Button>
+            <div className="flex justify-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => setVisibleRowsUpdate((v) => v + 20)}
+              >
+                Show more updates ({updatedRecords.length - visibleRowsUpdate}{" "}
+                remaining)
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() =>
+                  setShowAllConfirm({
+                    type: "update",
+                    count: updatedRecords.length,
+                  })
+                }
+              >
+                Show all updates
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -280,15 +307,27 @@ export function TemplatePreviewStep({
         </div>
         {renderTable(newRecords, visibleRowsNew, false)}
         {visibleRowsNew < newRecords.length && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="self-center text-muted-foreground"
-            onClick={() => setVisibleRowsNew((v) => v + 20)}
-          >
-            Show more new records ({newRecords.length - visibleRowsNew}{" "}
-            remaining)
-          </Button>
+          <div className="flex justify-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setVisibleRowsNew((v) => v + 20)}
+            >
+              Show more new records ({newRecords.length - visibleRowsNew}{" "}
+              remaining)
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() =>
+                setShowAllConfirm({ type: "new", count: newRecords.length })
+              }
+            >
+              Show all new records
+            </Button>
+          </div>
         )}
       </div>
 
@@ -303,6 +342,45 @@ export function TemplatePreviewStep({
           </Button>
         </div>
       </div>
+
+      <Dialog
+        open={showAllConfirm.type !== null}
+        onOpenChange={(open) =>
+          !open && setShowAllConfirm({ type: null, count: 0 })
+        }
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Show all records?</DialogTitle>
+            <DialogDescription>
+              You are about to render {showAllConfirm.count} records. This might
+              cause the application to lag or become unresponsive for a few
+              seconds depending on your computer&apos;s performance.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowAllConfirm({ type: null, count: 0 })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (showAllConfirm.type === "new") {
+                  setVisibleRowsNew(showAllConfirm.count)
+                } else if (showAllConfirm.type === "update") {
+                  setVisibleRowsUpdate(showAllConfirm.count)
+                }
+                setShowAllConfirm({ type: null, count: 0 })
+              }}
+            >
+              Show All Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
