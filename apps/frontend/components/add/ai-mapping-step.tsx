@@ -152,72 +152,84 @@ export function AIMappingStep({
     toSearchableText(mapping.origColumn).includes(unmappedSearch.toLowerCase())
   )
 
-  const renderMappingRow = (mapping: ColumnMapping) => (
-    <div
-      key={mapping.origColumn}
-      className="flex items-center gap-4 rounded-lg border p-4"
-    >
-      {/* Original column name */}
-      <div className="w-40 shrink-0">
-        <span className="text-sm font-medium">{mapping.origColumn}</span>
-      </div>
+  const renderMappingRow = (mapping: ColumnMapping) => {
+    const usedMappedColumns = mappings
+      .filter((m) => m.origColumn !== mapping.origColumn)
+      .map((m) => m.mappedColumn)
+      .filter((c) => c !== "")
 
-      {/* Arrow */}
-      <div className="text-muted-foreground">
-        <ChevronsUpDown className="h-4 w-4 rotate-90" />
-      </div>
-
-      {/* Dropdown for mapped column */}
-      <Popover
-        open={openStates[mapping.origColumn]}
-        onOpenChange={() => toggleOpen(mapping.origColumn)}
+    return (
+      <div
+        key={mapping.origColumn}
+        className="flex items-center gap-4 rounded-lg border p-4"
       >
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={openStates[mapping.origColumn]}
-            className="flex-1 justify-between"
-          >
-            <span className="truncate">
-              {getSystemColumnLabel(mapping.mappedColumn)}
-            </span>
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[300px] p-0" align="start">
-          <Command>
-            <CommandInput placeholder="Search columns..." className="h-9" />
-            <CommandList>
-              <CommandEmpty>No column found.</CommandEmpty>
-              <CommandGroup>
-                {availableColumns.map((column) => (
-                  <CommandItem
-                    key={column.value}
-                    value={column.value}
-                    onSelect={() => {
-                      handleMappingChange(mapping.origColumn, column.value)
-                      toggleOpen(mapping.origColumn)
-                    }}
-                  >
-                    {column.label}
-                    <Check
-                      className={cn(
-                        "ml-auto h-4 w-4",
-                        mapping.mappedColumn === column.value
-                          ? "opacity-100"
-                          : "opacity-0"
-                      )}
-                    />
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    </div>
-  )
+        {/* Original column name */}
+        <div className="w-40 shrink-0">
+          <span className="text-sm font-medium">{mapping.origColumn}</span>
+        </div>
+
+        {/* Arrow */}
+        <div className="text-muted-foreground">
+          <ChevronsUpDown className="h-4 w-4 rotate-90" />
+        </div>
+
+        {/* Dropdown for mapped column */}
+        <Popover
+          open={openStates[mapping.origColumn]}
+          onOpenChange={() => toggleOpen(mapping.origColumn)}
+        >
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={openStates[mapping.origColumn]}
+              className="flex-1 justify-between"
+            >
+              <span className="truncate">
+                {getSystemColumnLabel(mapping.mappedColumn)}
+              </span>
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[300px] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search columns..." className="h-9" />
+              <CommandList>
+                <CommandEmpty>No column found.</CommandEmpty>
+                <CommandGroup>
+                  {availableColumns.map((column) => {
+                    const isUsed = usedMappedColumns.includes(column.value)
+                    if (isUsed) return null
+
+                    return (
+                      <CommandItem
+                        key={column.value}
+                        value={column.value}
+                        onSelect={() => {
+                          handleMappingChange(mapping.origColumn, column.value)
+                          toggleOpen(mapping.origColumn)
+                        }}
+                      >
+                        {column.label}
+                        <Check
+                          className={cn(
+                            "ml-auto h-4 w-4",
+                            mapping.mappedColumn === column.value
+                              ? "opacity-100"
+                              : "opacity-0"
+                          )}
+                        />
+                      </CommandItem>
+                    )
+                  })}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6 py-8">
