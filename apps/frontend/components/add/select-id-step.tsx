@@ -2,9 +2,9 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Check, Info, Search } from "lucide-react"
+import { Check, ChevronDown, Info, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 interface SelectIDStepProps {
   columns: string[]
@@ -22,10 +22,27 @@ export function SelectIDStep({
   onBack,
 }: SelectIDStepProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [showScrollHint, setShowScrollHint] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const filteredColumns = columns.filter((col) =>
     col.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  const checkScroll = useCallback(() => {
+    if (scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+      setShowScrollHint(
+        scrollHeight > clientHeight &&
+          scrollTop + clientHeight < scrollHeight - 10
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    const handle = requestAnimationFrame(checkScroll)
+    return () => cancelAnimationFrame(handle)
+  }, [filteredColumns, checkScroll])
 
   return (
     <div className="flex flex-col gap-6 py-8">
@@ -59,40 +76,56 @@ export function SelectIDStep({
       </div>
 
       {/* Columns list - Scrollable container */}
-      <div className="custom-scrollbar flex max-h-[400px] flex-col gap-2 overflow-y-auto pr-2">
-        <button
-          onClick={() => onSelect(null)}
-          className={cn(
-            "flex items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted",
-            selectedId === null
-              ? "border-primary bg-primary/5 ring-1 ring-primary"
-              : "border-border bg-card"
-          )}
+      <div className="group/scroll relative">
+        <div
+          ref={scrollRef}
+          onScroll={checkScroll}
+          className="custom-scrollbar flex max-h-[400px] flex-col gap-2 overflow-y-auto rounded-lg border bg-muted/10 p-2"
         >
-          <span className="font-medium">None / Skip</span>
-          {selectedId === null && <Check className="h-4 w-4 text-primary" />}
-        </button>
-
-        {filteredColumns.map((col) => (
           <button
-            key={col}
-            onClick={() => onSelect(col)}
+            onClick={() => onSelect(null)}
             className={cn(
               "flex items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted",
-              selectedId === col
+              selectedId === null
                 ? "border-primary bg-primary/5 ring-1 ring-primary"
                 : "border-border bg-card"
             )}
           >
-            <span className="truncate font-medium">{col}</span>
-            {selectedId === col && <Check className="h-4 w-4 text-primary" />}
+            <span className="font-medium">None / Skip</span>
+            {selectedId === null && <Check className="h-4 w-4 text-primary" />}
           </button>
-        ))}
 
-        {filteredColumns.length === 0 && (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            No columns match your search
-          </div>
+          {filteredColumns.map((col) => (
+            <button
+              key={col}
+              onClick={() => onSelect(col)}
+              className={cn(
+                "flex items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted",
+                selectedId === col
+                  ? "border-primary bg-primary/5 ring-1 ring-primary"
+                  : "border-border bg-card"
+              )}
+            >
+              <span className="truncate font-medium">{col}</span>
+              {selectedId === col && <Check className="h-4 w-4 text-primary" />}
+            </button>
+          ))}
+
+          {filteredColumns.length === 0 && (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No columns match your search
+            </div>
+          )}
+        </div>
+
+        {/* Scroll Indicators */}
+        {showScrollHint && (
+          <>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 rounded-b-lg bg-gradient-to-t from-background/80 to-transparent" />
+            <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 animate-bounce text-muted-foreground transition-all">
+              <ChevronDown className="h-4 w-4" />
+            </div>
+          </>
         )}
       </div>
 
