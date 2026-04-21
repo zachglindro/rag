@@ -925,7 +925,7 @@ async def check_existence(request: CheckExistenceRequest):
         conn.close()
 
 
-@app.post("/ingest", response_model=IngestResponse)
+@app.post("/ingest")
 async def ingest_records(request: IngestRequest):
     # Validate request
     if not request.rows:
@@ -934,153 +934,191 @@ async def ingest_records(request: IngestRequest):
     if not request.mappings:
         raise HTTPException(status_code=400, detail="No mappings provided")
 
-    # Build mapping dict for quick lookup
-    mapping_dict = {
-        m.origColumn: m.mappedColumn for m in request.mappings if m.mappedColumn
-    }
+    async def event_generator():
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        inserted_ids: list[int] = []
+        updated_ids: list[int] = []
+        vector_db = None
 
-    if not mapping_dict:
-        raise HTTPException(
-            status_code=400,
-            detail="No valid mappings provided (all mappedColumn are empty)",
-        )
+        try:
+            yield json.dumps({"type": "progress", "progress": 5}) + "\n"
 
-    # Transform rows: apply mappings and filter to only mapped columns
-    transformed_rows = []
-    for row in request.rows:
-        transformed = {}
-        for orig_col, mapped_col in mapping_dict.items():
-            if orig_col in row:
-                transformed[mapped_col] = row[orig_col]
-        if transformed:  # Only add if at least one field was mapped
-            transformed_rows.append(transformed)
+            # Build mapping dict for quick lookup
+            mapping_dict = {
+                m.origColumn: m.mappedColumn for m in request.mappings if m.mappedColumn
+            }
 
-    if not transformed_rows:
-        raise HTTPException(
-            status_code=400,
-            detail="No rows could be transformed with the provided mappings",
-        )
+            if not mapping_dict:
+                yield (
+                    json.dumps(
+                        {"type": "error", "detail": "No valid mappings provided"}
+                    )
+                    + "\n"
+                )
+                return
 
-    descriptions = [
-        build_natural_language_description(row_data) for row_data in transformed_rows
-    ]
+            # Transform rows: apply mappings and filter to only mapped columns
+            transformed_rows = []
+            for row in request.rows:
+                transformed = {}
+                for orig_col, mapped_col in mapping_dict.items():
+                    if orig_col in row:
+                        transformed[mapped_col] = row[orig_col]
+                if transformed:
+                    transformed_rows.append(transformed)
 
-    embedder_instance = get_embedder()
-    vector_db = get_vectordb()
+            if not transformed_rows:
+                yield (
+                    json.dumps(
+                        {"type": "error", "detail": "No rows could be transformed"}
+                    )
+                    + "\n"
+                )
+                return
 
-    # Insert into database with transaction
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    inserted_ids: list[int] = []
-    updated_ids: list[int] = []
-
-    # Pre-calculate embeddings to keep transaction short
-    embeddings = embedder_instance.embed_batch(descriptions)
-    if len(embeddings) != len(transformed_rows):
-        raise RuntimeError("Embedding count does not match record count")
-
-    try:
-        conn.execute("BEGIN")
-
-        # Ensure mapped columns are represented in metadata for first-time ingestion.
-        unique_mapped_columns = list(dict.fromkeys(mapping_dict.values()))
-        for order, mapped_column in enumerate(unique_mapped_columns):
-            values_for_column = [
-                row[mapped_column]
-                for row in transformed_rows
-                if mapped_column in row and row[mapped_column] != ""
+            descriptions = [
+                build_natural_language_description(row_data)
+                for row_data in transformed_rows
             ]
-            inferred_type = infer_column_data_type(values_for_column)
 
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO column_metadata
-                (column_name, display_name, data_type, is_required, default_value, "order", description)
-                VALUES (?, ?, ?, 0, NULL, ?, ?)
-                """,
-                (
-                    mapped_column,
-                    to_display_name(mapped_column),
-                    inferred_type,
-                    order,
-                    "",
-                ),
+            yield json.dumps({"type": "progress", "progress": 10}) + "\n"
+
+            embedder_instance = get_embedder()
+            vector_db = get_vectordb()
+
+            # Batch embeddings in chunks to show progress
+            batch_size = 32
+            embeddings = []
+            for i in range(0, len(descriptions), batch_size):
+                batch = descriptions[i : i + batch_size]
+                batch_embeddings = embedder_instance.embed_batch(batch)
+                embeddings.extend(batch_embeddings)
+
+                # Progress from 10 to 40
+                p = 10 + int(
+                    (min(i + batch_size, len(descriptions))) / len(descriptions) * 30
+                )
+                yield json.dumps({"type": "progress", "progress": p}) + "\n"
+
+            if len(embeddings) != len(transformed_rows):
+                yield (
+                    json.dumps({"type": "error", "detail": "Embedding count mismatch"})
+                    + "\n"
+                )
+                return
+
+            conn.execute("BEGIN")
+
+            # Ensure mapped columns are represented in metadata
+            unique_mapped_columns = list(dict.fromkeys(mapping_dict.values()))
+            for order, mapped_column in enumerate(unique_mapped_columns):
+                values_for_column = [
+                    row[mapped_column]
+                    for row in transformed_rows
+                    if mapped_column in row and row[mapped_column] != ""
+                ]
+                inferred_type = infer_column_data_type(values_for_column)
+
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO column_metadata
+                    (column_name, display_name, data_type, is_required, default_value, "order", description)
+                    VALUES (?, ?, ?, 0, NULL, ?, ?)
+                    """,
+                    (
+                        mapped_column,
+                        to_display_name(mapped_column),
+                        inferred_type,
+                        order,
+                        "",
+                    ),
+                )
+
+            inserted_count = 0
+            updated_count = 0
+            total_rows = len(transformed_rows)
+
+            for i, (row_data, description) in enumerate(
+                zip(transformed_rows, descriptions, strict=True)
+            ):
+                record_id = None
+
+                if request.id_column and request.id_column in row_data:
+                    id_val = row_data[request.id_column]
+                    cursor.execute(
+                        "SELECT id FROM records WHERE json_extract(data, '$.' || ?) = ?",
+                        (request.id_column, id_val),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        record_id = row[0]
+
+                if record_id:
+                    cursor.execute(
+                        "UPDATE records SET data = ?, natural_language_description = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (
+                            json.dumps(row_data),
+                            description,
+                            request.user_name,
+                            record_id,
+                        ),
+                    )
+                    updated_ids.append(record_id)
+                    updated_count += 1
+                else:
+                    cursor.execute(
+                        "INSERT INTO records (data, natural_language_description, created_by, updated_by) VALUES (?, ?, ?, ?)",
+                        (
+                            json.dumps(row_data),
+                            description,
+                            request.user_name,
+                            request.user_name,
+                        ),
+                    )
+                    record_id = cursor.lastrowid
+                    if record_id is None:
+                        raise RuntimeError("Failed to retrieve inserted record ID")
+                    inserted_ids.append(int(record_id))
+                    inserted_count += 1
+
+                # Progress from 40 to 90
+                if (i + 1) % 10 == 0 or (i + 1) == total_rows:
+                    p = 40 + int((i + 1) / total_rows * 50)
+                    yield json.dumps({"type": "progress", "progress": p}) + "\n"
+
+            # Update vector DB for all
+            yield json.dumps({"type": "progress", "progress": 92}) + "\n"
+            all_affected_ids = inserted_ids + updated_ids
+            vector_db.upsert_documents(
+                ids=[str(rid) for rid in all_affected_ids],
+                documents=descriptions,
+                embeddings=embeddings,
+                metadatas=[{"record_id": rid} for rid in all_affected_ids],
+            )
+            yield json.dumps({"type": "progress", "progress": 98}) + "\n"
+
+            conn.commit()
+            yield json.dumps({"type": "progress", "progress": 100}) + "\n"
+            yield (
+                json.dumps(
+                    {"type": "done", "inserted_count": inserted_count + updated_count}
+                )
+                + "\n"
             )
 
-        inserted_count = 0
-        updated_count = 0
+        except Exception as e:
+            conn.rollback()
+            if inserted_ids and vector_db:
+                try:
+                    vector_db.delete_by_ids([str(rid) for rid in inserted_ids])
+                except Exception:
+                    pass
+            yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
+        finally:
+            conn.close()
 
-        for i, (row_data, description) in enumerate(
-            zip(transformed_rows, descriptions, strict=True)
-        ):
-            record_id = None
-
-            # Check for existing record if id_column is provided
-            if request.id_column and request.id_column in row_data:
-                id_val = row_data[request.id_column]
-                cursor.execute(
-                    "SELECT id FROM records WHERE json_extract(data, '$.' || ?) = ?",
-                    (request.id_column, id_val),
-                )
-                row = cursor.fetchone()
-                if row:
-                    record_id = row[0]
-
-            if record_id:
-                # UPDATE
-                cursor.execute(
-                    "UPDATE records SET data = ?, natural_language_description = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (
-                        json.dumps(row_data),
-                        description,
-                        request.user_name,
-                        record_id,
-                    ),
-                )
-                updated_ids.append(record_id)
-                updated_count += 1
-            else:
-                # INSERT
-                cursor.execute(
-                    "INSERT INTO records (data, natural_language_description, created_by, updated_by) VALUES (?, ?, ?, ?)",
-                    (
-                        json.dumps(row_data),
-                        description,
-                        request.user_name,
-                        request.user_name,
-                    ),
-                )
-                record_id = cursor.lastrowid
-                if record_id is None:
-                    raise RuntimeError("Failed to retrieve inserted record ID")
-                inserted_ids.append(int(record_id))
-                inserted_count += 1
-
-        # Update vector DB for all (inserted and updated)
-        all_affected_ids = inserted_ids + updated_ids
-        vector_db.upsert_documents(
-            ids=[str(rid) for rid in all_affected_ids],
-            documents=descriptions,
-            embeddings=embeddings,
-            metadatas=[{"record_id": rid} for rid in all_affected_ids],
-        )
-
-        conn.commit()
-        return IngestResponse(
-            inserted_count=inserted_count + updated_count, status="success"
-        )
-    except Exception as e:
-        conn.rollback()
-
-        if inserted_ids:
-            try:
-                vector_db.delete_by_ids([str(rid) for rid in inserted_ids])
-            except Exception:
-                pass
-
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
-    finally:
-        conn.close()
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
 @app.get("/records", response_model=RecordListResponse)

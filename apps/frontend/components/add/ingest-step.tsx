@@ -60,19 +60,45 @@ export function IngestStep({
           }),
         })
 
-        setProgress(50)
-
         if (!response.ok) {
-          const errorData = await response.json()
+          const errorData = await response.json().catch(() => ({}))
           throw new Error(errorData.detail || `HTTP ${response.status}`)
         }
 
-        await response.json()
-        setProgress(100)
+        const reader = response.body?.getReader()
+        if (!reader) {
+          throw new Error("Failed to read response stream")
+        }
 
-        // Success
-        setIsLoading(false)
-        onComplete()
+        const decoder = new TextDecoder()
+        let buffer = ""
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() || ""
+
+          for (const line of lines) {
+            if (!line.trim()) continue
+            try {
+              const event = JSON.parse(line)
+              if (event.type === "progress") {
+                setProgress(event.progress)
+              } else if (event.type === "done") {
+                // Success
+                setIsLoading(false)
+                onComplete()
+              } else if (event.type === "error") {
+                throw new Error(event.detail)
+              }
+            } catch (e) {
+              console.error("Error parsing stream line:", e)
+            }
+          }
+        }
       } catch (err) {
         startedIngestionKeys.delete(ingestionKey)
         setIsLoading(false)
