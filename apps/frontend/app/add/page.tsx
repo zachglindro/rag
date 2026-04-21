@@ -78,9 +78,8 @@ export default function AddPage() {
     } else {
       return [
         ...baseSteps,
-        { id: 2, title: "Select ID" },
-        { id: 3, title: "Preview" },
-        { id: 4, title: "Ingest" },
+        { id: 2, title: "Preview" },
+        { id: 3, title: "Ingest" },
       ]
     }
   }, [hasData])
@@ -118,12 +117,12 @@ export default function AddPage() {
           )
         } else {
           return (
-            <SelectIDStep
-              columns={mappedColumnNames}
-              selectedId={idColumn}
-              onSelect={setIdColumn}
+            <TemplatePreviewStep
               onBack={() => goToStep(1)}
               onNext={() => goToStep(3)}
+              mappings={mappings}
+              rawData={parsedData}
+              idColumn={idColumn}
             />
           )
         }
@@ -140,11 +139,10 @@ export default function AddPage() {
           )
         } else {
           return (
-            <TemplatePreviewStep
-              onBack={() => goToStep(2)}
-              onNext={() => goToStep(4)}
+            <IngestStep
+              onComplete={handleIngestionComplete}
+              rows={parsedData}
               mappings={mappings}
-              rawData={parsedData}
               idColumn={idColumn}
             />
           )
@@ -160,16 +158,8 @@ export default function AddPage() {
               idColumn={idColumn}
             />
           )
-        } else {
-          return (
-            <IngestStep
-              onComplete={handleIngestionComplete}
-              rows={parsedData}
-              mappings={mappings}
-              idColumn={idColumn}
-            />
-          )
         }
+        return null
       case 5:
         if (hasData) {
           return (
