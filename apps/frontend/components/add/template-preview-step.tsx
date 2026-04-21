@@ -161,7 +161,13 @@ export function TemplatePreviewStep({
                       const hasChanged =
                         isUpdateSection &&
                         oldVal !== undefined &&
-                        String(newVal) !== String(oldVal)
+                        String(newVal ?? "") !== String(oldVal ?? "")
+
+                      const newValStr = newVal != null ? String(newVal) : ""
+                      const oldValStr =
+                        oldVal != null && String(oldVal).trim() !== ""
+                          ? String(oldVal)
+                          : "(blank)"
 
                       return (
                         <TableCell
@@ -174,21 +180,21 @@ export function TemplatePreviewStep({
                           {hasChanged ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="cursor-help border-b border-dotted border-amber-400">
-                                  {newVal != null ? String(newVal) : "—"}
+                                <span className="inline-block min-h-[1.2em] min-w-[20px] cursor-help border-b border-dotted border-amber-400">
+                                  {newValStr}
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p className="text-xs">
                                   Changed from:{" "}
-                                  <span className="font-mono text-muted-foreground line-through">
-                                    {oldVal != null ? String(oldVal) : "—"}
+                                  <span className="font-mono text-blue-600 dark:text-blue-400">
+                                    {oldValStr}
                                   </span>
                                 </p>
                               </TooltipContent>
                             </Tooltip>
                           ) : (
-                            <span>{newVal != null ? String(newVal) : "—"}</span>
+                            <span>{newValStr}</span>
                           )}
                         </TableCell>
                       )
