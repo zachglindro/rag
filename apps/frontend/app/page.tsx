@@ -396,6 +396,7 @@ async function retrieveRagContext(
     }
 
     const formattedRecords = data.records
+      .slice(0, 3)
       .map((record, index) => formatRagRecord(record, index))
       .join("\n\n")
 
