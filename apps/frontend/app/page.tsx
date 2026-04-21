@@ -18,6 +18,7 @@ import {
   Database,
   ExternalLink,
   Loader2,
+  Plus,
   Send,
   Square,
   User,
@@ -518,6 +519,14 @@ export default function Page() {
     setIsLoading(false)
   }, [])
 
+  const startNewChat = useCallback(() => {
+    stopGeneration()
+    setMessages([])
+    setInputValue("")
+    setError(null)
+    setDebugLogs([])
+  }, [stopGeneration])
+
   useEffect(() => {
     const fetchRecordCount = async () => {
       try {
@@ -841,7 +850,20 @@ export default function Page() {
     <>
       <AppSidebar />
       <SidebarInset>
-        <div className="flex min-h-svh flex-col bg-muted/30">
+        <div className="relative flex min-h-svh flex-col bg-muted/30">
+          {messages.length > 0 && (
+            <div className="absolute top-4 right-4 z-20">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={startNewChat}
+                className="h-9 gap-2 rounded-full bg-background px-4 shadow-sm hover:bg-muted"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="text-xs font-medium">New Chat</span>
+              </Button>
+            </div>
+          )}
           {hasRecords === null ? (
             <div className="flex flex-1 items-center justify-center px-4 sm:px-8">
               <div className="w-full max-w-3xl rounded-lg border bg-background p-6 text-center text-sm text-muted-foreground">
