@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/collapsible"
 import { useSidebarSettings } from "@/contexts/sidebar-context"
 import { Reorder } from "framer-motion"
+import { Input } from "@/components/ui/input"
 
 interface ModelInfo {
   id: string
@@ -47,6 +48,16 @@ interface ModelSettingsResponse {
   available_models: ModelInfo[]
 }
 
+interface BackupSettings {
+  enabled: boolean
+  subfolder: string
+  frequency: string
+  retention: number
+  format: string
+  base_path: string
+  last_backup_time: number | null
+}
+
 export default function Settings() {
   const { theme, setTheme } = useTheme()
   const { sidebarOrder: sidebarItems, setSidebarOrder: setSidebarItems } =
@@ -59,24 +70,20 @@ export default function Settings() {
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [isSwitching, setIsSwitching] = useState(false)
   const [switchSuccess, setSwitchSuccess] = useState(false)
-  const [enableDebugging, setEnableDebugging] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("enableDebugging") === "true"
-    }
-    return false
-  })
-  const [searchType, setSearchType] = useState<"semantic" | "keyword">(() => {
-    if (typeof window !== "undefined") {
-      return (
-        (localStorage.getItem("searchType") as "semantic" | "keyword") ||
-        "semantic"
-      )
-    }
-    return "semantic"
-  })
+  const [enableDebugging, setEnableDebugging] = useState(false)
+  const [searchType, setSearchType] = useState<"semantic" | "keyword">(
+    "semantic"
+  )
 
   useEffect(() => {
     setMounted(true)
+    const storedDebugging = localStorage.getItem("enableDebugging") === "true"
+    const storedSearchType = localStorage.getItem("searchType") as
+      | "semantic"
+      | "keyword"
+
+    if (storedDebugging) setEnableDebugging(true)
+    if (storedSearchType) setSearchType(storedSearchType)
   }, [])
 
   const toggleSidebarItem = (title: string) => {
@@ -106,6 +113,7 @@ export default function Settings() {
 
   useEffect(() => {
     fetchModelSettings()
+    fetchBackupSettings()
   }, [])
 
   const handleModelSelection = (modelId: string) => {
@@ -144,6 +152,69 @@ export default function Settings() {
       toast.error("Failed to switch model")
     } finally {
       setIsSwitching(false)
+    }
+  }
+
+  const [backupSettings, setBackupSettings] = useState<BackupSettings | null>(
+    null
+  )
+  const [originalBackupSettings, setOriginalBackupSettings] =
+    useState<BackupSettings | null>(null)
+  const [isSavingBackup, setIsSavingBackup] = useState(false)
+  const [isBackingUpNow, setIsBackingUpNow] = useState(false)
+
+  const fetchBackupSettings = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/settings/backup")
+      if (!response.ok) throw new Error("Failed to fetch backup settings")
+      const data: BackupSettings = await response.json()
+      setBackupSettings(data)
+      setOriginalBackupSettings(data)
+    } catch {
+      toast.error("Failed to load backup settings")
+    }
+  }
+
+  const handleSaveBackupSettings = async () => {
+    if (!backupSettings) return
+    setIsSavingBackup(true)
+    try {
+      const response = await fetch("http://localhost:8000/settings/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backupSettings),
+      })
+      if (!response.ok) throw new Error("Failed to save backup settings")
+      toast.success("Backup settings saved")
+      setOriginalBackupSettings(backupSettings)
+    } catch {
+      toast.error("Failed to save backup settings")
+    } finally {
+      setIsSavingBackup(false)
+    }
+  }
+
+  const hasBackupChanges =
+    backupSettings &&
+    originalBackupSettings &&
+    JSON.stringify(backupSettings) !== JSON.stringify(originalBackupSettings)
+
+  const handleManualBackup = async () => {
+    setIsBackingUpNow(true)
+    try {
+      const response = await fetch(
+        "http://localhost:8000/settings/backup/now",
+        {
+          method: "POST",
+        }
+      )
+      if (!response.ok) throw new Error("Backup failed")
+      toast.success("Backup created successfully")
+      fetchBackupSettings() // Refresh last backup time
+    } catch {
+      toast.error("Failed to create backup")
+    } finally {
+      setIsBackingUpNow(false)
     }
   }
 
@@ -350,20 +421,187 @@ export default function Settings() {
                 Choose the appearance of the application.
               </p>
               <div className="mt-4">
-                <Select
-                  value={theme}
-                  onValueChange={(value) => setTheme(value)}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select theme" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
-                  </SelectContent>
-                </Select>
+                {mounted ? (
+                  <Select
+                    value={theme}
+                    onValueChange={(value) => setTheme(value)}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Select theme" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="h-10 w-[180px] animate-pulse rounded bg-muted" />
+                )}
               </div>
+            </div>
+
+            <div>
+              <h2>Database Backups</h2>
+              <p className="text-sm text-muted-foreground">
+                Configure automatic database backups. Backups are stored in a
+                dedicated folder in your Documents.
+              </p>
+              {backupSettings ? (
+                <div className="mt-4 space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="backup-enabled"
+                      checked={backupSettings.enabled}
+                      onCheckedChange={(checked) =>
+                        setBackupSettings({
+                          ...backupSettings,
+                          enabled: checked,
+                        })
+                      }
+                    />
+                    <Label htmlFor="backup-enabled" className="cursor-pointer">
+                      Enable Database Backups
+                    </Label>
+                  </div>
+
+                  {backupSettings.enabled && (
+                    <div className="max-w-md animate-in space-y-4 duration-300 fade-in slide-in-from-top-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="base-path">
+                          Base Directory (Read-only)
+                        </Label>
+                        <Input
+                          id="base-path"
+                          value={backupSettings.base_path}
+                          readOnly
+                          className="bg-muted text-muted-foreground"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="subfolder">Backup Subfolder Name</Label>
+                        <Input
+                          id="subfolder"
+                          value={backupSettings.subfolder}
+                          onChange={(e) =>
+                            setBackupSettings({
+                              ...backupSettings,
+                              subfolder: e.target.value,
+                            })
+                          }
+                          placeholder="e.g. my_backups"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="frequency">Frequency</Label>
+                          <Select
+                            value={backupSettings.frequency}
+                            onValueChange={(value) =>
+                              setBackupSettings({
+                                ...backupSettings,
+                                frequency: value,
+                              })
+                            }
+                          >
+                            <SelectTrigger id="frequency">
+                              <SelectValue placeholder="Select frequency" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="format">Format</Label>
+                          <Select
+                            value={backupSettings.format}
+                            onValueChange={(value) =>
+                              setBackupSettings({
+                                ...backupSettings,
+                                format: value,
+                              })
+                            }
+                          >
+                            <SelectTrigger id="format">
+                              <SelectValue placeholder="Select format" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="csv">CSV</SelectItem>
+                              <SelectItem value="xlsx">XLSX</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="retention">Backups to Keep</Label>
+                          <Input
+                            id="retention"
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={backupSettings.retention}
+                            onChange={(e) =>
+                              setBackupSettings({
+                                ...backupSettings,
+                                retention: parseInt(e.target.value) || 1,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-md border p-3">
+                        <div className="space-y-0.5">
+                          <Label>Last Backup</Label>
+                          <p className="text-xs text-muted-foreground">
+                            {backupSettings.last_backup_time
+                              ? new Date(
+                                  backupSettings.last_backup_time * 1000
+                                ).toLocaleString()
+                              : "Never"}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleManualBackup}
+                          disabled={isBackingUpNow}
+                        >
+                          {isBackingUpNow ? (
+                            <>
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                              Backing up...
+                            </>
+                          ) : (
+                            "Backup Now"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {hasBackupChanges && (
+                    <Button
+                      onClick={handleSaveBackupSettings}
+                      disabled={isSavingBackup}
+                      className="w-full max-w-md animate-in duration-200 zoom-in-95 fade-in"
+                    >
+                      {isSavingBackup ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save Backup Settings"
+                      )}
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-4 h-40 animate-pulse rounded-md bg-muted" />
+              )}
             </div>
 
             <div>

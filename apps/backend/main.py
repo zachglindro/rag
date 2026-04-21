@@ -4,6 +4,7 @@ import importlib
 import json
 import sqlite3
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -110,6 +111,8 @@ async def lifespan(app: FastAPI):
     print("Embedding service initialized")
     print("FlashRank reranker initialized")
     print(f"Active model: {active_model_id}")
+    # Start backup scheduler
+    asyncio.create_task(backup_scheduler())
     yield
 
 
@@ -248,6 +251,16 @@ class CompareStatusResponse(BaseModel):
     ready: bool
     indexed_count: int | None = None
     last_updated: str | None = None
+
+
+class BackupSettings(BaseModel):
+    enabled: bool
+    subfolder: str
+    frequency: str  # daily, weekly, monthly
+    retention: int
+    format: str  # csv, xlsx
+    base_path: str | None = None
+    last_backup_time: float | None = None
 
 
 class CompareRebuildResponse(BaseModel):
@@ -2050,6 +2063,233 @@ async def switch_model(request: SwitchModelRequest):
 
     active_model_id = request.model_id
     return {"message": f"Switched to model {request.model_id}"}
+
+
+BACKUP_BASE_DIR = Path.home() / "Documents"
+
+
+def get_setting(key: str, default: Any = None) -> Any:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        if row:
+            return json.loads(row[0])
+        return default
+    finally:
+        conn.close()
+
+
+def set_setting(key: str, value: Any):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            (key, json.dumps(value)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@app.get("/settings/backup", response_model=BackupSettings)
+async def get_backup_settings_endpoint():
+    default_settings = {
+        "enabled": False,
+        "subfolder": "default_backup",
+        "frequency": "daily",
+        "retention": 5,
+        "format": "csv",
+    }
+    settings_dict = get_setting("backup_settings", default_settings)
+    last_backup = get_setting("last_backup_time")
+
+    # Ensure it's a dict and has expected keys
+    if not isinstance(settings_dict, dict):
+        settings_dict = default_settings
+
+    return BackupSettings(
+        enabled=settings_dict.get("enabled", default_settings["enabled"]),
+        subfolder=settings_dict.get("subfolder", default_settings["subfolder"]),
+        frequency=settings_dict.get("frequency", default_settings["frequency"]),
+        retention=settings_dict.get("retention", default_settings["retention"]),
+        format=settings_dict.get("format", default_settings["format"]),
+        base_path=str(BACKUP_BASE_DIR),
+        last_backup_time=last_backup,
+    )
+
+
+@app.post("/settings/backup")
+async def update_backup_settings_endpoint(settings: BackupSettings):
+    # Only allow subfolder name, sanitize it to prevent path traversal
+    subfolder_name = Path(settings.subfolder).name
+    if not subfolder_name or subfolder_name in (".", ".."):
+        raise HTTPException(status_code=400, detail="Invalid subfolder name")
+
+    # Validate frequency
+    if settings.frequency not in ("daily", "weekly", "monthly"):
+        raise HTTPException(status_code=400, detail="Invalid frequency")
+
+    # Validate retention
+    if settings.retention < 1:
+        raise HTTPException(status_code=400, detail="Retention must be at least 1")
+
+    # Validate format
+    if settings.format not in ("csv", "xlsx"):
+        raise HTTPException(status_code=400, detail="Invalid format")
+
+    settings_to_save = {
+        "enabled": settings.enabled,
+        "subfolder": subfolder_name,
+        "frequency": settings.frequency,
+        "retention": settings.retention,
+        "format": settings.format,
+    }
+    set_setting("backup_settings", settings_to_save)
+    return {"status": "success", "settings": settings_to_save}
+
+
+def generate_export_content(format: str) -> bytes:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT column_name, "order"
+            FROM column_metadata
+            ORDER BY "order" ASC, column_name ASC
+            """
+        )
+        metadata_rows = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
+            FROM records
+            ORDER BY id ASC
+            """
+        )
+        records = cursor.fetchall()
+
+        export_rows, ordered_export_columns = build_export_rows(records, metadata_rows)
+        records_df = pd.DataFrame(export_rows)
+        if not records_df.empty:
+            records_df = records_df.reindex(columns=ordered_export_columns)
+
+        # Filter out system columns that users shouldn't see in backups
+        columns_to_remove = [
+            "id",
+            "natural_language_description",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+        records_df = records_df.drop(
+            columns=[c for c in columns_to_remove if c in records_df.columns]
+        )
+
+        if format == "csv":
+            text_buffer = io.StringIO()
+            records_df.to_csv(text_buffer, index=False)
+            return text_buffer.getvalue().encode("utf-8")
+        elif format == "xlsx":
+            bytes_buffer = io.BytesIO()
+            with pd.ExcelWriter(bytes_buffer, engine="openpyxl") as writer:
+                records_df.to_excel(writer, sheet_name="records", index=False)
+            return bytes_buffer.getvalue()
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+    finally:
+        conn.close()
+
+
+def run_backup():
+    settings = get_setting("backup_settings")
+    if not settings:
+        return
+
+    subfolder = settings.get("subfolder", "default_backup")
+    retention = settings.get("retention", 5)
+    format = settings.get("format", "csv")
+
+    backup_dir = BACKUP_BASE_DIR / subfolder
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    extension = "csv" if format == "csv" else "xlsx"
+    backup_path = backup_dir / f"backup_{timestamp}.{extension}"
+
+    try:
+        content = generate_export_content(format)
+        with open(backup_path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        print(f"Failed to generate/write backup: {e}")
+        return None
+
+    # Manage retention: delete oldest backups if count exceeds retention
+    # Look for both csv and xlsx to be safe, or just current extension?
+    # Usually better to manage within the same subfolder regardless of extension if they are "backups"
+    backups = sorted(
+        list(backup_dir.glob("backup_*.csv")) + list(backup_dir.glob("backup_*.xlsx")),
+        key=lambda p: p.stat().st_mtime,
+    )
+    while len(backups) > retention:
+        oldest = backups.pop(0)
+        try:
+            oldest.unlink()
+        except Exception as e:
+            print(f"Failed to delete old backup {oldest}: {e}")
+
+    set_setting("last_backup_time", time.time())
+    return str(backup_path)
+
+
+async def backup_scheduler():
+    # Wait a bit after startup
+    await asyncio.sleep(10)
+    while True:
+        try:
+            settings = get_setting("backup_settings")
+            if settings and settings.get("enabled", False):
+                frequency = settings.get("frequency", "daily")
+                last_backup = get_setting("last_backup_time", 0)
+
+                now = time.time()
+                interval = 24 * 3600  # Default daily
+                if frequency == "daily":
+                    interval = 24 * 3600
+                elif frequency == "weekly":
+                    interval = 7 * 24 * 3600
+                elif frequency == "monthly":
+                    interval = 30 * 24 * 3600
+
+                if now - last_backup >= interval:
+                    print(f"Running periodic backup ({frequency})...")
+                    run_backup()
+                    print(f"Periodic backup completed at {time.ctime()}")
+        except Exception as e:
+            print(f"Backup scheduler error: {e}")
+
+        # Check every hour
+        await asyncio.sleep(3600)
+
+
+@app.post("/settings/backup/now")
+async def manual_backup():
+    try:
+        backup_path = run_backup()
+        if not backup_path:
+            raise HTTPException(
+                status_code=400, detail="Backup settings not configured"
+            )
+        return {"status": "success", "backup_path": backup_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
 
 
 def get_llm() -> Any:

@@ -29,6 +29,14 @@ def create_tables(cursor: sqlite3.Cursor) -> None:
         )
     """)
 
+    # Settings table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL  -- JSON string
+        )
+    """)
+
 
 def create_fts_table(cursor: sqlite3.Cursor) -> None:
     # FTS5 virtual table for keyword search
