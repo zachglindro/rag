@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, DragEvent, ChangeEvent } from "react"
-import { Database, Upload } from "lucide-react"
+import { Database, Upload, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -148,7 +148,14 @@ export function UploadStep({
 
       {/* Continue button */}
       <Button onClick={handleContinue} disabled={!selectedFile || isUploading}>
-        {isUploading ? "Uploading..." : "Continue"}
+        {isUploading ? (
+          <>
+            Uploading...
+            <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+          </>
+        ) : (
+          "Continue"
+        )}
       </Button>
     </div>
   )
