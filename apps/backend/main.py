@@ -942,7 +942,12 @@ async def ingest_records(request: IngestRequest):
         vector_db = None
 
         try:
-            yield json.dumps({"type": "progress", "progress": 5}) + "\n"
+            yield (
+                json.dumps(
+                    {"type": "progress", "progress": 5, "message": "Initializing..."}
+                )
+                + "\n"
+            )
 
             # Build mapping dict for quick lookup
             mapping_dict = {
@@ -982,7 +987,16 @@ async def ingest_records(request: IngestRequest):
                 for row_data in transformed_rows
             ]
 
-            yield json.dumps({"type": "progress", "progress": 10}) + "\n"
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 10,
+                        "message": "Connecting to vector database...",
+                    }
+                )
+                + "\n"
+            )
 
             embedder_instance = get_embedder()
             vector_db = get_vectordb()
@@ -999,7 +1013,16 @@ async def ingest_records(request: IngestRequest):
                 p = 10 + int(
                     (min(i + batch_size, len(descriptions))) / len(descriptions) * 30
                 )
-                yield json.dumps({"type": "progress", "progress": p}) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "type": "progress",
+                            "progress": p,
+                            "message": f"Generating embeddings ({min(i + batch_size, len(descriptions))}/{len(descriptions)})...",
+                        }
+                    )
+                    + "\n"
+                )
 
             if len(embeddings) != len(transformed_rows):
                 yield (
@@ -1085,21 +1108,58 @@ async def ingest_records(request: IngestRequest):
                 # Progress from 40 to 90
                 if (i + 1) % 10 == 0 or (i + 1) == total_rows:
                     p = 40 + int((i + 1) / total_rows * 50)
-                    yield json.dumps({"type": "progress", "progress": p}) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "type": "progress",
+                                "progress": p,
+                                "message": f"Saving records ({i + 1}/{total_rows})...",
+                            }
+                        )
+                        + "\n"
+                    )
 
             # Update vector DB for all
-            yield json.dumps({"type": "progress", "progress": 92}) + "\n"
             all_affected_ids = inserted_ids + updated_ids
-            vector_db.upsert_documents(
-                ids=[str(rid) for rid in all_affected_ids],
-                documents=descriptions,
-                embeddings=embeddings,
-                metadatas=[{"record_id": rid} for rid in all_affected_ids],
-            )
-            yield json.dumps({"type": "progress", "progress": 98}) + "\n"
+            str_ids = [str(rid) for rid in all_affected_ids]
+            metadatas: list[Any] = [{"record_id": rid} for rid in all_affected_ids]
+
+            total_affected = len(all_affected_ids)
+            vector_batch_size = 32
+
+            for i in range(0, total_affected, vector_batch_size):
+                batch_ids = str_ids[i : i + vector_batch_size]
+                batch_docs = descriptions[i : i + vector_batch_size]
+                batch_embeddings = embeddings[i : i + vector_batch_size]
+                batch_metadatas = metadatas[i : i + vector_batch_size]
+
+                vector_db.upsert_documents(
+                    ids=batch_ids,
+                    documents=batch_docs,
+                    embeddings=batch_embeddings,
+                    metadatas=batch_metadatas,
+                )
+
+                # Progress from 92 to 98
+                p = 92 + int(
+                    (min(i + vector_batch_size, total_affected)) / total_affected * 6
+                )
+                yield (
+                    json.dumps(
+                        {
+                            "type": "progress",
+                            "progress": p,
+                            "message": f"Syncing vector database ({min(i + vector_batch_size, total_affected)}/{total_affected})...",
+                        }
+                    )
+                    + "\n"
+                )
 
             conn.commit()
-            yield json.dumps({"type": "progress", "progress": 100}) + "\n"
+            yield (
+                json.dumps({"type": "progress", "progress": 100, "message": "Done!"})
+                + "\n"
+            )
             yield (
                 json.dumps(
                     {"type": "done", "inserted_count": inserted_count + updated_count}
