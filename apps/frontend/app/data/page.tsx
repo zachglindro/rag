@@ -1608,9 +1608,6 @@ function DataPageContent() {
               <div className="flex flex-wrap items-center gap-2">
                 {!isEditMode && (
                   <>
-                    <Button onClick={enterEditMode} disabled={isMutating}>
-                      Edit
-                    </Button>
                     <Button
                       variant={isSelectionMode ? "secondary" : "outline"}
                       onClick={() => {
@@ -1622,6 +1619,9 @@ function DataPageContent() {
                       disabled={isMutating}
                     >
                       {isSelectionMode ? "Cancel Selection" : "Select"}
+                    </Button>
+                    <Button onClick={enterEditMode} disabled={isMutating}>
+                      Edit
                     </Button>
                   </>
                 )}
