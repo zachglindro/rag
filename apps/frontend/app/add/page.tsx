@@ -135,6 +135,8 @@ export default function AddPage() {
               onSelect={setIdColumn}
               onBack={() => goToStep(2)}
               onNext={() => goToStep(4)}
+              data={parsedData}
+              mappings={mappings}
             />
           )
         } else {
