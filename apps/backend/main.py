@@ -138,7 +138,17 @@ class ColumnMapping(BaseModel):
 class IngestRequest(BaseModel):
     rows: list[dict[str, Any]]
     mappings: list[ColumnMapping]
+    id_column: str | None = None
     user_name: str | None = None
+
+
+class CheckExistenceRequest(BaseModel):
+    column_name: str
+    ids: list[Any]
+
+
+class CheckExistenceResponse(BaseModel):
+    existing_records: dict[str, dict[str, Any]]
 
 
 class IngestResponse(BaseModel):
@@ -874,6 +884,34 @@ async def suggest_mappings(request: SuggestMappingsRequest):
         conn.close()
 
 
+@app.post("/records/check-existence", response_model=CheckExistenceResponse)
+async def check_existence(request: CheckExistenceRequest):
+    if not request.ids:
+        return CheckExistenceResponse(existing_records={})
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # We search for records where the specified column in the 'data' JSON matches the provided IDs
+        placeholders = ", ".join(["?" for _ in request.ids])
+        query = f"""
+            SELECT json_extract(data, '$.' || ?) as val, data
+            FROM records
+            WHERE val IN ({placeholders})
+        """
+        cursor.execute(query, (request.column_name, *request.ids))
+        results = cursor.fetchall()
+
+        existing_records = {}
+        for val, data_json in results:
+            # We convert the ID to string for the dict key to ensure consistency
+            existing_records[str(val)] = parse_record_data(data_json)
+
+        return CheckExistenceResponse(existing_records=existing_records)
+    finally:
+        conn.close()
+
+
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest_records(request: IngestRequest):
     # Validate request
@@ -921,6 +959,13 @@ async def ingest_records(request: IngestRequest):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     inserted_ids: list[int] = []
+    updated_ids: list[int] = []
+
+    # Pre-calculate embeddings to keep transaction short
+    embeddings = embedder_instance.embed_batch(descriptions)
+    if len(embeddings) != len(transformed_rows):
+        raise RuntimeError("Embedding count does not match record count")
+
     try:
         conn.execute("BEGIN")
 
@@ -950,41 +995,73 @@ async def ingest_records(request: IngestRequest):
             )
 
         inserted_count = 0
-        for row_data, description in zip(transformed_rows, descriptions, strict=True):
-            cursor.execute(
-                "INSERT INTO records (data, natural_language_description, created_by, updated_by) VALUES (?, ?, ?, ?)",
-                (
-                    json.dumps(row_data),
-                    description,
-                    request.user_name,
-                    request.user_name,
-                ),
-            )
-            record_id = cursor.lastrowid
-            if record_id is None:
-                raise RuntimeError("Failed to retrieve inserted record ID")
-            inserted_ids.append(int(record_id))
-            inserted_count += 1
+        updated_count = 0
 
-        embeddings = embedder_instance.embed_batch(descriptions)
-        if len(embeddings) != inserted_count:
-            raise RuntimeError("Embedding count does not match inserted record count")
+        for i, (row_data, description) in enumerate(
+            zip(transformed_rows, descriptions, strict=True)
+        ):
+            record_id = None
 
+            # Check for existing record if id_column is provided
+            if request.id_column and request.id_column in row_data:
+                id_val = row_data[request.id_column]
+                cursor.execute(
+                    "SELECT id FROM records WHERE json_extract(data, '$.' || ?) = ?",
+                    (request.id_column, id_val),
+                )
+                row = cursor.fetchone()
+                if row:
+                    record_id = row[0]
+
+            if record_id:
+                # UPDATE
+                cursor.execute(
+                    "UPDATE records SET data = ?, natural_language_description = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (
+                        json.dumps(row_data),
+                        description,
+                        request.user_name,
+                        record_id,
+                    ),
+                )
+                updated_ids.append(record_id)
+                updated_count += 1
+            else:
+                # INSERT
+                cursor.execute(
+                    "INSERT INTO records (data, natural_language_description, created_by, updated_by) VALUES (?, ?, ?, ?)",
+                    (
+                        json.dumps(row_data),
+                        description,
+                        request.user_name,
+                        request.user_name,
+                    ),
+                )
+                record_id = cursor.lastrowid
+                if record_id is None:
+                    raise RuntimeError("Failed to retrieve inserted record ID")
+                inserted_ids.append(int(record_id))
+                inserted_count += 1
+
+        # Update vector DB for all (inserted and updated)
+        all_affected_ids = inserted_ids + updated_ids
         vector_db.upsert_documents(
-            ids=[str(record_id) for record_id in inserted_ids],
+            ids=[str(rid) for rid in all_affected_ids],
             documents=descriptions,
             embeddings=embeddings,
-            metadatas=[{"record_id": record_id} for record_id in inserted_ids],
+            metadatas=[{"record_id": rid} for rid in all_affected_ids],
         )
 
         conn.commit()
-        return IngestResponse(inserted_count=inserted_count, status="success")
+        return IngestResponse(
+            inserted_count=inserted_count + updated_count, status="success"
+        )
     except Exception as e:
         conn.rollback()
 
         if inserted_ids:
             try:
-                vector_db.delete_by_ids([str(record_id) for record_id in inserted_ids])
+                vector_db.delete_by_ids([str(rid) for rid in inserted_ids])
             except Exception:
                 pass
 

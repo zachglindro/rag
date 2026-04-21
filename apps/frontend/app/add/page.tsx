@@ -2,12 +2,13 @@
 
 import { AIMappingStep } from "@/components/add/ai-mapping-step"
 import { IngestStep } from "@/components/add/ingest-step"
+import { SelectIDStep } from "@/components/add/select-id-step"
 import { Stepper } from "@/components/add/stepper"
 import { TemplatePreviewStep } from "@/components/add/template-preview-step"
 import { UploadStep } from "@/components/add/upload-step"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 
 interface ColumnMapping {
   origColumn: string
@@ -19,6 +20,7 @@ export default function AddPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [parsedData, setParsedData] = useState<Record<string, unknown>[]>([])
   const [mappings, setMappings] = useState<ColumnMapping[]>([])
+  const [idColumn, setIdColumn] = useState<string | null>(null)
   const [isIngestionComplete, setIsIngestionComplete] = useState(false)
   const [hasData, setHasData] = useState(false)
 
@@ -62,37 +64,50 @@ export default function AddPage() {
     setIsIngestionComplete(true)
   }
 
-  const steps = hasData
-    ? [
-        { id: 1, title: "Upload" },
+  const steps = useMemo(() => {
+    const baseSteps = [{ id: 1, title: "Upload" }]
+
+    if (hasData) {
+      return [
+        ...baseSteps,
         { id: 2, title: "AI Mapping" },
+        { id: 3, title: "Select ID" },
+        { id: 4, title: "Preview" },
+        { id: 5, title: "Ingest" },
+      ]
+    } else {
+      return [
+        ...baseSteps,
+        { id: 2, title: "Select ID" },
         { id: 3, title: "Preview" },
         { id: 4, title: "Ingest" },
       ]
-    : [
-        { id: 1, title: "Upload" },
-        { id: 2, title: "Preview" },
-        { id: 3, title: "Ingest" },
-      ]
+    }
+  }, [hasData])
+
+  const mappedColumnNames = useMemo(() => {
+    return mappings
+      .filter((m) => m.mappedColumn !== "")
+      .map((m) => m.mappedColumn)
+  }, [mappings])
 
   const renderStep = () => {
     if (isIngestionComplete) {
-      // Show success state even when on final step.
       return <IngestStep onComplete={() => {}} />
     }
 
-    if (hasData) {
-      switch (currentStep) {
-        case 1:
-          return (
-            <UploadStep
-              onFileSelect={handleFileSelect}
-              onNext={() => goToStep(2)}
-              selectedFile={selectedFile}
-              onColumnsSet={handleColumnsSet}
-            />
-          )
-        case 2:
+    switch (currentStep) {
+      case 1:
+        return (
+          <UploadStep
+            onFileSelect={handleFileSelect}
+            onNext={() => goToStep(2)}
+            selectedFile={selectedFile}
+            onColumnsSet={handleColumnsSet}
+          />
+        )
+      case 2:
+        if (hasData) {
           return (
             <AIMappingStep
               onBack={() => goToStep(1)}
@@ -101,57 +116,74 @@ export default function AddPage() {
               onMappingsChange={setMappings}
             />
           )
-        case 3:
+        } else {
+          return (
+            <SelectIDStep
+              columns={mappedColumnNames}
+              selectedId={idColumn}
+              onSelect={setIdColumn}
+              onBack={() => goToStep(1)}
+              onNext={() => goToStep(3)}
+            />
+          )
+        }
+      case 3:
+        if (hasData) {
+          return (
+            <SelectIDStep
+              columns={mappedColumnNames}
+              selectedId={idColumn}
+              onSelect={setIdColumn}
+              onBack={() => goToStep(2)}
+              onNext={() => goToStep(4)}
+            />
+          )
+        } else {
           return (
             <TemplatePreviewStep
               onBack={() => goToStep(2)}
               onNext={() => goToStep(4)}
               mappings={mappings}
               rawData={parsedData}
+              idColumn={idColumn}
             />
           )
-        case 4:
-          return (
-            <IngestStep
-              onComplete={handleIngestionComplete}
-              rows={parsedData}
-              mappings={mappings}
-            />
-          )
-        default:
-          return null
-      }
-    } else {
-      switch (currentStep) {
-        case 1:
-          return (
-            <UploadStep
-              onFileSelect={handleFileSelect}
-              onNext={() => goToStep(2)}
-              selectedFile={selectedFile}
-              onColumnsSet={handleColumnsSet}
-            />
-          )
-        case 2:
+        }
+      case 4:
+        if (hasData) {
           return (
             <TemplatePreviewStep
-              onBack={() => goToStep(1)}
-              onNext={() => goToStep(3)}
+              onBack={() => goToStep(3)}
+              onNext={() => goToStep(5)}
               mappings={mappings}
               rawData={parsedData}
+              idColumn={idColumn}
             />
           )
-        case 3:
+        } else {
           return (
             <IngestStep
               onComplete={handleIngestionComplete}
               rows={parsedData}
               mappings={mappings}
+              idColumn={idColumn}
             />
           )
-        default:
-          return null
-      }
+        }
+      case 5:
+        if (hasData) {
+          return (
+            <IngestStep
+              onComplete={handleIngestionComplete}
+              rows={parsedData}
+              mappings={mappings}
+              idColumn={idColumn}
+            />
+          )
+        }
+        return null
+      default:
+        return null
     }
   }
 

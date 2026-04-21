@@ -12,9 +12,15 @@ interface IngestStepProps {
   onComplete: () => void
   rows?: Record<string, unknown>[]
   mappings?: { origColumn: string; mappedColumn: string }[]
+  idColumn?: string | null
 }
 
-export function IngestStep({ onComplete, rows, mappings }: IngestStepProps) {
+export function IngestStep({
+  onComplete,
+  rows,
+  mappings,
+  idColumn,
+}: IngestStepProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [progress, setProgress] = useState(0)
@@ -41,12 +47,15 @@ export function IngestStep({ onComplete, rows, mappings }: IngestStepProps) {
         setError(null)
         setProgress(10)
 
+        const mappedIdColumn = idColumn
+
         const response = await fetch("http://localhost:8000/ingest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             rows,
             mappings,
+            id_column: mappedIdColumn || null,
             user_name: localStorage.getItem("userName") || "Unknown",
           }),
         })
@@ -72,7 +81,7 @@ export function IngestStep({ onComplete, rows, mappings }: IngestStepProps) {
     }
 
     ingestData()
-  }, [onComplete, rows, mappings])
+  }, [onComplete, rows, mappings, idColumn])
 
   if (error) {
     return (
