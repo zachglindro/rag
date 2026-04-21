@@ -1,7 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, ChevronsUpDown, ChevronRight, ChevronDown } from "lucide-react"
+import {
+  Check,
+  ChevronsUpDown,
+  ChevronRight,
+  ChevronDown,
+  Loader2,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -62,10 +68,12 @@ export function AIMappingStep({
   const [availableColumns, setAvailableColumns] = useState<
     { value: string; label: string }[]
   >([])
+  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false)
 
   useEffect(() => {
     if (mappings.length > 0 && !suggestionsApplied) {
       const fetchSuggestions = async () => {
+        setIsSuggestionsLoading(true)
         try {
           const response = await fetch(
             "http://localhost:8000/suggest-mappings",
@@ -91,8 +99,18 @@ export function AIMappingStep({
           })
           onMappingsChange(newMappings)
           setSuggestionsApplied(true)
+
+          // Auto-expand sections if they have items
+          const hasMapped = newMappings.some((m) => m.mappedColumn !== "")
+          const hasUnmapped = newMappings.some((m) => m.mappedColumn === "")
+          setSectionStates({
+            mapped: hasMapped,
+            unmapped: hasUnmapped,
+          })
         } catch (error) {
           console.error("Failed to fetch suggestions:", error)
+        } finally {
+          setIsSuggestionsLoading(false)
         }
       }
       fetchSuggestions()
@@ -243,68 +261,82 @@ export function AIMappingStep({
 
       {/* Column mappings */}
       <div className="flex flex-col gap-6">
-        {/* Mapped section */}
-        <div className="flex flex-col gap-2">
-          <Button
-            variant="ghost"
-            onClick={() =>
-              setSectionStates((prev) => ({ ...prev, mapped: !prev.mapped }))
-            }
-            className="h-auto w-full justify-start px-2 py-4"
-            aria-expanded={sectionStates.mapped}
-          >
-            {sectionStates.mapped ? (
-              <ChevronDown className="mr-2 h-4 w-4" />
-            ) : (
-              <ChevronRight className="mr-2 h-4 w-4" />
-            )}
-            Mapped ({mappedMappings.length})
-          </Button>
-          {sectionStates.mapped && (
-            <div className="ml-6 flex flex-col gap-4">
-              <Input
-                placeholder="Search mapped columns..."
-                value={mappedSearch}
-                onChange={(e) => setMappedSearch(e.target.value)}
-                className="mb-2"
-              />
-              {filteredMappedMappings.map(renderMappingRow)}
+        {isSuggestionsLoading ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">
+              Finding AI mappings...
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Mapped section */}
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  setSectionStates((prev) => ({
+                    ...prev,
+                    mapped: !prev.mapped,
+                  }))
+                }
+                className="h-auto w-full justify-start px-2 py-4"
+                aria-expanded={sectionStates.mapped}
+              >
+                {sectionStates.mapped ? (
+                  <ChevronDown className="mr-2 h-4 w-4" />
+                ) : (
+                  <ChevronRight className="mr-2 h-4 w-4" />
+                )}
+                Mapped ({mappedMappings.length})
+              </Button>
+              {sectionStates.mapped && (
+                <div className="ml-6 flex flex-col gap-4">
+                  <Input
+                    placeholder="Search mapped columns..."
+                    value={mappedSearch}
+                    onChange={(e) => setMappedSearch(e.target.value)}
+                    className="mb-2"
+                  />
+                  {filteredMappedMappings.map(renderMappingRow)}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Unmapped section */}
-        <div className="flex flex-col gap-2">
-          <Button
-            variant="ghost"
-            onClick={() =>
-              setSectionStates((prev) => ({
-                ...prev,
-                unmapped: !prev.unmapped,
-              }))
-            }
-            className="h-auto w-full justify-start px-2 py-4"
-            aria-expanded={sectionStates.unmapped}
-          >
-            {sectionStates.unmapped ? (
-              <ChevronDown className="mr-2 h-4 w-4" />
-            ) : (
-              <ChevronRight className="mr-2 h-4 w-4" />
-            )}
-            Unmapped ({unmappedMappings.length})
-          </Button>
-          {sectionStates.unmapped && (
-            <div className="ml-6 flex flex-col gap-4">
-              <Input
-                placeholder="Search unmapped columns..."
-                value={unmappedSearch}
-                onChange={(e) => setUnmappedSearch(e.target.value)}
-                className="mb-2"
-              />
-              {filteredUnmappedMappings.map(renderMappingRow)}
+            {/* Unmapped section */}
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  setSectionStates((prev) => ({
+                    ...prev,
+                    unmapped: !prev.unmapped,
+                  }))
+                }
+                className="h-auto w-full justify-start px-2 py-4"
+                aria-expanded={sectionStates.unmapped}
+              >
+                {sectionStates.unmapped ? (
+                  <ChevronDown className="mr-2 h-4 w-4" />
+                ) : (
+                  <ChevronRight className="mr-2 h-4 w-4" />
+                )}
+                Unmapped ({unmappedMappings.length})
+              </Button>
+              {sectionStates.unmapped && (
+                <div className="ml-6 flex flex-col gap-4">
+                  <Input
+                    placeholder="Search unmapped columns..."
+                    value={unmappedSearch}
+                    onChange={(e) => setUnmappedSearch(e.target.value)}
+                    className="mb-2"
+                  />
+                  {filteredUnmappedMappings.map(renderMappingRow)}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* Navigation buttons */}
