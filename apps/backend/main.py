@@ -1083,13 +1083,25 @@ async def get_records(
     try:
         # Build ORDER BY clause
         sort_order_upper = sort_order.upper()
-        if sort_by in ["id", "created_at", "updated_at"]:
-            order_clause = f"ORDER BY {sort_by} {sort_order_upper}"
+        top_level_columns = {
+            "id",
+            "natural_language_description",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        }
+
+        if sort_by in top_level_columns:
+            if sort_by == "id":
+                order_clause = f"ORDER BY {sort_by} {sort_order_upper}"
+            else:
+                # Use COLLATE NOCASE for case-insensitive string/timestamp sorting
+                order_clause = f"ORDER BY {sort_by} COLLATE NOCASE {sort_order_upper}"
         else:
             # Assume sort_by is a data column, use json_extract
-            order_clause = (
-                f"ORDER BY json_extract(data, '$.{sort_by}') {sort_order_upper}"
-            )
+            # Added COLLATE NOCASE for case-insensitive sorting
+            order_clause = f"ORDER BY json_extract(data, '$.{sort_by}') COLLATE NOCASE {sort_order_upper}"
 
         cursor.execute(
             f"""
@@ -1543,20 +1555,23 @@ async def search_records(
         reverse = sort_order == "desc"
 
         def sort_key(row):
+            # Check for top-level attributes first
             if sort_by == "id":
                 return row.id
-            elif sort_by == "created_at":
-                return row.created_at or ""
-            elif sort_by == "updated_at":
-                return row.updated_at or ""
             elif sort_by == "distance":
                 return row.distance if row.distance is not None else float("inf")
+            elif hasattr(row, sort_by):
+                val = getattr(row, sort_by)
+                if val is None:
+                    return ""
+                return str(val).lower() if isinstance(val, str) else val
             else:
                 # Assume data field
                 value = row.data.get(sort_by)
                 if value is None:
                     return ""
-                return str(value)  # Handle mixed types by converting to string
+                # Handle mixed types by converting to string and use .lower() for case-insensitive sorting
+                return str(value).lower()
 
         ordered_rows.sort(key=sort_key, reverse=reverse)
 
@@ -1816,24 +1831,27 @@ async def search_records_keyword(
             reverse = sort_order == "desc"
 
             def sort_key(row):
+                # Check for top-level attributes first
                 if sort_by == "id":
                     return row.id
-                elif sort_by == "created_at":
-                    return row.created_at or ""
-                elif sort_by == "updated_at":
-                    return row.updated_at or ""
                 elif sort_by == "rerank_score":
                     return (
                         row.rerank_score
                         if row.rerank_score is not None
                         else float("inf")
                     )
+                elif hasattr(row, sort_by):
+                    val = getattr(row, sort_by)
+                    if val is None:
+                        return ""
+                    return str(val).lower() if isinstance(val, str) else val
                 else:
                     # Assume data field
                     value = row.data.get(sort_by)
                     if value is None:
                         return ""
-                    return str(value)
+                    # Use .lower() for case-insensitive sorting
+                    return str(value).lower()
 
             ordered_rows.sort(key=sort_key, reverse=reverse)
 
