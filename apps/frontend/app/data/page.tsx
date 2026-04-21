@@ -426,6 +426,276 @@ const SearchSection = memo(function SearchSection({
   )
 })
 
+interface AddColumnDialogProps {
+  isOpen: boolean
+  onOpenChange: (open: boolean) => void
+  columnPendingAdd: { key: string; label: string } | null
+  isMutating: boolean
+  onConfirm: (data: {
+    name: string
+    type: string
+    defaultValue: string
+  }) => void
+}
+
+const AddColumnDialog = memo(function AddColumnDialog({
+  isOpen,
+  onOpenChange,
+  columnPendingAdd,
+  isMutating,
+  onConfirm,
+}: AddColumnDialogProps) {
+  const [name, setName] = useState("")
+  const [type, setType] = useState("string")
+  const [defaultValue, setDefaultValue] = useState("")
+
+  const handleConfirm = () => {
+    onConfirm({ name, type, defaultValue })
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add New Column</DialogTitle>
+          <DialogDescription>
+            Add a new column to the right of &quot;
+            {columnPendingAdd?.label}&quot;.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="col-name" className="text-right text-sm">
+              Name
+            </label>
+            <Input
+              id="col-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="col-span-3"
+              placeholder="Column name"
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="col-type" className="text-right text-sm">
+              Type
+            </label>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger className="col-span-3" id="col-type">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="string">Text</SelectItem>
+                <SelectItem value="number">Number</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <div className="text-right">
+              <label htmlFor="col-default" className="text-sm font-medium">
+                Default
+              </label>
+              <p className="text-[10px] text-muted-foreground">
+                For existing rows
+              </p>
+            </div>
+            <Input
+              id="col-default"
+              value={defaultValue}
+              onChange={(e) => setDefaultValue(e.target.value)}
+              className="col-span-3"
+              placeholder={type === "number" ? "123" : "Default value"}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isMutating}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleConfirm} disabled={isMutating || !name.trim()}>
+            {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isMutating ? "Adding..." : "Add Column"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+})
+
+interface RenameColumnDialogProps {
+  isOpen: boolean
+  onOpenChange: (open: boolean) => void
+  columnPendingRename: { key: string; label: string } | null
+  isMutating: boolean
+  onConfirm: (newName: string) => void
+}
+
+const RenameColumnDialog = memo(function RenameColumnDialog({
+  isOpen,
+  onOpenChange,
+  columnPendingRename,
+  isMutating,
+  onConfirm,
+}: RenameColumnDialogProps) {
+  const [name, setName] = useState(columnPendingRename?.label ?? "")
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Rename Column</DialogTitle>
+          <DialogDescription>
+            Rename the &quot;{columnPendingRename?.label}&quot; column.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="new-name" className="text-right">
+              New Name
+            </label>
+            <Input
+              id="new-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="col-span-3"
+              placeholder="Enter new column name"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isMutating}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onConfirm(name)}
+            disabled={isMutating || !name.trim()}
+          >
+            {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isMutating ? "Renaming..." : "Rename"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+})
+
+interface FilterDialogProps {
+  isOpen: boolean
+  onOpenChange: (open: boolean) => void
+  visibleColumns: VisibleColumn[]
+  onConfirm: (filter: {
+    columnKey: string
+    operator: string
+    value: string
+  }) => void
+}
+
+const FilterDialog = memo(function FilterDialog({
+  isOpen,
+  onOpenChange,
+  visibleColumns,
+  onConfirm,
+}: FilterDialogProps) {
+  const [columnKey, setColumnKey] = useState("")
+  const [operator, setOperator] = useState("contains")
+  const [value, setValue] = useState("")
+
+  const handleConfirm = () => {
+    onConfirm({ columnKey, operator, value })
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Add Filter</DialogTitle>
+          <DialogDescription>
+            Add a filter to the current view.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="filter-column" className="text-right text-sm">
+              Column
+            </label>
+            <Select value={columnKey} onValueChange={setColumnKey}>
+              <SelectTrigger className="col-span-3" id="filter-column">
+                <SelectValue placeholder="Select a column" />
+              </SelectTrigger>
+              <SelectContent>
+                {visibleColumns.map((column) => (
+                  <SelectItem key={column.key} value={column.key}>
+                    {column.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="filter-operator" className="text-right text-sm">
+              Operator
+            </label>
+            <Select value={operator} onValueChange={setOperator}>
+              <SelectTrigger className="col-span-3" id="filter-operator">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contains">Contains (text)</SelectItem>
+                <SelectItem value="=">Equals</SelectItem>
+                <SelectItem value=">">Greater than (number)</SelectItem>
+                <SelectItem value="<">Less than (number)</SelectItem>
+                <SelectItem value=">=">&gt;= Greater or equal</SelectItem>
+                <SelectItem value="<=">&lt;= Less or equal</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="filter-value" className="text-right text-sm">
+              Value
+            </label>
+            <Input
+              id="filter-value"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              className="col-span-3"
+              placeholder={
+                operator.match(/[><=]/)
+                  ? "Enter a number"
+                  : "Enter filter value"
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  handleConfirm()
+                }
+              }}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={!columnKey.trim() || !value.trim()}
+          >
+            Add Filter
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+})
+
 function DataPageContent() {
   const searchParams = useSearchParams()
   const highlightIdString = searchParams.get("highlight")
@@ -469,9 +739,6 @@ function DataPageContent() {
   const [exportScope, setExportScope] = useState<"all" | "selected">("all")
 
   const [filters, setFilters] = useState<FilterCondition[]>([])
-  const [filterColumnKey, setFilterColumnKey] = useState<string>("")
-  const [filterOperator, setFilterOperator] = useState<string>("contains")
-  const [filterValue, setFilterValue] = useState<string>("")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
   const applyRowFilters = useCallback(
@@ -635,16 +902,12 @@ function DataPageContent() {
   } | null>(null)
   const [isColumnRenameDialogOpen, setIsColumnRenameDialogOpen] =
     useState(false)
-  const [newName, setNewName] = useState("")
 
   const [columnPendingAdd, setColumnPendingAdd] = useState<{
     key: string
     label: string
   } | null>(null)
   const [isColumnAddDialogOpen, setIsColumnAddDialogOpen] = useState(false)
-  const [newColumnName, setNewColumnName] = useState("")
-  const [newColumnType, setNewColumnType] = useState("string")
-  const [newColumnDefaultValue, setNewColumnDefaultValue] = useState("null")
 
   const isSearchMode = appliedSearchQuery.trim().length > 0
 
@@ -1189,7 +1452,6 @@ function DataPageContent() {
         return
       }
       setColumnPendingRename(column)
-      setNewName(column.label)
       setIsColumnRenameDialogOpen(true)
     },
     []
@@ -1198,9 +1460,6 @@ function DataPageContent() {
   const openColumnAddDialog = useCallback(
     (column: { key: string; label: string }) => {
       setColumnPendingAdd(column)
-      setNewColumnName("")
-      setNewColumnType("string")
-      setNewColumnDefaultValue("")
       setIsColumnAddDialogOpen(true)
     },
     []
@@ -1269,7 +1528,7 @@ function DataPageContent() {
     }
   }
 
-  const handleConfirmColumnRename = async () => {
+  const handleConfirmColumnRename = async (newName: string) => {
     if (!columnPendingRename) {
       return
     }
@@ -1279,8 +1538,6 @@ function DataPageContent() {
       toast.error("Name cannot be empty")
       return
     }
-
-    const newColumnName = trimmedName
 
     setIsMutating(true)
     try {
@@ -1300,8 +1557,8 @@ function DataPageContent() {
       const renameRequest = {
         old_column_name: columnPendingRename.key,
         new_column: {
-          column_name: newColumnName,
-          display_name: newColumnName,
+          column_name: trimmedName,
+          display_name: trimmedName,
           data_type: currentMeta.data_type,
           is_required: currentMeta.is_required,
           default_value: currentMeta.default_value || "null",
@@ -1326,7 +1583,6 @@ function DataPageContent() {
       toast.success(`Column renamed to '${trimmedName}'`)
       setIsColumnRenameDialogOpen(false)
       setColumnPendingRename(null)
-      setNewName("")
       await fetchData() // Refresh data and metadata
     } catch (error) {
       toast.error(
@@ -1337,9 +1593,13 @@ function DataPageContent() {
     }
   }
 
-  const handleConfirmColumnAdd = async () => {
+  const handleConfirmColumnAdd = async (data: {
+    name: string
+    type: string
+    defaultValue: string
+  }) => {
     if (!columnPendingAdd) return
-    const trimmedName = newColumnName.trim()
+    const trimmedName = data.name.trim()
     if (!trimmedName) {
       toast.error("Column name cannot be empty")
       return
@@ -1357,12 +1617,12 @@ function DataPageContent() {
         : metadata.length
 
       // Format default value for backend (must be valid JSON)
-      let formattedDefault = newColumnDefaultValue.trim()
+      let formattedDefault = data.defaultValue.trim()
       if (!formattedDefault || formattedDefault.toLowerCase() === "null") {
         formattedDefault = "null"
-      } else if (newColumnType === "string" || newColumnType === "text") {
+      } else if (data.type === "string" || data.type === "text") {
         formattedDefault = JSON.stringify(formattedDefault)
-      } else if (newColumnType === "number") {
+      } else if (data.type === "number") {
         if (isNaN(Number(formattedDefault))) {
           formattedDefault = "0"
         }
@@ -1376,7 +1636,7 @@ function DataPageContent() {
         body: JSON.stringify({
           column_name: trimmedName,
           display_name: trimmedName,
-          data_type: newColumnType,
+          data_type: data.type,
           is_required: false,
           default_value: formattedDefault,
           order: newOrder,
@@ -1392,9 +1652,6 @@ function DataPageContent() {
       toast.success(`Column '${trimmedName}' added successfully`)
       setIsColumnAddDialogOpen(false)
       setColumnPendingAdd(null)
-      setNewColumnName("")
-      setNewColumnType("string")
-      setNewColumnDefaultValue("null")
       await fetchData()
     } catch (error) {
       toast.error(
@@ -1440,32 +1697,33 @@ function DataPageContent() {
     }
   }
 
-  const handleAddFilter = () => {
-    if (!filterColumnKey.trim()) {
+  const handleAddFilter = (filter: {
+    columnKey: string
+    operator: string
+    value: string
+  }) => {
+    if (!filter.columnKey.trim()) {
       toast.error("Please select a column")
       return
     }
 
-    if (!filterValue.trim()) {
+    if (!filter.value.trim()) {
       toast.error("Please enter a filter value")
       return
     }
 
     const newFilter: FilterCondition = {
       id: `${Date.now()}-${Math.random()}`,
-      columnKey: filterColumnKey,
-      operator: filterOperator,
-      value: filterValue,
+      columnKey: filter.columnKey,
+      operator: filter.operator,
+      value: filter.value,
     }
 
     setFilters((prev) => [...prev, newFilter])
 
-    setFilterColumnKey("")
-    setFilterOperator("contains")
-    setFilterValue("")
     setIsFilterDialogOpen(false)
     toast.success(
-      `Filter added: ${filterColumnKey} ${filterOperator} "${filterValue}"`
+      `Filter added: ${filter.columnKey} ${filter.operator} "${filter.value}"`
     )
   }
 
@@ -1925,137 +2183,23 @@ function DataPageContent() {
             </DialogContent>
           </Dialog>
 
-          <Dialog
-            open={isColumnRenameDialogOpen}
+          <RenameColumnDialog
+            key={`rename-${columnPendingRename?.key || "none"}-${isColumnRenameDialogOpen}`}
+            isOpen={isColumnRenameDialogOpen}
             onOpenChange={setIsColumnRenameDialogOpen}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Rename Column</DialogTitle>
-                <DialogDescription>
-                  Rename the &quot;{columnPendingRename?.label}&quot; column.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="new-name" className="text-right">
-                    New Name
-                  </label>
-                  <Input
-                    id="new-name"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="col-span-3"
-                    placeholder="Enter new column name"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsColumnRenameDialogOpen(false)}
-                  disabled={isMutating}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleConfirmColumnRename}
-                  disabled={isMutating || !newName.trim()}
-                >
-                  {isMutating && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {isMutating ? "Renaming..." : "Rename"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            columnPendingRename={columnPendingRename}
+            isMutating={isMutating}
+            onConfirm={handleConfirmColumnRename}
+          />
 
-          <Dialog
-            open={isColumnAddDialogOpen}
+          <AddColumnDialog
+            key={`add-${isColumnAddDialogOpen}`}
+            isOpen={isColumnAddDialogOpen}
             onOpenChange={setIsColumnAddDialogOpen}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Column</DialogTitle>
-                <DialogDescription>
-                  Add a new column to the right of &quot;
-                  {columnPendingAdd?.label}&quot;.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="col-name" className="text-right text-sm">
-                    Name
-                  </label>
-                  <Input
-                    id="col-name"
-                    value={newColumnName}
-                    onChange={(e) => setNewColumnName(e.target.value)}
-                    className="col-span-3"
-                    placeholder="Column name"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="col-type" className="text-right text-sm">
-                    Type
-                  </label>
-                  <Select
-                    value={newColumnType}
-                    onValueChange={setNewColumnType}
-                  >
-                    <SelectTrigger className="col-span-3" id="col-type">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="string">Text</SelectItem>
-                      <SelectItem value="number">Number</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <div className="text-right">
-                    <label
-                      htmlFor="col-default"
-                      className="text-sm font-medium"
-                    >
-                      Default
-                    </label>
-                    <p className="text-[10px] text-muted-foreground">
-                      For existing rows
-                    </p>
-                  </div>
-                  <Input
-                    id="col-default"
-                    value={newColumnDefaultValue}
-                    onChange={(e) => setNewColumnDefaultValue(e.target.value)}
-                    className="col-span-3"
-                    placeholder={
-                      newColumnType === "number" ? "123" : "Default value"
-                    }
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsColumnAddDialogOpen(false)}
-                  disabled={isMutating}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleConfirmColumnAdd}
-                  disabled={isMutating || !newColumnName.trim()}
-                >
-                  {isMutating && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {isMutating ? "Adding..." : "Add Column"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            columnPendingAdd={columnPendingAdd}
+            isMutating={isMutating}
+            onConfirm={handleConfirmColumnAdd}
+          />
 
           <Dialog
             open={isExportDialogOpen}
@@ -2125,102 +2269,13 @@ function DataPageContent() {
             </DialogContent>
           </Dialog>
 
-          <Dialog
-            open={isFilterDialogOpen}
+          <FilterDialog
+            key={`filter-${isFilterDialogOpen}`}
+            isOpen={isFilterDialogOpen}
             onOpenChange={setIsFilterDialogOpen}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Filter</DialogTitle>
-                <DialogDescription>
-                  Add filters to narrow down records. Multiple filters use AND
-                  logic.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="filter-column" className="text-right text-sm">
-                    Column
-                  </label>
-                  <Select
-                    value={filterColumnKey}
-                    onValueChange={setFilterColumnKey}
-                  >
-                    <SelectTrigger className="col-span-3" id="filter-column">
-                      <SelectValue placeholder="Select a column" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {visibleColumns.map((column) => (
-                        <SelectItem key={column.key} value={column.key}>
-                          {column.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label
-                    htmlFor="filter-operator"
-                    className="text-right text-sm"
-                  >
-                    Operator
-                  </label>
-                  <Select
-                    value={filterOperator}
-                    onValueChange={setFilterOperator}
-                  >
-                    <SelectTrigger className="col-span-3" id="filter-operator">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="contains">Contains (text)</SelectItem>
-                      <SelectItem value="=">Equals</SelectItem>
-                      <SelectItem value=">">Greater than (number)</SelectItem>
-                      <SelectItem value="<">Less than (number)</SelectItem>
-                      <SelectItem value=">=">&gt;= Greater or equal</SelectItem>
-                      <SelectItem value="<=">&lt;= Less or equal</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="filter-value" className="text-right text-sm">
-                    Value
-                  </label>
-                  <Input
-                    id="filter-value"
-                    value={filterValue}
-                    onChange={(e) => setFilterValue(e.target.value)}
-                    className="col-span-3"
-                    placeholder={
-                      filterOperator.match(/[><=]/)
-                        ? "Enter a number"
-                        : "Enter filter value"
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault()
-                        handleAddFilter()
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsFilterDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleAddFilter}
-                  disabled={!filterColumnKey.trim() || !filterValue.trim()}
-                >
-                  Add Filter
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            visibleColumns={visibleColumns}
+            onConfirm={handleAddFilter}
+          />
         </div>
       </SidebarInset>
     </>
