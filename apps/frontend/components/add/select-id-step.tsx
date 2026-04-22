@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AlertCircle, Check, ChevronDown, Info, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 interface SelectIDStepProps {
   columns: string[]
@@ -27,22 +27,12 @@ export function SelectIDStep({
 }: SelectIDStepProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [showScrollHint, setShowScrollHint] = useState(false)
-  const [duplicates, setDuplicates] = useState<{
-    value: unknown
-    rows: number[]
-  }[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!selectedId) {
-      setDuplicates([])
-      return
-    }
-
+  const duplicates = useMemo(() => {
     const mapping = mappings.find((m) => m.mappedColumn === selectedId)
-    if (!mapping) {
-      setDuplicates([])
-      return
+    if (!selectedId || !mapping) {
+      return []
     }
 
     const origCol = mapping.origColumn
@@ -63,7 +53,7 @@ export function SelectIDStep({
       }
     })
 
-    setDuplicates(foundDuplicates)
+    return foundDuplicates
   }, [selectedId, data, mappings])
 
   const filteredColumns = columns.filter((col) =>
@@ -183,7 +173,11 @@ export function SelectIDStep({
             <ul className="mt-2 list-inside list-disc space-y-1 text-xs">
               {duplicates.slice(0, 5).map((dup, i) => (
                 <li key={i}>
-                  Value <span className="font-mono underline">"{String(dup.value)}"</span> at rows: {dup.rows.join(", ")}
+                  Value{" "}
+                  <span className="font-mono underline">
+                    &quot;{String(dup.value)}&quot;
+                  </span>{" "}
+                  at rows: {dup.rows.join(", ")}
                 </li>
               ))}
               {duplicates.length > 5 && (
