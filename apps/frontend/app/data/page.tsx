@@ -11,21 +11,12 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { SidebarInset } from "@/components/ui/sidebar"
 import {
@@ -49,317 +40,23 @@ import {
 } from "react"
 import { toast } from "sonner"
 import { ChevronUp, ChevronDown, Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-
-interface RecordRow {
-  id: number
-  data: Record<string, unknown>
-  natural_language_description: string | null
-  created_at: string | null
-  updated_at: string | null
-  created_by: string | null
-  updated_by: string | null
-  distance?: number | null
-}
-
-interface RecordListResponse {
-  records: RecordRow[]
-  skip: number
-  limit: number
-}
-
-interface ColumnMetadataRow {
-  column_name: string
-  display_name: string
-  data_type: string
-  is_required: boolean
-  default_value: string | null
-  order: number | null
-  description: string | null
-}
-
-interface RecordSearchResponse {
-  query: string
-  top_k: number
-  records: RecordRow[]
-}
-
-interface FilterCondition {
-  id: string
-  columnKey: string
-  operator: string
-  value: string
-}
-
-const BACKEND_URL = "http://localhost:8000"
-const BOOLEAN_TRUE_VALUES = new Set(["true", "1", "yes"])
-const BOOLEAN_FALSE_VALUES = new Set(["false", "0", "no"])
-
-function stringifyValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return ""
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim()
-    return trimmed.length > 0 ? value : ""
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value)
-  }
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return "[]"
-    }
-
-    return value.map((item) => stringifyValue(item)).join(", ")
-  }
-
-  if (typeof value === "object") {
-    try {
-      return JSON.stringify(value)
-    } catch {
-      return "[object]"
-    }
-  }
-
-  return String(value)
-}
-
-interface VisibleColumn {
-  key: string
-  label: string
-}
-
-interface DataTableRowProps {
-  row: RecordRow
-  visibleColumns: VisibleColumn[]
-  isEditMode: boolean
-  isMutating: boolean
-  isSelectionMode: boolean
-  isSelected: boolean
-  onToggleSelection: (rowId: number) => void
-  rowDraft: Record<string, string> | undefined
-  toEditableCellValue: (value: unknown) => string
-  onUpdateDraftCell: (rowId: number, columnKey: string, value: string) => void
-  onContextEditRow: (row: RecordRow) => void
-  onOpenDeleteDialog: (row: RecordRow) => void
-  onOpenBulkDeleteDialog: () => void
-  onOpenExportDialog: (scope: "all" | "selected") => void
-  isHighlighted?: boolean
-}
-
-const EditableCell = memo(function EditableCell({
-  rowId,
-  columnKey,
-  initialValue,
-  onUpdateDraftCell,
-  isMutating,
-  changed,
-}: {
-  rowId: number
-  columnKey: string
-  initialValue: string
-  onUpdateDraftCell: (rowId: number, columnKey: string, value: string) => void
-  isMutating: boolean
-  changed: boolean
-}) {
-  const [value, setValue] = useState(initialValue)
-
-  const handleCommit = useCallback(() => {
-    onUpdateDraftCell(rowId, columnKey, value)
-  }, [rowId, columnKey, value, onUpdateDraftCell])
-
-  return (
-    <TableCell>
-      <div className="w-[300px]">
-        <Textarea
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onBlur={handleCommit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault()
-              handleCommit()
-            }
-          }}
-          className={cn(
-            "min-h-[40px] resize-none",
-            changed ? "border-amber-500" : ""
-          )}
-          disabled={isMutating}
-        />
-      </div>
-    </TableCell>
-  )
-})
-
-const DataTableRow = memo(function DataTableRow({
-  row,
-  visibleColumns,
-  isEditMode,
-  isMutating,
-  isSelectionMode,
-  isSelected,
-  onToggleSelection,
-  rowDraft,
-  toEditableCellValue,
-  onUpdateDraftCell,
-  onContextEditRow,
-  onOpenDeleteDialog,
-  onOpenBulkDeleteDialog,
-  onOpenExportDialog,
-  isHighlighted,
-}: DataTableRowProps) {
-  const rowRef = useRef<HTMLTableRowElement>(null)
-
-  useEffect(() => {
-    if (isHighlighted && rowRef.current) {
-      rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
-    }
-  }, [isHighlighted])
-
-  const showBulkMenu = isSelectionMode && isSelected
-
-  const timestampInfo = useMemo(() => {
-    if (!row.created_at) return null
-    const createdDate = new Date(row.created_at)
-    const updatedDate = row.updated_at ? new Date(row.updated_at) : createdDate
-
-    const isUpdated = updatedDate.getTime() > createdDate.getTime()
-    const targetDate = isUpdated ? updatedDate : createdDate
-    const prefix = isUpdated ? "Updated" : "Created"
-    const user = isUpdated ? row.updated_by : row.created_by
-
-    return {
-      label: `${prefix}: ${targetDate.toLocaleDateString()}${user ? ` by ${user}` : ""}`,
-      full: `${prefix}: ${targetDate.toLocaleString()}${user ? ` by ${user}` : ""}`,
-    }
-  }, [row.created_at, row.updated_at, row.created_by, row.updated_by])
-
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <TableRow
-          ref={rowRef}
-          className={cn(
-            isHighlighted
-              ? "bg-primary/10 transition-colors duration-1000"
-              : "",
-            isSelected ? "bg-muted" : ""
-          )}
-          data-state={isSelected ? "selected" : undefined}
-        >
-          {isSelectionMode && (
-            <TableCell className="w-[40px]">
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={() => onToggleSelection(row.id)}
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                disabled={isMutating}
-              />
-            </TableCell>
-          )}
-
-          {visibleColumns.map((column) => {
-            const originalValue = toEditableCellValue(row.data?.[column.key])
-            const draftValue = rowDraft?.[column.key]
-            const cellValue = draftValue ?? originalValue
-            const changed =
-              draftValue !== undefined && draftValue !== originalValue
-
-            if (isEditMode) {
-              return (
-                <EditableCell
-                  key={`${row.id}-${column.key}`}
-                  rowId={row.id}
-                  columnKey={column.key}
-                  initialValue={cellValue}
-                  onUpdateDraftCell={onUpdateDraftCell}
-                  isMutating={isMutating}
-                  changed={changed}
-                />
-              )
-            }
-
-            return (
-              <TableCell key={`${row.id}-${column.key}`}>
-                <div className="max-w-[400px] break-words whitespace-normal">
-                  {stringifyValue(row.data?.[column.key])}
-                </div>
-              </TableCell>
-            )
-          })}
-        </TableRow>
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        {showBulkMenu ? (
-          <>
-            <ContextMenuLabel>Bulk Actions</ContextMenuLabel>
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              onSelect={() => onOpenExportDialog("selected")}
-              disabled={isMutating}
-            >
-              Export Selected
-            </ContextMenuItem>
-            <ContextMenuItem
-              variant="destructive"
-              onSelect={onOpenBulkDeleteDialog}
-              disabled={isMutating}
-            >
-              Delete Selected
-            </ContextMenuItem>
-          </>
-        ) : (
-          <>
-            <ContextMenuLabel>Row {row.id}</ContextMenuLabel>
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              onSelect={() => onContextEditRow(row)}
-              disabled={isMutating}
-            >
-              Edit
-            </ContextMenuItem>
-            <ContextMenuItem
-              variant="destructive"
-              onSelect={() => onOpenDeleteDialog(row)}
-              disabled={isMutating}
-            >
-              Delete
-            </ContextMenuItem>
-            {timestampInfo && (
-              <>
-                <ContextMenuSeparator />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <ContextMenuLabel className="cursor-default text-xs font-normal text-muted-foreground">
-                        {timestampInfo.label}
-                      </ContextMenuLabel>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>{timestampInfo.full}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </>
-            )}
-          </>
-        )}
-      </ContextMenuContent>
-    </ContextMenu>
-  )
-})
+  RecordRow,
+  ColumnMetadataRow,
+  RecordSearchResponse,
+  RecordListResponse,
+  BACKEND_URL,
+  FilterCondition,
+  stringifyValue,
+  BOOLEAN_TRUE_VALUES,
+  BOOLEAN_FALSE_VALUES,
+} from "./types"
+import { DataTableRow } from "@/components/data/table/data-table-row"
+import { DeleteConfirmDialog } from "./components/dialogs/delete-confirm-dialog"
+import { RenameColumnDialog } from "./components/dialogs/rename-column-dialog"
+import { AddColumnDialog } from "./components/dialogs/add-column-dialog"
+import { FilterDialog } from "./components/dialogs/filter-dialog"
+import { ExportDialog } from "./components/dialogs/export-dialog"
 
 interface SearchSectionProps {
   initialValue: string
@@ -423,276 +120,6 @@ const SearchSection = memo(function SearchSection({
         </div>
       </div>
     </div>
-  )
-})
-
-interface AddColumnDialogProps {
-  isOpen: boolean
-  onOpenChange: (open: boolean) => void
-  columnPendingAdd: { key: string; label: string } | null
-  isMutating: boolean
-  onConfirm: (data: {
-    name: string
-    type: string
-    defaultValue: string
-  }) => void
-}
-
-const AddColumnDialog = memo(function AddColumnDialog({
-  isOpen,
-  onOpenChange,
-  columnPendingAdd,
-  isMutating,
-  onConfirm,
-}: AddColumnDialogProps) {
-  const [name, setName] = useState("")
-  const [type, setType] = useState("string")
-  const [defaultValue, setDefaultValue] = useState("")
-
-  const handleConfirm = () => {
-    onConfirm({ name, type, defaultValue })
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add New Column</DialogTitle>
-          <DialogDescription>
-            Add a new column to the right of &quot;
-            {columnPendingAdd?.label}&quot;.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label htmlFor="col-name" className="text-right text-sm">
-              Name
-            </label>
-            <Input
-              id="col-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="col-span-3"
-              placeholder="Column name"
-            />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label htmlFor="col-type" className="text-right text-sm">
-              Type
-            </label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="col-span-3" id="col-type">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="string">Text</SelectItem>
-                <SelectItem value="number">Number</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <div className="text-right">
-              <label htmlFor="col-default" className="text-sm font-medium">
-                Default
-              </label>
-              <p className="text-[10px] text-muted-foreground">
-                For existing rows
-              </p>
-            </div>
-            <Input
-              id="col-default"
-              value={defaultValue}
-              onChange={(e) => setDefaultValue(e.target.value)}
-              className="col-span-3"
-              placeholder={type === "number" ? "123" : "Default value"}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isMutating}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm} disabled={isMutating || !name.trim()}>
-            {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isMutating ? "Adding..." : "Add Column"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-})
-
-interface RenameColumnDialogProps {
-  isOpen: boolean
-  onOpenChange: (open: boolean) => void
-  columnPendingRename: { key: string; label: string } | null
-  isMutating: boolean
-  onConfirm: (newName: string) => void
-}
-
-const RenameColumnDialog = memo(function RenameColumnDialog({
-  isOpen,
-  onOpenChange,
-  columnPendingRename,
-  isMutating,
-  onConfirm,
-}: RenameColumnDialogProps) {
-  const [name, setName] = useState(columnPendingRename?.label ?? "")
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Rename Column</DialogTitle>
-          <DialogDescription>
-            Rename the &quot;{columnPendingRename?.label}&quot; column.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label htmlFor="new-name" className="text-right">
-              New Name
-            </label>
-            <Input
-              id="new-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="col-span-3"
-              placeholder="Enter new column name"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isMutating}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => onConfirm(name)}
-            disabled={isMutating || !name.trim()}
-          >
-            {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isMutating ? "Renaming..." : "Rename"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-})
-
-interface FilterDialogProps {
-  isOpen: boolean
-  onOpenChange: (open: boolean) => void
-  visibleColumns: VisibleColumn[]
-  onConfirm: (filter: {
-    columnKey: string
-    operator: string
-    value: string
-  }) => void
-}
-
-const FilterDialog = memo(function FilterDialog({
-  isOpen,
-  onOpenChange,
-  visibleColumns,
-  onConfirm,
-}: FilterDialogProps) {
-  const [columnKey, setColumnKey] = useState("")
-  const [operator, setOperator] = useState("contains")
-  const [value, setValue] = useState("")
-
-  const handleConfirm = () => {
-    onConfirm({ columnKey, operator, value })
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Add Filter</DialogTitle>
-          <DialogDescription>
-            Add a filter to the current view.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label htmlFor="filter-column" className="text-right text-sm">
-              Column
-            </label>
-            <Select value={columnKey} onValueChange={setColumnKey}>
-              <SelectTrigger className="col-span-3" id="filter-column">
-                <SelectValue placeholder="Select a column" />
-              </SelectTrigger>
-              <SelectContent>
-                {visibleColumns.map((column) => (
-                  <SelectItem key={column.key} value={column.key}>
-                    {column.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label htmlFor="filter-operator" className="text-right text-sm">
-              Operator
-            </label>
-            <Select value={operator} onValueChange={setOperator}>
-              <SelectTrigger className="col-span-3" id="filter-operator">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="contains">Contains (text)</SelectItem>
-                <SelectItem value="=">Equals</SelectItem>
-                <SelectItem value=">">Greater than (number)</SelectItem>
-                <SelectItem value="<">Less than (number)</SelectItem>
-                <SelectItem value=">=">&gt;= Greater or equal</SelectItem>
-                <SelectItem value="<=">&lt;= Less or equal</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label htmlFor="filter-value" className="text-right text-sm">
-              Value
-            </label>
-            <Input
-              id="filter-value"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              className="col-span-3"
-              placeholder={
-                operator.match(/[><=]/)
-                  ? "Enter a number"
-                  : "Enter filter value"
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault()
-                  handleConfirm()
-                }
-              }}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={!columnKey.trim() || !value.trim()}
-          >
-            Add Filter
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 })
 
@@ -2117,74 +1544,25 @@ function DataPageContent() {
             </div>
           )}
 
-          <Dialog
-            open={isDeleteDialogOpen}
+          <DeleteConfirmDialog
+            isOpen={isDeleteDialogOpen}
             onOpenChange={setIsDeleteDialogOpen}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Delete Record</DialogTitle>
-                <DialogDescription>
-                  This will permanently delete record #{recordPendingDelete?.id}{" "}
-                  from SQLite and Chroma.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDeleteDialogOpen(false)}
-                  disabled={isMutating}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleConfirmDelete}
-                  disabled={isMutating}
-                >
-                  Delete
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            title="Delete Record"
+            description={`This will permanently delete record #${recordPendingDelete?.id} from SQLite and Chroma.`}
+            onConfirm={handleConfirmDelete}
+            isMutating={isMutating}
+          />
 
-          <Dialog
-            open={isColumnDeleteDialogOpen}
+          <DeleteConfirmDialog
+            isOpen={isColumnDeleteDialogOpen}
             onOpenChange={setIsColumnDeleteDialogOpen}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Delete Column</DialogTitle>
-                <DialogDescription>
-                  This will permanently delete the &quot;
-                  {columnPendingDelete?.label}&quot; column from all records and
-                  metadata. This action cannot be undone.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsColumnDeleteDialogOpen(false)}
-                  disabled={isMutating}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleConfirmColumnDelete}
-                  disabled={isMutating}
-                >
-                  {isMutating && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {isMutating ? "Deleting..." : "Delete"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            title="Delete Column"
+            description={`This will permanently delete the "${columnPendingDelete?.label}" column from all records and metadata. This action cannot be undone.`}
+            onConfirm={handleConfirmColumnDelete}
+            isMutating={isMutating}
+          />
 
           <RenameColumnDialog
-            key={`rename-${columnPendingRename?.key || "none"}-${isColumnRenameDialogOpen}`}
             isOpen={isColumnRenameDialogOpen}
             onOpenChange={setIsColumnRenameDialogOpen}
             columnPendingRename={columnPendingRename}
@@ -2193,7 +1571,6 @@ function DataPageContent() {
           />
 
           <AddColumnDialog
-            key={`add-${isColumnAddDialogOpen}`}
             isOpen={isColumnAddDialogOpen}
             onOpenChange={setIsColumnAddDialogOpen}
             columnPendingAdd={columnPendingAdd}
@@ -2201,76 +1578,25 @@ function DataPageContent() {
             onConfirm={handleConfirmColumnAdd}
           />
 
-          <Dialog
-            open={isExportDialogOpen}
+          <ExportDialog
+            isOpen={isExportDialogOpen}
             onOpenChange={setIsExportDialogOpen}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Export Data</DialogTitle>
-                <DialogDescription>
-                  Select the export format and download the data.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  value={exportFormat}
-                  onValueChange={(value: "csv" | "xlsx") =>
-                    setExportFormat(value)
-                  }
-                  disabled={isExporting}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select export format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="csv">CSV</SelectItem>
-                    <SelectItem value="xlsx">XLSX</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button onClick={handleExportData} disabled={isExporting}>
-                  {isExporting ? "Exporting..." : "Export"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+            format={exportFormat}
+            onFormatChange={setExportFormat}
+            onExport={handleExportData}
+            isExporting={isExporting}
+          />
 
-          <Dialog
-            open={isBulkDeleteDialogOpen}
+          <DeleteConfirmDialog
+            isOpen={isBulkDeleteDialogOpen}
             onOpenChange={setIsBulkDeleteDialogOpen}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Bulk Delete Records</DialogTitle>
-                <DialogDescription>
-                  Are you sure you want to delete {selectedRowIds.size} selected
-                  records? This action cannot be undone.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsBulkDeleteDialogOpen(false)}
-                  disabled={isMutating}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleConfirmBulkDelete}
-                  disabled={isMutating}
-                >
-                  {isMutating && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {isMutating ? "Deleting..." : "Delete"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            title="Bulk Delete Records"
+            description={`Are you sure you want to delete ${selectedRowIds.size} selected records? This action cannot be undone.`}
+            onConfirm={handleConfirmBulkDelete}
+            isMutating={isMutating}
+          />
 
           <FilterDialog
-            key={`filter-${isFilterDialogOpen}`}
             isOpen={isFilterDialogOpen}
             onOpenChange={setIsFilterDialogOpen}
             visibleColumns={visibleColumns}
