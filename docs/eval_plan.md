@@ -1,24 +1,23 @@
-20 queries for testing
-1. List all parental lines collected from the province of Laguna.
-2. Find varieties collected in Region 4A during the year 2018.
-3. Show me corn varieties from the southern part of the Philippines.
-4. Find all varieties with purple tassels.
-5. Show me only flint type kernels with white color.
-6. Identify tall plants where the plant height is greater than 220 cm.
-7. Find lines with short stature (under 150 cm) but high ear placement (above 80 cm).
-8. Search for varieties with many grain rows.
-9. Which lines have a high lysine status?
-10. Find varieties with iron content higher than average and zinc content higher than average.
-11. List white corn varieties that have high amylose levels (above 25%).
-12. Find corn that is nutritionally dense.
-13. Find all lines resistant to downy mildew.
-14. Identify varieties that are drought tolerant and acidic soil tolerant.
-15. Show me varieties that can survive flooding.
-16. Which lines are pest resistant?
-17. List varieties that take less than 50 days to reach 50% anthesis.
-18. Find early maturing flint corn.
-19. Find lines with a short anthesis-silking interval (ASI) of 2 days or less.
-20. Search for high-yielding candidates.
+1. Find records associated with lodging resistance.
+2. Show me varieties that are early maturing.
+3. List parental lines that have purple tassels.
+4. Retrieve data regarding ear length.
+5. Which varieties resist lodging and have purple tassels?
+6. Show me maize lines that are high yielding and early maturing.
+7. Find lines with excellent stem strength.
+8. Which maize varieties have tight husk fitting?
+9. Are there plants with long ears and high lodging resistance?
+10. Which parental lines show strong stem breakage resistance?
+11. List varieties with a plant height between 200 and 250 cm.
+12. Find maize lines with an ear length greater than 15 cm.
+13. Which parental lines have a high ear height?
+14. Show me the short plant varieties.
+15. Find maize lines that have a high seed count.
+16. Find lines with strong stems that do not lodge.
+17. Show me varieties suitable for early harvest.
+18. List lines that are known to be resistant to lodging.
+19. Find flint type maize varieties with tight husks.
+20. Which parental lines have a pink silk color?
 
 Record for sem search and kw search.
 Record within top k:
@@ -33,9 +32,14 @@ The mean of the Average Precision (AP) scores across all test queries. This metr
 
 
 for usability testing: tasks
-1. Find all parental lines that are located in Barangay Pili Drive and have a Yellow Kernel Color.
-2. Find parental lines that would be good for planting in flooded or very wet conditions and have high protein content."
-3. A breeder needs a variety that is early maturing (short time to anthesis), has orange/flint kernels, and is resistant to Downy Mildew.
+1. Ingest a new dataset from a CSV file into the system.
+2. Create, rename, and delete a custom column in the dataset to organize phenotypic data.
+3. Perform a semantic search for a specific parental line based on a natural language description and verify the accuracy of the retrieved records.
+4. Perform a keyword search for a specific parental line using an identifier and compare the results with semantic search.
+5. Filter the data table to display only records meeting specific criteria (e.g., plant height range, kernel type).
+6. Export the currently viewed data table as a CSV or Excel file.
+7. Update an existing record's details to reflect new field observations and ensure the system updates the corresponding vector embedding.
+
 
 Test w/ RAG and Excel.
 Record: Participant, Task, System, Time taken (sec), Success (Y/N), Notes
