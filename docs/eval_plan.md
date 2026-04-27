@@ -1,44 +1,44 @@
 Hello, ito po yung queries and system usability tasks queries:
 
-&#x20;1. Find records associated with lodging resistance.
+1. Find records associated with lodging resistance.
 
-&#x20;2. Show me varieties that are early maturing.
+2. Show me varieties that are early maturing.
 
-&#x20;3. List parental lines that have purple tassels. 
+3. List parental lines that have purple tassels. 
 
-4\. Retrieve data regarding ear length. 
+4. Retrieve data regarding ear length. 
 
-5\. Which varieties resist lodging and have purple tassels?
+5. Which varieties resist lodging and have purple tassels?
 
-&#x20;6. Show me maize lines that are high yielding and early maturing. 
+6. Show me maize lines that are high yielding and early maturing. 
 
-7\. Find lines with excellent stem strength.
+7. Find lines with excellent stem strength.
 
-&#x20;8. Which maize varieties have tight husk fitting? 
+8. Which maize varieties have tight husk fitting? 
 
-9\. Are there plants with long ears and high lodging resistance? 
+9. Are there plants with long ears and high lodging resistance? 
 
-10\. Search for lines that can survive in very dry soil.
+10. Search for lines that can survive in very dry soil.
 
-11\. List varieties with a plant height between 200 and 250 cm. 
+11. List varieties with a plant height between 200 and 250 cm. 
 
-12\. Find maize lines with an ear length greater than 15 cm. 
+12. Find maize lines with an ear length greater than 15 cm. 
 
-13\. Find parental lines that can handle saturated or flooded soil.
+13. Find parental lines that can handle saturated or flooded soil.
 
-14\. Find varieties that show resistance to ear rot.
+14 Find varieties that show resistance to ear rot.
 
-15\. Retrieve parental lines with more than 13 rows of grain.
+15. Retrieve parental lines with more than 13 rows of grain.
 
-16\. Retrieve parental lines that are characterized by having a red cob color.
+16. Retrieve parental lines that are characterized by having a red cob color.
 
-17\. Show me varieties suitable for early harvest. 
+17. Show me varieties suitable for early harvest. 
 
-18\. Find varieties that show good resistance to common diseases. 
+18. Find varieties that show good resistance to common diseases. 
 
-19\. Find flint type maize varieties with tight husks. 
+19. Find flint type maize varieties with tight husks. 
 
-20\. Which parental lines have a pink silk color? 
+20. Which parental lines have a pink silk color? 
 
 Record for sem search and kw search.
 Record within top k:
