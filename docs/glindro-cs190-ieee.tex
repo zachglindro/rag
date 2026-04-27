@@ -1,5 +1,5 @@
 \documentclass[journal]{./IEEE/IEEEtran}
-\usepackage{amsmath,cite,graphicx,microtype, tikz}
+\usepackage{amsmath,apacite,graphicx,microtype,tikz,xurl}
 
 \newcommand{\SPTITLE}{Enhancing Cereal Crops Phenotypic Trait Searchability and Parental Line Selection Using Retrieval-Augmented Semantic Search}
 \newcommand{\ADVISEE}{Zach Dwayne M. Glindro}
@@ -33,7 +33,8 @@
 
 % ABSTRACT
 \begin{abstract}
-Efficient parental line selection is fundamental to crop improvement but is often impeded by the limitations of keyword-based search within spreadsheet applications. This reliance on exact string matching causes researchers to overlook valuable phenotypic data due to terminology inconsistencies. This study proposes the development of a semantic search system utilizing Retrieval-Augmented Generation to enhance trait searchability in maize breeding. By transforming textual descriptions into dense vector embeddings, the system allows researchers to query databases using natural language, retrieving records based on conceptual similarity rather than lexical overlap. The proposed architecture integrates a vector database for indexing and a large language model for generating context-aware summaries within a web-based interface. System performance will be assessed against a traditional keyword search baseline using precision and recall metrics, alongside usability testing with researchers. This research aims to demonstrate how natural language processing can streamline the selection of parental lines.
+% TODO: to redo
+to redo
 \end{abstract}
 
 % INDEX TERMS
@@ -51,15 +52,15 @@ The main problem with using spreadsheets is their reliance on simple keyword-bas
 
 To overcome these limitations, modern information retrieval has shifted towards semantic search. Semantic search focuses on understanding the meaning behind a query rather than just matching keywords. This approach is made possible by pre-trained language models (PLMs), which can transform text into dense vector representations called "embeddings"~\cite{mandikal_sparse_2024,zhao_dense_2024}. Models like Sentence-BERT are specifically designed to create embeddings where similar concepts are located close to each other in vector space, allowing for effective similarity comparisons using metrics like cosine similarity~\cite{reimers_sentence-bert_2019}. This turns the search problem into a nearest neighbor search, which can be efficiently handled by specialized vector databases~\cite{zhao_chat2data_2024}.
 
-This study will apply these techniques using a framework called Retrieval-Augmented Generation (RAG). A RAG system has two main parts: a "retriever" that uses semantic search to find the most relevant pieces of information from a knowledge base, and a "generator," which is a large language model (LLM) that takes this retrieved information as context to provide a clear and accurate answer~\cite{lewis_retrieval-augmented_2021}. This approach has been successful in other specialized fields, such as agriculture and biomedicine, because it grounds the LLM's responses in factual data, which helps to avoid errors and "hallucinations"~\cite{balaguer_rag_2024,garcia_improving_2025,hier_simplified_2025, soong_improving_2024}. By building a RAG-based semantic search system, this study aims to provide plant breeders with a more intuitive and effective way to analyze phenotypic trait data, ultimately improving the efficiency of parental line selection.
+This study applies these techniques using a framework called Retrieval-Augmented Generation (RAG). A RAG system has two main parts: a "retriever" that uses semantic search to find the most relevant pieces of information from a knowledge base, and a "generator," which is a large language model (LLM) that takes this retrieved information as context to provide a clear and accurate answer~\cite{lewis_retrieval-augmented_2021}. This approach has been successful in other specialized fields, such as agriculture and biomedicine, because it grounds the LLM's responses in factual data, which helps to avoid errors and "hallucinations"~\cite{balaguer_rag_2024,garcia_improving_2025,hier_simplified_2025, soong_improving_2024}. By building a RAG-based semantic search system, this study aimed provide plant breeders with a more intuitive and effective way to analyze phenotypic trait data, ultimately improving the efficiency of parental line selection.
 
 \subsection{Statement of the Problem}
 Traditional methods for analyzing phenotypic trait data in plant breeding often rely on general-purpose spreadsheets like Microsoft Excel and Google Sheets. The primary mechanism for data retrieval in these applications is keyword-based lexical search, which is fundamentally limited by its reliance on exact string matching. This rigidity creates a barrier to data , placing a burden on the user's recall of specific terminology and data entry standards, which can vary between researchers and over time. Consequently, this leads to incomplete search results, risking the omission of parental lines from consideration.
 
-Recent advancements in natural language processing, particularly in dense embeddings and retrieval-augmented generation (RAG) offer a solution to this challenge. The study aims to bridge this semantic gap by designing and evaluating a system that leverages these technologies. By doing so, the proposed system will empower researchers to find data based on conceptual meaning, thereby improving the efficiency of parental line selection.
+Recent advancements in natural language processing, particularly in dense embeddings and retrieval-augmented generation (RAG) offer a solution to this challenge. This study aimed to bridge this semantic gap by designing and evaluating a system that leverages these technologies. By doing so, the system empowers researchers to find data based on conceptual meaning, thereby improving the efficiency of parental line selection.
 
 \subsection{Significance of the Study}
-This study aims to demonstrate a practical framework to transition from keyword-based data retrieval in spreadsheets to a flexible semantic search system for phenotypic trait data. This shift alleviates the burden on researchers to recall exact terminology and adhere to strict data standards, which hinder effective data . The proposed system will allow users with varying levels of technical expertise, from researchers to lab technicians, to query the database using natural, descriptive language and receive conceptually relevant results. By providing a practical case study on applying retrieval-augmented generation and large language models to a specialized scientific domain, this study aims to improve the efficiency of parental line selection and offer a model for integrating semantic search into other research fields grappling with similar data accessibility challenges.
+This study aimed to demonstrate a practical framework to transition from keyword-based data retrieval in spreadsheets to a flexible semantic search system for phenotypic trait data. This shift alleviates the burden on researchers to recall exact terminology and adhere to strict data standards, which hinder effective data . The system allows users with varying levels of technical expertise, from researchers to lab technicians, to query the database using natural, descriptive language and receive conceptually relevant results. By providing a practical case study on applying retrieval-augmented generation and large language models to a specialized scientific domain, this study aimed to improve the efficiency of parental line selection and offer a model for integrating semantic search into other research fields grappling with similar data accessibility challenges.
 
 \subsection{Objectives of the Study}
 The general objective of the study is to design, implement, and evaluate a retrieval-augmented semantic search system to improve the efficiency and accuracy of phenotypic trait searchability. The specific objectives are the following:
@@ -67,7 +68,7 @@ The general objective of the study is to design, implement, and evaluate a retri
 \begin{enumerate}
     \item To develop a Retrieval-Augmented Generation (RAG) pipeline using a sentence embedding model and a vector database for indexing and searching phenotypic trait descriptions
     \item To integrate the semantic search pipeline into a web application to provide a natural language interface for researchers
-    \item To evaluate the performance of the semantic search system against a traditional keyword-based search baseline, using standard information retrieval metrics such as Precision@k, Recall@k, and Mean Average Precision (MAP); and
+    \item To evaluate the performance of the semantic search system against a traditional keyword-based search baseline, using standard information retrieval metrics: Precision@k, Recall@k, and Mean Average Precision (MAP); and
     \item To assess the web application's effectiveness and usability in facilitating parental line selection.
 \end{enumerate}
 
@@ -90,6 +91,10 @@ While powerful, general-purpose PLMs often lack the specialized vocabulary and d
 
 A more recent paradigm shifts the focus from resource-intensive pre-training on raw data to taking advantage of the vast knowledge contained within scientific literature via large, general-purpose Large Language Models (LLMs) like the GPT series. The GenePT model exemplifies this approach by generating gene and cell embeddings directly from their textual descriptions in curated databases like NCBI, using a powerful off-the-shelf embedding model from ChatGPT~\cite{chen_genept_2023}. This method composes representations for complex entities, such as a single cell, by either creating a weighted average of the embeddings of its constituent genes or by forming a sentence-like sequence of gene names ordered by expression level to be embedded as a whole. This approach offers an effective path for creating biological foundation models, as it bypasses the need for extensive data curation and pre-training while capturing a high-level, human-curated knowledge source that often results in comparable or superior performance on domain-specific tasks~\cite{chen_genept_2023}.
 
+Despite the high accuracy of transformer-based bi-encoders, their reliance on the self-attention mechanism introduces significant latency, particularly on CPU-based systems or in environments with limited hardware resources. To bridge the gap between performance and efficiency, a recent paradigm shift involves the distillation of large transformer models into high-performance "static" embeddings. Using frameworks like \textit{model2vec}, the high-dimensional knowledge of models like \textit{mxbai-embed-large-v1} can be compressed into a fixed vocabulary lookup table through techniques like weight-averaging and k-means clustering of token embeddings~\cite{minishlab2024model2vec}. 
+
+Models such as \texttt{potion-mxbai-micro} represent the extreme of this efficiency, reducing model size to under one megabyte while maintaining a significant portion of the original model's semantic capabilities. Because these models eliminate the need for a heavy neural network pass during inference—relying instead on pure NumPy-based lookups—they can achieve up to 80-fold increases in speed on standard consumer CPUs compared to traditional bi-encoders. This makes them uniquely suited for real-time agricultural search applications where rapid response times are prioritized over the massive parameter counts of general-purpose language models.
+
 \subsection{Vector Databases}
 Semantic search requires specific infrastructure for managing the dense vector embeddings that represent conceptual meaning. Traditional relational databases, designed for structured data and exact matching, are not suited for the high-dimensional similarity search required by these embeddings~\cite{ma_comprehensive_2025}. This has led to the emergence of vector databases (VDBs), which are purpose-built systems for the efficient storage and retrieval of large-scale vector collections~\cite{monir_vectorsearch_2024}. A core principle of VDBs is the shift from Nearest Neighbor Search (NNS), which is computationally infeasible for large datasets, to Approximate Nearest Neighbor Search (ANNS). ANNS algorithms compromise a small degree of accuracy for gains in search speed and reductions in memory usage~\cite{ma_comprehensive_2025, douze_faiss_2025}.
 
@@ -111,11 +116,11 @@ Alongside qualitative judgments, system performance is quantitatively assessed t
 \section{Materials and Methods}
 
 \subsection{System Architecture}
-The proposed system is designed as a client-server web application that integrates a Retrieval-Augmented Generation (RAG) pipeline to provide semantic search capabilities over phenotypic trait data. The architecture, illustrated in Figure \ref{fig:architecture}, is composed of a frontend user interface, a backend server with a REST API, a relational database for storing original data, and a vector database for enabling semantic search.
+The system was designed as a client-server web application that integrates a Retrieval-Augmented Generation (RAG) pipeline to provide semantic search capabilities over phenotypic trait data. The architecture, illustrated in Figure \ref{fig:architecture}, was composed of a frontend user interface, a backend server with a REST API, a relational database for storing original data, and a vector database for enabling semantic search.
 
 \begin{figure}
     \centering
-    \includegraphics[width=0.5\linewidth]{images/system_arch.png}
+    \includegraphics[width=0.5\linewidth]{images/updated_system_arch.png}
     \caption{System Architecture of the RAG-based application.}
     \label{fig:architecture}
 \end{figure}
@@ -133,9 +138,9 @@ The user interaction flow is as follows:
 \end{itemize}
 
 \subsection{Data Acquisition and Preprocessing}
-Due to the confidential nature of the source data, a synthetic dataset will be generated to mirror the structure of the current sheets being used in the Cereal Crops Section. The schema will be based on the column structure provided by the Cereal Crops Section, which includes fields such as Local Name and Plant height (cm), among others. A domain expert from the Cereal Crops Section will review a sample of the synthetic dataset to certify that the synthetic dataset realistically reflects actual datasets.
+Due to the confidential nature of the source data, a synthetic dataset was generated to mirror the structure of the current sheets being used in the Cereal Crops Section. The schema was based on the column structure provided by the Cereal Crops Section, which includes fields such as Local Name and Plant height (cm), among others. A domain expert from the Cereal Crops Section reviewed the sample of the synthetic dataset to certify that the synthetic dataset realistically reflects actual datasets.
 
-The synthesis process will involve generating approximately 500 records. For categorical columns (e.g., Kernel type, Silk color), data will be sampled from a predefined list of plausible values. For numerical columns (e.g., Plant height, Ear length), values will be randomly generated within realistic ranges. Free-text columns (e.g., Others) will be populated with varied, descriptive phrases to simulate researcher notes. This process will ensure the dataset contains the semantic diversity required to test the system robustly.
+The synthesis process involved generating approximately 500 records. For categorical columns (e.g., Kernel type, Silk color), data were sampled from a predefined list of plausible values. For numerical columns (e.g., Plant height, Ear length), values were randomly generated within realistic ranges. Free-text columns (e.g., Others) were populated with varied, descriptive phrases to simulate researcher notes. This process ensured the dataset contains the semantic diversity required to test the system robustly.
 
 \begin{figure*}[htbp]
 \centering
@@ -157,15 +162,17 @@ The synthesis process will involve generating approximately 500 records. For cat
     \end{tabular}
 };
 
-\node (template) [process, right of=table, xshift=2.5cm] {Template\\Serialization};
+\node (template) [process, right of=table, xshift=2.5cm] {JSON\\Serialization};
 
-\node (text) [databox, right of=template, xshift=3.0cm, label=above:\textbf{Natural Language}] {
-    ``Variety X is\\
-    a Flint type with\\
-    tight husks...''
+\node (text) [databox, right of=template, xshift=3.0cm, label=above:\textbf{Serialized JSON}] {
+    \{ \\
+    \hspace{1em}"local name": "IPB-99", \\
+    \hspace{1em}"kernel type": "Flint", \\
+    \hspace{1em}"husk fit": "Tight" \\
+    \}
 };
 
-\node (model) [process, right of=text, xshift=2.5cm] {Embedding Model\\(Qwen3)};
+\node (model) [process, right of=text, xshift=2.5cm] {Embedding Model\\(potion-mxbai-micro)};
 
 \node (vector) [rectangle, draw=black, thick, right of=model, xshift=2.5cm, align=center, label=above:\textbf{Vector}] {
     $[0.12]$ \\ $[-0.5]$ \\ $[0.88]$ \\ $\vdots$
@@ -182,22 +189,22 @@ The synthesis process will involve generating approximately 500 records. For cat
 \label{fig:pipeline}
 \end{figure*}
 
-To prepare this structured data for semantic search, a preprocessing pipeline (Fig. \ref{fig:pipeline}) will be implemented. The core step will involve transforming each row of structured data into a descriptive paragraph. This will be achieved using a template-based approach to construct a natural language description for each parental line, allowing for the embedding model to capture its semantic meaning. An example of a generated description is as follows:
+To prepare this structured data for semantic search, a preprocessing pipeline (Fig. \ref{fig:pipeline}) was implemented to transform each row into a cleaned, serialized JSON string. This approach replaced fixed narrative templates with a dynamic normalization process that filtered out noise and placeholder values such as "n/a", "null", or "nan". Internal database column names were converted into human-readable labels by replacing underscores with spaces before being paired with their respective values. The resulting JSON structure ensured that the embedding model processed a concise representation of only the populated traits, avoiding the linguistic overhead of traditional sentence templates. An example of a processed record is as follows:
 
-% TODO: format correctly?
-"Variety [Local name] is a [Kernel type] type with [Tassel color] tassels and a plant height of [Plant height] cm. Observations noted [\# plants lodged] lodged plants and the presence of [Plant disease observed]."
+\texttt{{"local name": "IPB-99", "kernel type": "flint", "husk": "tight", "lodged plants": "0"}}.
 
-The original synthetic data will be stored in a SQLite database to allow for retrieval of complete records. Each entry will be assigned a unique ID, which will serve as a foreign key to its corresponding vector representation in the vector database.
+
+The original synthetic data was stored in a SQLite database to allow for retrieval of complete records. Each entry was assigned a unique ID, which will serve as a foreign key to its corresponding vector representation in the vector database.
 
 \subsection{Implementation of the RAG-based Semantic Search System}
-The system will be developed using a modern technology stack selected for its efficiency and suitability for a self-hosted environment.
+The system was developed using a modern technology stack selected for its efficiency and suitability for a self-hosted environment.
 
 \begin{itemize}
-    \item \textbf{Backend Framework:} The backend will be built using FastAPI (Python). This framework was chosen for its high performance, ease of use, and automatic generation of interactive API documentation.
-    \item \textbf{Frontend Framework:} The user interface will be developed using Next.js, a popular React framework. The component library shadcn/ui, built on top of Radix UI and styled with Tailwind CSS, will be used for UI construction. This stack was selected for several reasons: Next.js provides server-side rendering (SSR) and static site generation (SSG) capabilities, which improve initial page load times and overall performance. Shadcn/ui offers a collection of beautifully designed, accessible, and unstyled components that can be easily customized, making the development of a professional and intuitive interface accessible to the researcher. The utility-first approach of Tailwind CSS allows for rapid styling and ensures a consistent design system.
-    \item \textbf{Embedding Model:} The Qwen3-Embedding-0.6B model will be used to generate dense vector representations of both the phenotypic trait descriptions and the user's natural language queries. It is a multilingual model, capable of understanding domain-specific terminology and local names that may appear in the dataset. It is also instruction-aware, allowing it to better capture the user's intent from the query.
-    \item \textbf{Vector Database:} ChromaDB will be the vector store for the indexed trait embeddings. It is an open-source, AI-native database designed for simplicity and developer productivity. Its ability to run in-memory or be persisted to disk makes it apt for a small-scale, self-hosted application.
-    \item \textbf{Large Language Model:} For the generation component of the RAG pipeline, the Qwen3-4B model will be used. This specific variant was chosen as it balances accuracy in responses and compactness. It is an instruction-tuned model designed for high performance on consumer-grade hardware. Its small size makes it ideal for local deployment. Using an LLM from the same Qwen series as the embedding model may also provide better synergy and understanding between the retrieved context and the generation task.
+    \item \textbf{Backend Framework:} The backend was built using FastAPI (Python). This framework was chosen for its high performance, ease of use, and automatic generation of interactive API documentation.
+    \item \textbf{Frontend Framework:} The user interface was developed using Next.js, a popular React framework. The component library shadcn/ui, built on top of Radix UI and styled with Tailwind CSS, was used for UI construction. This stack was selected for several reasons: Next.js provides server-side rendering (SSR) and static site generation (SSG) capabilities, which improve initial page load times and overall performance. Shadcn/ui offers a collection of accessible and unstyled components that can be easily customized, making the development of a professional and intuitive interface accessible to the researcher. The utility-first approach of Tailwind CSS allows for rapid styling and ensures a consistent design system.
+    \item \textbf{Embedding Model:} The potion-mxbai-micro model was used to generate dense vector representations. Distilled via the \textit{model2vec} framework from \textit{mxbai-embed-large-v1}, this is an ultra-compact static embedding model (700KB) that produces 256-dimensional vectors. It was selected specifically to address latency concerns, as it offers faster inference speeds on CPU compared to standard Transformer-based bi-encoders while maintaining high semantic accuracy (68.91 average on MTEB). This efficiency allows the system to remain highly responsive even when hosted on consumer-grade or aging hardware without GPU acceleration.
+    \item \textbf{Vector Database:} ChromaDB was the vector store for the indexed trait embeddings. It is an open-source, AI-native database designed for simplicity and developer productivity. Its ability to run in-memory or be persisted to disk made it apt for a small-scale, self-hosted application.
+    \item \textbf{Large Language Model:} For the generation component of the RAG pipeline, the \textbf{Qwen3-0.6B} model was selected and deployed in its non-thinking (standard instruction-following) mode. While the Qwen3 architecture supports extended reasoning (thinking mode), this system strictly disabled that feature to prioritize response latency and throughput.  This configuration ensured that the system can generate summaries on consumer-grade hardware without computational overhead.
 \end{itemize}
 
 \subsection{Development of the Baseline System}
@@ -278,8 +285,11 @@ The following 10 items will be used to assess the usability of the system. Parti
 % Many thanks to...
 
 % BIBLIOGRAPHY
-\bibliographystyle{./IEEE/IEEEtran}
-\bibliography{./glindro-cs190-ieee}
+\begin{sloppypar}
+    \raggedright 
+    \bibliographystyle{apacite}
+    \bibliography{./glindro-cs190-ieee}
+\end{sloppypar}
 
 % BIOGRAPHY
 \begin{biography}[{\includegraphics[width=1in, height=1.25in, clip, keepaspectratio]{./glindro.eps}}]{Zach Dwayne M. Glindro}
