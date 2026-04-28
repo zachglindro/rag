@@ -165,3 +165,15 @@ Query 3:
 - Excel: Y, in 48s.
 
 Their comments: Search is inconsistent, so we still need to finetune it. The benefit of Excel is that we have filters, which we can use to more specifically narrow down the rows.
+
+
+---
+
+SUS scores
+User 1: 75
+User 2: 70
+User 3: 52.5
+User 4: 72.5
+User 5: 87.5
+
+Average: 71.5

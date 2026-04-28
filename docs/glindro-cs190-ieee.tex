@@ -125,23 +125,26 @@ The system was designed as a client-server web application that integrates a Ret
     \label{fig:architecture}
 \end{figure}
 
+The application provides two distinct interaction modes to facilitate data exploration and management:
+
+\begin{enumerate}
+\item \textbf{Conversational RAG (Chat Mode):} Located on the home page, this interface allows users to interact with the \textit{Qwen3-0.6B} LLM. The LLM acts as an autonomous agent equipped with a custom "search tool." When a user submits a natural language query, the LLM determines if a database lookup is required. If so, it invokes the tool to trigger the semantic search pipeline, synthesizes the retrieved records into a natural language summary, and presents the formatted data to the user.
+\item \textbf{Direct Semantic Search (Edit Mode):} Located on the data page, this interface provides a traditional tabular view of the dataset. It allows for direct semantic querying of the vector database without LLM intervention. This mode also supports administrative tasks, including record updates and dynamic schema modifications such as adding or deleting columns via context menus.
+\end{enumerate}
+
 The user interaction flow is as follows:
 \begin{itemize}
-    \item A researcher inputs a natural language query (e.g., "varieties that resist lodging and have purple tassels") into the web interface.
+    \item A researcher inputs a natural language query into the web interface.
     \item The frontend transmits the query to the backend API.
-    \item The backend server uses a pre-trained sentence-transformer model to convert the text query into a dense vector embedding.
-    \item This query vector is used to perform an Approximate Nearest Neighbor (ANN) search against the vector database to retrieve the top-k most semantically similar data entries.
-    \item The unique identifiers from search results are used to fetch the full, original data records from a corresponding SQL database.
-    \item The retrieved data is formatted as context and passed to a local Large Language Model (LLM), which generates a summary of the findings.
-    \item The backend returns both the generated summary and the structured data of the retrieved rows to the frontend.
-    \item The interface displays the summary for a quick overview and the detailed records for analysis.
+    \item The backend server converts the query into a dense vector embedding using the \textit{potion-mxbai-micro} bi-encoder.
+    \item This vector is used to perform an Approximate Nearest Neighbor (ANN) search against the ChromaDB vector database to retrieve an initial candidate set of results.
+    \item The query and the candidate records are passed to the \textit{jina-reranker-v1-tiny-en} cross-encoder. This model re-scores and re-ranks the candidates to ensure the most semantically relevant rows are at the top of the list.
+    \item The unique identifiers from the top re-ranked results are used to fetch the full records from the SQL database.
+    \item The retrieved data is passed to the LLM for summarization.
+    \item The backend returns both the generated summary and the re-ranked structured data to the frontend.
 \end{itemize}
 
 \subsection{Data Acquisition and Preprocessing}
-Due to the confidential nature of the source data, a synthetic dataset was generated to mirror the structure of the current sheets being used in the Cereal Crops Section. The schema was based on the column structure provided by the Cereal Crops Section, which includes fields such as Local Name and Plant height (cm), among others. A domain expert from the Cereal Crops Section reviewed the sample of the synthetic dataset to certify that the synthetic dataset realistically reflects actual datasets.
-
-The synthesis process involved generating approximately 500 records. For categorical columns (e.g., Kernel type, Silk color), data were sampled from a predefined list of plausible values. For numerical columns (e.g., Plant height, Ear length), values were randomly generated within realistic ranges. Free-text columns (e.g., Others) were populated with varied, descriptive phrases to simulate researcher notes. This process ensured the dataset contains the semantic diversity required to test the system robustly.
-
 \begin{figure*}[htbp]
 \centering
 \resizebox{\textwidth}{!}{
@@ -189,7 +192,9 @@ The synthesis process involved generating approximately 500 records. For categor
 \label{fig:pipeline}
 \end{figure*}
 
-To prepare this structured data for semantic search, a preprocessing pipeline (Fig. \ref{fig:pipeline}) was implemented to transform each row into a cleaned, serialized JSON string. This approach replaced fixed narrative templates with a dynamic normalization process that filtered out noise and placeholder values such as "n/a", "null", or "nan". Internal database column names were converted into human-readable labels by replacing underscores with spaces before being paired with their respective values. The resulting JSON structure ensured that the embedding model processed a concise representation of only the populated traits, avoiding the linguistic overhead of traditional sentence templates. An example of a processed record is as follows:
+The system was developed and evaluated using the original phenotypic dataset provided by the Cereal Crops Section of the Institute of Plant Breeding. This dataset comprises 3,682 unique parental line records. Each record is highly multidimensional, containing 131 distinct columns covering passport data (e.g., Region, Province, Collection Date), morphological traits (e.g., Kernel Color, Silk Color, Plant Height), and biotic/abiotic stress responses (e.g., Waterlogging, Downy Mildew, and Calcareous Soil resistance).
+
+To prepare this high-dimensional structured data for semantic search, a preprocessing pipeline (Fig. \ref{fig:pipeline}) was implemented to transform each row into a cleaned, serialized JSON string. This approach replaced fixed narrative templates with a dynamic normalization process that filtered out noise and placeholder values such as "n/a", "null", or "nan". Internal database column names were converted into human-readable labels (e.g., \texttt{ASI} to \texttt{anthesis-silking interval}) before being paired with their respective values. This ensured the embedding model (\textit{potion-mxbai-micro}) processed a concise representation of only the populated traits for each specific line, maximizing the signal-to-noise ratio in the 256-dimensional vector space. An example of the serialized JSON string is as follows:
 
 \texttt{{"local name": "IPB-99", "kernel type": "flint", "husk": "tight", "lodged plants": "0"}}.
 
@@ -205,24 +210,35 @@ The system was developed using a modern technology stack selected for its effici
     \item \textbf{Embedding Model:} The potion-mxbai-micro model was used to generate dense vector representations. Distilled via the \textit{model2vec} framework from \textit{mxbai-embed-large-v1}, this is an ultra-compact static embedding model (700KB) that produces 256-dimensional vectors. It was selected specifically to address latency concerns, as it offers faster inference speeds on CPU compared to standard Transformer-based bi-encoders while maintaining high semantic accuracy (68.91 average on MTEB). This efficiency allows the system to remain highly responsive even when hosted on consumer-grade or aging hardware without GPU acceleration.
     \item \textbf{Vector Database:} ChromaDB was the vector store for the indexed trait embeddings. It is an open-source, AI-native database designed for simplicity and developer productivity. Its ability to run in-memory or be persisted to disk made it apt for a small-scale, self-hosted application.
     \item \textbf{Large Language Model:} For the generation component of the RAG pipeline, the \textbf{Qwen3-0.6B} model was selected and deployed in its non-thinking (standard instruction-following) mode. While the Qwen3 architecture supports extended reasoning (thinking mode), this system strictly disabled that feature to prioritize response latency and throughput.  This configuration ensured that the system can generate summaries on consumer-grade hardware without computational overhead.
+    \item \textbf{Reranking Model (Cross-Encoder):} To enhance retrieval precision, the \textbf{jina-reranker-v1-tiny-en} model was integrated into the pipeline. This 33-million parameter model is distilled from the larger Jina-Reranker-v1-base. By performing a cross-encoding of query-document pairs, it corrects for the "semantic gap" inherent in bi-encoder-only retrieval, ensuring that the top-k results provided to the LLM are of the highest possible relevance.
 \end{itemize}
+
+To support flexible data management, the system utilizes a hybrid schema-less approach within a traditional relational database. Rather than mapping each phenotypic trait to a static SQL column, the SQLite backend employs a dedicated \texttt{records} table where all trait data is stored as a serialized JSON object in a single \texttt{data} column. A secondary \texttt{column\_metadata} table manages the definitions, display names, and ordering of these traits. This architecture allows for real-time schema modifications without the structural rigidity of \texttt{ALTER TABLE} commands, enabling researchers to dynamically add or remove trait fields while maintaining a consistent metadata registry for the frontend interface.
+
+When a schema modification is triggered—such as adding a "Reviewed by" status column—the backend executes a multi-stage synchronization process to ensure search consistency. Using SQLite's \texttt{json\_set} or \texttt{json\_remove} functions, the system updates the JSON blob for every record in the database. Because semantic search relies on the textual representation of these records, any structural change necessitates a complete re-indexing of the affected dataset. The system iterates through the updated records, regenerates their natural language descriptions based on the new JSON state, and produces new 256-dimensional embeddings. These updated vectors are then synchronized with the ChromaDB vector store using an upsert operation. To ensure data integrity, this entire workflow is wrapped in a transactional rollback mechanism that reverts both the SQLite JSON data and the ChromaDB embeddings if an error occurs during the re-embedding or ingestion process.
 
 \subsection{Development of the Baseline System}
-To evaluate the performance of the proposed system, a baseline system implementing traditional keyword-based search will be developed. This baseline will be integrated into the same web application, allowing for a direct comparison. It will be implemented using a standard SQL query with the LIKE operator to search against the text columns in the SQLite database. A user's query will be split into individual keywords, and the system will retrieve all rows where any of the keywords are present as substrings in one or more of the designated search columns.
+To evaluate the performance of the proposed semantic search, a baseline system implementing traditional lexical search was developed using the SQLite FTS5 (Full-Text Search) extension. Unlike simple substring matching, this baseline utilizes the BM25 (Best Matching 25) ranking function to score document relevance based on term frequency and inverse document frequency. 
+
+Upon receiving a query, the system performs a tokenization process where the input string is split into individual terms. Each term is sanitized by removing special characters and wrapped in double-quotes to ensure compatibility with the FTS5 \texttt{MATCH} syntax. The search is executed across a virtual table containing the natural language descriptions of the parental lines. Results are returned in descending order of their BM25 scores. This baseline represents a keyword-matching approach that accounts for term importance.
 
 \subsection{Evaluation Methodology}
-Evaluation will be conducted to assess the system's retrieval accuracy as well as its usefulness for the target users. The evaluation will consist of two parts: a quantitative retrieval analysis and a qualitative usability assessment.
+Evaluation was conducted to assess the system's retrieval accuracy as well as its usefulness for the target users. The evaluation consisted of two parts: a quantitative retrieval analysis and a qualitative usability assessment.
 
 \subsubsection{Retrieval Performance Evaluation}
-To measure search accuracy, a test dataset will be created from the synthetic data to serve as ground truth. This will be accomplished during the data generation phase. While creating the synthetic records, specific semantic clusters will be intentionally designed.
+To measure the system's ability to bridge the semantic gap, a quantitative comparison was conducted between the proposed semantic search and the traditional keyword baseline. The proposed system utilizes a two-stage hybrid retrieval process: an initial candidate retrieval using the potion-mxbai-micro bi-encoder, followed by a re-ranking stage using the jina-reranker-v1-tiny-en cross-encoder to refine the order of the top results. This is compared against the keyword-based baseline, which uses the BM25 algorithm to rank records based on literal term overlap.
 
-The process will be as follows:
+The evaluation assessed both the relevance of the retrieved items and the quality of their ranking using a set of 20 test queries. These queries were designed to simulate real-world researcher needs, ranging from simple keyword matches to conceptual descriptions that do not share literal terms with the database. Performance is quantified using Precision@k and Recall@k at depths of 5, 10, and 20, alongside Mean Average Precision (MAP) to evaluate the system’s ability to place the most relevant parental lines at the top of the results.
+
+The process was conducted as follows:
 \begin{itemize}
-    \item A set of 20 representative queries will be authored by the researcher. These queries will range from simple keyword-based searches to complex, conceptual searches.
-    \item For each query, the researcher will manually identify and list the unique IDs of all relevant records from the synthetic dataset. This mapping will provide an internally consistent ground truth for evaluation.
+    \item A set of 20 representative queries was authored to cover a spectrum of search types, including exact keywords, common misspellings (e.g., "calcerous" vs "calcareous"), and high-level conceptual traits (e.g., "can handle saturated soil" vs "waterlogging").
+    \item A ground-truth "gold standard" was established by manually mapping the unique identifiers of all relevant records within the 3,682-row dataset for each query.
+    \item The queries were executed against both the two-stage hybrid search pipeline and the BM25-based lexical search to produce top-$k$ result sets.
+    \item Metrics were calculated for each query by comparing the system outputs against the manual ground truth mapping to determine relevance and ranking accuracy.
 \end{itemize}
 
-Both the semantic search system and the keyword-based baseline will be evaluated against this dataset using standard information retrieval metrics, as summarized in Table \ref{tab:metrics}.
+Both systems were evaluated against this dataset using standard information retrieval metrics, as summarized in Table \ref{tab:metrics}.
 
 \begin{table}[htbp]
 \caption{Summary of IR Evaluation Metrics}
@@ -245,13 +261,20 @@ The mean of the Average Precision (AP) scores across all test queries. This metr
 \end{table}
 
 \subsubsection{Usability and Task-Based Evaluation}
-The application's effectiveness and usability will be assessed with the target users, including researchers and lab technicians. Participants will be informed that they will be interacting with a representative but synthetic dataset. Each participant will be asked to perform a series of predefined tasks using both the baseline keyword search and the new semantic search application. The following data will be collected.
+The application’s effectiveness and usability were assessed through controlled trials with target users at the Institute of Plant Breeding. A group of five researchers and laboratory technicians, including University Research Associates and Researchers, participated in the study. These participants performed a series of practical workflows using a representative subset of the phenotypic dataset, curated to ensure that all test queries had valid target records within the database. The evaluation was designed as a comparative study, benchmarking the RAG-based natural language interface (AI Chat) and the direct database search feature against Microsoft Excel, which represents the Section's current data management standard.
 
+To evaluate the system's "agentic" capabilities, the AI Chat mode utilized a function-calling loop where the LLM was required to trigger a database search tool based on user intent. Performance was measured across three functional categories: schema management, data curation, and multi-criteria retrieval. Quantitative data were collected for task success rates and "Time on Task," while qualitative observations focused on the accuracy of the LLM’s synthesis and the researchers' ability to navigate the system's specific UI components, such as context menus and save mechanisms. Following the tasks, the System Usability Scale (SUS) was administered to provide a standardized metric of perceived usability.
+
+The evaluation involved five active staff members from the Cereal Crops Section of the Institute of Plant Breeding. The participant pool was composed of one University Researcher, one University Research Associate II, two University Research Associates I, and one Project Technical Aide V. These individuals represented the primary target users of the system, encompassing both senior research and technical support roles. Their specific professional titles were recorded to contextualize the qualitative feedback and observe how varying levels of familiarity with data management tools influenced their interaction with the semantic search features.
+
+The procedure of the usability testing was as follows:
 \begin{enumerate}
-\item \textbf{Participants:} A group of 5-8 target users, including researchers and lab technicians from the institute, will be recruited. Demographic data will be recorded for each participant. This profile will include \textbf{age range}, \textbf{highest educational attainment}, \textbf{current role} (e.g., Senior Researcher, University Researcher, Lab Technician), and \textbf{years of experience} in plant breeding.
+\item \textbf{Data Management Tasks (Tasks 1 and 2):} The first phase focused on the administrative and schema-level capabilities of the system. In Task 1, participants were required to ingest a new phenotypic dataset into the system to verify the robustness of the file upload and parsing mechanism. In Task 2, users were instructed to perform schema modifications by creating a new column named "Reviewed by" with a default value of "None," followed by the deletion of that same column. This phase evaluated the discoverability of the context-sensitive UI elements and the system's ability to handle dynamic database schema changes without data loss.
 
-\item \textbf{Procedure:} Participants will be asked to complete a series of predefined parental line selection tasks (e.g., "Find two potential parental lines that are early maturing and have good husk fitting"). They will perform these tasks on both the baseline system and the new semantic search system.
-\item \textbf{Usability Metrics:} The following metrics will be collected to assess usability:
+\item \textbf{Data Curation Task (Task 3):} In Task 3, participants performed a targeted update on a specific record to evaluate the efficiency of the "Edit" page interface. Users were tasked with locating the record assigned with Accession Number (APN) 264 and updating its attributes to reflect a "Yellow" kernel color and a "Flint" kernel type. This task required participants to navigate the data grid, utilize the save-state mechanism, and verify that the updates were successfully persisted in the relational database. The researcher recorded the time taken to locate the specific record and any difficulties encountered with the interface's layout or navigation.
+
+\item \textbf{Comparative Retrieval Tasks (Task 4):} The fourth phase consisted of three distinct search queries performed across three environments: the RAG-based AI Chat (Home page), the Direct Semantic Search (Edit page), and Microsoft Excel. Query 1 required users to find parental lines located in Antique with a Yellow Kernel Color. Query 2 tested the system's handling of stress responses by asking for lines suitable for flooded conditions that also showed resistance to Downy Mildew. Query 3 involved a specific search for a variety with orange/flint kernels and the local name "Calumpit." These tasks allowed for a direct comparison between natural language querying, dense-vector retrieval, and traditional spreadsheet filtering/sorting.
+\item \textbf{Usability Metrics:} The following metrics were also collected to assess usability:
 \begin{itemize}
 \item \textbf{Task Success Rate:} A binary measure of whether a user could successfully complete the given task.
 \item \textbf{Time on Task:} The time taken to complete each task, measuring efficiency.
@@ -259,6 +282,113 @@ The application's effectiveness and usability will be assessed with the target u
 \item \textbf{Qualitative Feedback:} A post-session interview will be conducted to gather subjective feedback on the user experience and how intuitive the system is. The demographic factors collected in the participant profiles will be used to contextualize these findings, helping to identify if specific user groups (e.g., based on experience level or education) face unique challenges.
 \end{itemize}
 \end{enumerate}
+
+% RESULTS AND DISCUSSION
+\section{Results and Discussion}
+
+\subsection{Information Retrieval Performance}
+This section evaluates the effectiveness of the two-stage hybrid search (Bi-Encoder + Cross-Encoder) compared to the BM25 lexical baseline.
+
+\subsubsection{Aggregated Metric Analysis}
+Table \ref{tab:ir_summary} summarizes the performance of both systems across 20 test queries. 
+
+\begin{table}[htbp]
+\caption{Aggregated Information Retrieval Metrics}
+\label{tab:ir_summary}
+\centering
+\begin{tabular}{l|ccc|ccc|c}
+\hline
+\textbf{Search} & \textbf{P@5} & \textbf{P@10} & \textbf{P@20} & \textbf{R@5} & \textbf{R@10} & \textbf{R@20} & \textbf{MAP} \\ \hline
+Hybrid & 0.44 & 0.38 & 0.315 & 0.0932 & 0.1169 & 0.1298 & 0.1134 \\
+Keyword & 0.31 & 0.285 & 0.2275 & 0.0944 & 0.1256 & 0.1241 & 0.1241 \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    %\includegraphics[width=\linewidth]{precision_comparison.png}
+    \caption{Comparison of Precision@k between Hybrid and Keyword search. (Placeholder for Bar Chart)}
+    \label{fig:precision_chart}
+\end{figure}
+
+\subsubsection{Analysis of Semantic vs. Lexical Retrieval}
+% Discussion point: Hybrid search excelled in conceptual queries (Query 1, 11, 17) 
+% while Lexical search performed better on specific variety names (Query 19).
+
+\subsubsection{Zero-Result and Failure Case Analysis}
+% Discussion point: Analysis of Queries 5, 10b, 12, 16, and 20 which yielded 0% precision across both systems.
+% Discussion of data density and embedding alignment for traits like "purple anther colors."
+
+\subsection{Usability and Task-Based Evaluation}
+This section details the results of the usability trials conducted with the five researchers from the Cereal Crops Section.
+
+\subsubsection{Participant Demographics}
+Table \ref{tab:participants} outlines the professional roles of the evaluators.
+
+\begin{table}[htbp]
+\caption{Participant Profiles}
+\label{tab:participants}
+\centering
+\begin{tabular}{c|l|l}
+\hline
+\textbf{ID} & \textbf{Position} & \textbf{Organization} \\ \hline
+U1 & Univ. Research Associate II & IPB \\
+U2 & Univ. Research Associate I & IPB \\
+U3 & Project Technical Aide V & IPB \\
+U4 & University Researcher & IPB \\
+U5 & University Researcher I & IPB \\ \hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Task Success and Efficiency}
+Table \ref{tab:task_time} compares the time taken to complete retrieval tasks across the three search modalities.
+
+\begin{table}[htbp]
+\caption{Mean Time on Task (Seconds) for Task 4 Retrieval}
+\label{tab:task_time}
+\centering
+\begin{tabular}{l|ccc}
+\hline
+\textbf{Task} & \textbf{AI Chat (LLM)} & \textbf{Direct Search} & \textbf{MS Excel} \\ \hline
+Query 1 & 109.8s & 48.4s & 81.9s \\
+Query 2 & Fail (N/A) & 115.7s & 63.6s \\
+Query 3 & 101.2s & 43.1s & 34.3s \\ \hline
+\end{tabular}
+\end{table}
+
+\subsubsection{System Usability Scale (SUS) Results}
+The system achieved a mean SUS score of 71.5.
+
+\begin{table}[htbp]
+\caption{Individual System Usability Scale (SUS) Scores}
+\label{tab:sus_scores}
+\centering
+\begin{tabular}{c|ccccc|c}
+\hline
+\textbf{User} & U1 & U2 & U3 & U4 & U5 & \textbf{Mean} \\ \hline
+\textbf{Score} & 75.0 & 70.0 & 52.5 & 72.5 & 87.5 & \textbf{71.5} \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Qualitative Discussion}
+
+\subsubsection{The Semantic Reversal Problem}
+% Discussion point: Users 1, 2, and 4 noted that the system retrieved "Susceptible" 
+% records when "Resistant" was requested. Analysis of cosine similarity between 
+% antonymous traits in the embedding space.
+
+\subsubsection{Large Language Model Limitations}
+% Discussion point: The Qwen3-0.6B model's failure to trigger the tool-calling 
+% mechanism without explicit prompting (e.g., "search for..."). Analysis of the 
+% trade-off between model size and agentic reliability.
+
+\subsubsection{Comparison with Spreadsheet-Based Workflows}
+% Discussion point: Participant feedback on the "naturalness" of the RAG interface 
+% versus the "precision and familiarity" of Excel filters.
+
+\subsubsection{UI/UX and Feature Discoverability}
+% Discussion point: Users struggled to find the "Add Column" feature in the 
+% context menu (Users 2, 3, 4). Recommendation for more explicit button placement.
 
 
 % APPENDICES
