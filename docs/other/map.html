@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAP Calculator - CS 190</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 900px; margin: auto; background: #f4f4f9; }
+        h1 { color: #333; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #eee; }
+        input { width: 90%; padding: 5px; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+        .btn-add { background: #28a745; margin-bottom: 10px; }
+        .btn-calc { background: #007bff; width: 100%; font-size: 1.1em; }
+        .btn-remove { background: #dc3545; padding: 5px 10px; }
+        #results { margin-top: 20px; font-size: 1.2em; font-weight: bold; color: #007bff; }
+        .small-text { font-size: 0.8em; color: #666; }
+    </style>
+</head>
+<body>
+
+    <h1>MAP Calculator</h1>
+    <div class="card">
+        <p>Enter the ranks where a <b>correct</b> record was found (comma separated) and the total number of relevant records that actually exist in the database for that query.</p>
+        
+        <table id="queryTable">
+            <thead>
+                <tr>
+                    <th>Query #</th>
+                    <th>Correct Ranks <br><span class="small-text">(e.g. 2, 5, 8)</span></th>
+                    <th>Total Relevant in DB (R) <br><span class="small-text">(Count of all matches in DB)</span></th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr>
+                    <td>1</td>
+                    <td><input type="text" class="ranks" placeholder="e.g. 2, 5"></td>
+                    <td><input type="number" class="total-rel" value="1"></td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <button class="btn btn-add" onclick="addRow()">+ Add Query</button>
+        <button class="btn btn-calc" onclick="calculateMAP()">Calculate MAP</button>
+    </div>
+
+    <div id="results" class="card" style="display:none;">
+        <div id="individualAPs"></div>
+        <hr>
+        <div id="finalMAP"></div>
+    </div>
+
+    <script>
+        let rowCount = 1;
+
+        function addRow() {
+            rowCount++;
+            const tbody = document.getElementById('tableBody');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${rowCount}</td>
+                <td><input type="text" class="ranks" placeholder="e.g. 2, 5"></td>
+                <td><input type="number" class="total-rel" value="1"></td>
+                <td><button class="btn btn-remove" onclick="removeRow(this)">Remove</button></td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function removeRow(btn) {
+            btn.parentElement.parentElement.remove();
+        }
+
+        function calculateMAP() {
+            const rankInputs = document.querySelectorAll('.ranks');
+            const totalInputs = document.querySelectorAll('.total-rel');
+            let sumAP = 0;
+            let queryCount = 0;
+            let resultsHTML = "<h3>Average Precision (AP) per Query:</h3><ul>";
+
+            for (let i = 0; i < rankInputs.length; i++) {
+                const ranks = rankInputs[i].value.split(',')
+                    .map(r => parseInt(r.trim()))
+                    .filter(r => !isNaN(r))
+                    .sort((a, b) => a - b);
+                
+                const R = parseInt(totalInputs[i].value);
+
+                if (ranks.length === 0 || isNaN(R) || R === 0) continue;
+
+                let precisionSum = 0;
+                for (let j = 0; j < ranks.length; j++) {
+                    let k = j + 1; // Number of correct results found so far
+                    let rankOfK = ranks[j];
+                    precisionSum += (k / rankOfK);
+                }
+
+                let ap = precisionSum / R;
+                sumAP += ap;
+                queryCount++;
+                resultsHTML += `<li>Query ${i+1}: AP = ${ap.toFixed(4)}</li>`;
+            }
+
+            if (queryCount === 0) {
+                alert("Please enter valid data for at least one query.");
+                return;
+            }
+
+            const map = sumAP / queryCount;
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('individualAPs').innerHTML = resultsHTML + "</ul>";
+            document.getElementById('finalMAP').innerHTML = `MEAN AVERAGE PRECISION (MAP): ${map.toFixed(4)}`;
+        }
+    </script>
+</body>
+</html>
