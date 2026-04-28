@@ -19,7 +19,7 @@ from preprocessing.description_builder import build_natural_language_description
 from pydantic import BaseModel
 from rag.embedding import EmbeddingService
 from rag.llm import GemmaLLM, GroqLLM
-from rag.reranker import FlashRankService
+from rag.reranker import CrossEncoderReranker
 from rag.vectordb import ChromaVectorDB
 
 
@@ -105,11 +105,11 @@ async def lifespan(app: FastAPI):
     global embedder
     embedder = EmbeddingService()
     global reranker
-    reranker = FlashRankService()
+    reranker = CrossEncoderReranker()
     print(f"ChromaDB initialized with persist directory: {vectordb.persist_directory}")
     print("ChromaDB collection 'trait_embeddings' ready")
     print("Embedding service initialized")
-    print("FlashRank reranker initialized")
+    print("CrossEncoder reranker initialized")
     print(f"Active model: {active_model_id}")
     # Start backup scheduler
     asyncio.create_task(backup_scheduler())
@@ -1613,7 +1613,7 @@ async def search_records(
             if record.natural_language_description
             else json.dumps(record.data)
         )
-        rerank_candidates.append({"id": str(record_id), "text": candidate_text})
+        rerank_candidates.append({"corpus_id": str(record_id), "text": candidate_text})
 
     reranker_instance = get_reranker()
     try:
@@ -1624,7 +1624,7 @@ async def search_records(
     reranked_ids: list[int] = []
     rerank_score_by_record_id: dict[int, float | None] = {}
     for item in reranked:
-        raw_id = item.get("id")
+        raw_id = item.get("corpus_id")
         if not isinstance(raw_id, str | int):
             continue
         try:
@@ -2410,7 +2410,7 @@ def get_embedder() -> EmbeddingService:
     return embedder
 
 
-def get_reranker() -> FlashRankService:
+def get_reranker() -> CrossEncoderReranker:
     if reranker is None:
         raise RuntimeError("Reranker was not initialized during startup")
 

@@ -1,38 +1,30 @@
 from typing import Any
+from sentence_transformers import CrossEncoder
 
-from flashrank import Ranker, RerankRequest  # type: ignore[import-untyped]
+class CrossEncoderReranker:
+    def __init__(self, model_name: str = "jinaai/jina-reranker-v1-tiny-en"):
+        self.model = CrossEncoder(model_name, trust_remote_code=True)
 
-
-class FlashRankService:
-    def __init__(self, model_name: str = "ms-marco-MiniLM-L-12-v2"):
-        self.model_name = model_name
-        self.ranker = Ranker(model_name=model_name)
-
-    def rerank(self, query: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def rerank(self, query: str, candidates: list[dict[str, Any]], top_k: int = 20) -> list[dict[str, Any]]:
         if not candidates:
             return []
 
-        request = RerankRequest(query=query, passages=candidates)
-        reranked = self.ranker.rerank(request)
-
-        # Normalize to plain Python scalars to avoid JSON serialization failures
-        # from numpy-like numeric values (e.g., float32).
-        return [self._normalize_item(item) for item in reranked]
-
-    def _normalize_item(self, item: dict[str, Any]) -> dict[str, Any]:
-        return {key: self._normalize_value(value) for key, value in item.items()}
-
-    def _normalize_value(self, value: Any) -> Any:
-        if isinstance(value, dict):
-            return {key: self._normalize_value(nested) for key, nested in value.items()}
-
-        if isinstance(value, list):
-            return [self._normalize_value(nested) for nested in value]
-
-        if hasattr(value, "item") and callable(value.item):
-            try:
-                return value.item()
-            except Exception:
-                return value
-
-        return value
+        # Extract texts for CrossEncoder rank
+        texts = [c["text"] for c in candidates]
+        
+        results = self.model.rank(query, texts, return_documents=True, top_k=top_k)
+        
+        # Map results back to original structure, including the ID
+        reranked = []
+        for res in results:
+            # Match by text content to get the original ID
+            # Note: This assumes texts are unique.
+            original_candidate = next((c for c in candidates if c["text"] == res["text"]), None)
+            
+            reranked.append({
+                "text": res["text"],
+                "score": float(res["score"]),
+                "corpus_id": original_candidate.get("corpus_id") if original_candidate else None
+            })
+            
+        return reranked
