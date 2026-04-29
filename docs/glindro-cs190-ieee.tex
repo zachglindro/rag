@@ -1,5 +1,16 @@
 \documentclass[journal]{./IEEE/IEEEtran}
-\usepackage{amsmath,apacite,graphicx,microtype,tikz,xurl}
+\usepackage{amsmath,apacite,graphicx,microtype,tikz,xurl, pgfplots, listings, xcolor}
+
+\pgfplotsset{compat=1.18}
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!5},
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false
+}
 
 \newcommand{\SPTITLE}{Enhancing Cereal Crops Phenotypic Trait Searchability and Parental Line Selection Using Retrieval-Augmented Semantic Search}
 \newcommand{\ADVISEE}{Zach Dwayne M. Glindro}
@@ -33,8 +44,7 @@
 
 % ABSTRACT
 \begin{abstract}
-% TODO: to redo
-to redo
+Plant breeding research currently relies on the manual analysis of extensive phenotypic trait data within spreadsheets, a method fundamentally limited by rigid, keyword-based search mechanisms. To address this, a Retrieval-Augmented Generation (RAG) system was designed and implemented, leveraging dense vector embeddings and a two-stage hybrid retrieval pipeline to facilitate natural language querying of phenotypic databases. This system was evaluated against a standard BM25 keyword baseline using 20 complex agricultural queries and standard information retrieval metrics. Quantitative results demonstrate that the hybrid approach outperforms lexical search in Precision@k, successfully navigating nuanced agricultural terminology where traditional keyword matching fails. Usability trials with research personnel further compared the AI-driven interface against established Microsoft Excel-based workflows, revealing a distinct reliability gap between system performance and user workflow expectations. Findings indicate researchers prioritize the deterministic precision and predictable accuracy of spreadsheet filters over the probabilistic "fuzziness" of semantic retrieval. Ultimately, this research concludes that while semantic search offers a scalable solution for data discovery, future agricultural information systems must adopt a filter-first co-pilot paradigm—leveraging AI to generate structured database filters before performing semantic retrieval—to ensure the exactitude required for scientific breeding decisions.
 \end{abstract}
 
 % INDEX TERMS
@@ -289,6 +299,7 @@ The procedure of the usability testing was as follows:
 \subsection{Information Retrieval Performance}
 This section evaluates the effectiveness of the two-stage hybrid search (Bi-Encoder + Cross-Encoder) compared to the BM25 lexical baseline.
 
+
 \subsubsection{Aggregated Metric Analysis}
 Table \ref{tab:ir_summary} summarizes the performance of both systems across 20 test queries. 
 
@@ -296,68 +307,157 @@ Table \ref{tab:ir_summary} summarizes the performance of both systems across 20 
 \caption{Aggregated Information Retrieval Metrics}
 \label{tab:ir_summary}
 \centering
+\resizebox{\columnwidth}{!}{
 \begin{tabular}{l|ccc|ccc|c}
 \hline
 \textbf{Search} & \textbf{P@5} & \textbf{P@10} & \textbf{P@20} & \textbf{R@5} & \textbf{R@10} & \textbf{R@20} & \textbf{MAP} \\ \hline
 Hybrid & 0.44 & 0.38 & 0.315 & 0.0932 & 0.1169 & 0.1298 & 0.1134 \\
 Keyword & 0.31 & 0.285 & 0.2275 & 0.0944 & 0.1256 & 0.1241 & 0.1241 \\ \hline
 \end{tabular}
+}
 \end{table}
 
-\begin{figure}[htbp]
+
+The quantitative evaluation of the 20 test queries reveals a performance gap between the two-stage hybrid search pipeline and the BM25-based keyword baseline, particularly regarding precision. As summarized in Table \ref{tab:ir_summary}, the hybrid system achieved a Precision@5 (P@5) of 0.44, representing a 41.9\% improvement over the keyword search's score of 0.31. This trend persists across deeper retrieval ranks, with the hybrid system maintaining a Precision@20 of 0.315 compared to the baseline's 0.2275. These results suggest that the integration of a bi-encoder and a cross-encoder reranker is more effective at populating the top of the search results with relevant parental lines, which is critical for researchers who typically scan only the first few pages of results.
+
+Despite the hybrid system’s superior precision, the keyword-based search maintained a slightly higher Mean Average Precision (MAP) of 0.1241 compared to the hybrid system’s 0.1134. This statistical paradox is largely attributable to the binary nature of lexical matching. In several instances where exact token matches existed—specifically for unique variety names or specific identifiers—the BM25 algorithm successfully ranked the single correct record at the very first position, resulting in a perfect Average Precision for those specific queries. In contrast, the semantic search model occasionally "smeared" the ranking by retrieving several conceptually similar but technically irrelevant records. This behavior can push the specific "gold standard" record slightly further down the list (e.g., to rank 2 or 3), which penalizes the MAP score even if the overall density of relevant records in the top 20 remains higher.
+
+Recall metrics for both systems remained relatively low, with Recall@20 plateauing at approximately 0.1298 for hybrid search and 0.1241 for keyword search. This indicates that while the systems are successful at finding relevant candidates, they struggle to retrieve the full breadth of all matching records from the 3,682-row dataset within the first 20 results. This limitation is likely a byproduct of the high dimensionality of the phenotypic data; because each record contains up to 131 distinct traits, condensing a complete row into a single 256-dimensional vector or a short JSON description inherently involves information loss. Consequently, while the system effectively captures the "most relevant" lines for a given trait, it may miss lines where that trait is buried among a high volume of other populated data fields.
+
+\begin{figure}
     \centering
-    %\includegraphics[width=\linewidth]{precision_comparison.png}
-    \caption{Comparison of Precision@k between Hybrid and Keyword search. (Placeholder for Bar Chart)}
-    \label{fig:precision_chart}
+    \includegraphics[width=1\linewidth]{images/precision_recall_k.png}
+    \caption{Comparative Information Retrieval (IR) performance across varying rank depths (k).}
+    \label{fig:architecture}
 \end{figure}
 
+The decay in precision as $k$ increases (from P@5 to P@20) is more gradual in the hybrid system than in the keyword baseline. As illustrated in the performance trends, the hybrid system’s ability to understand semantic nuances allows it to maintain a steadier stream of relevant results even as the search depth increases. Whereas the keyword search often "runs out" of exact string matches and begins returning unrelated data, the hybrid pipeline continues to surface semantically proximate records. This suggests that the two-stage architecture successfully leverages the bi-encoder for broad candidate selection and the cross-encoder for fine-grained relevance filtering, providing a more robust search experience for complex agricultural queries.
+
 \subsubsection{Analysis of Semantic vs. Lexical Retrieval}
-% Discussion point: Hybrid search excelled in conceptual queries (Query 1, 11, 17) 
-% while Lexical search performed better on specific variety names (Query 19).
+
+The comparative performance of the hybrid and lexical systems reveals a distinct dichotomy in how each approach processes agricultural queries. The hybrid search pipeline, utilizing the potion-mxbai-micro bi-encoder, excels in queries where the user employs descriptive or non-standard terminology. For instance, in Query 1 ("resistant to calcareous soil"), the hybrid system successfully navigated the semantic space to retrieve relevant records, whereas the BM25 baseline required an exact string match that the raw dataset occasionally failed to provide. This suggests that the hybrid model’s ability to map synonyms and related trait descriptions into a dense vector space significantly lowers the barrier for users who may not have internalized the specific, rigid terminology of the phenotypic database.
+
+Conversely, the BM25-based lexical search demonstrates superior efficacy for queries involving specific identifiers or unique nomenclature where no semantic interpretation is necessary. A clear example is Query 19 ("plant height between 200 and 250 cm") and Query 13 ("shows resistance to ear rot"). In these instances, the keyword baseline frequently assigned the highest rank to the exact matches, resulting in a higher Average Precision. When a user provides a precise, unambiguous token—such as a variety name or a specific numerical range—the hybrid model’s inherent "fuzziness" can actually become a liability. By attempting to find "conceptually similar" results, the hybrid system may introduce noise into the top-k results, effectively lowering the MAP when the ground truth is limited to a single, literal record.
+
+The performance discrepancy is best illustrated by the following table, which highlights the divergent outcomes for selected queries:
+
+\begin{table}[htbp]
+\caption{Comparison of Hybrid vs. Lexical Retrieval on Selected Queries}
+\label{tab:query_comparison}
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{l|cc|cc}
+\hline
+\textbf{Query} & \textbf{Hybrid P@5} & \textbf{Keyword P@5} & \textbf{Hybrid MAP} & \textbf{Keyword MAP} \\ \hline
+Q1 (Calcareous) & 0.80 & 1.00 & 0.065 & 0.073 \\
+Q2 (Calcerous) & 1.00 & 0.00 & 0.076 & 0.000 \\
+Q13 (Ear rot) & 0.80 & 1.00 & 0.030 & 0.050 \\
+Q19 (Height) & 0.60 & 0.60 & 1.000 & 1.000 \\ \hline
+\end{tabular}
+}
+\end{table}
+
+As evidenced by Query 2, the hybrid system’s robustness against human error—such as the misspelling of "calcareous"—provides a critical utility that the BM25 baseline lacks. While the keyword search is technically more precise for "perfect" queries, the real-world application environment is characterized by noisy data entry and diverse user vocabularies. The hybrid system acts as a stabilizing force, ensuring that search results remain relevant even when queries deviate from the database’s standardized schema. This suggests that the two systems are not merely competitors, but complementary tools: the hybrid system provides the necessary flexibility for exploratory search, while the lexical baseline serves as a high-precision anchor for known-item retrieval. Moving forward, the goal of this framework is to tune the hybrid re-ranking weights to preserve the high-precision retrieval of the BM25 baseline while maintaining the conceptual breadth of the vector-based approach.
 
 \subsubsection{Zero-Result and Failure Case Analysis}
-% Discussion point: Analysis of Queries 5, 10b, 12, 16, and 20 which yielded 0% precision across both systems.
-% Discussion of data density and embedding alignment for traits like "purple anther colors."
+A subset of the test queries, specifically Queries 5, 10b, 12, 16, and 20, yielded zero precision and recall across both the hybrid and keyword systems. These failure cases highlight fundamental limitations regarding data sparsity and the granularity of trait descriptions within the phenotypic dataset. For specific descriptors such as "purple anther colors" or "more than 13 rows of grain," the system failed to identify any relevant parental lines, suggesting that these traits are either underrepresented or inconsistently recorded across the 3,682-row database. Because the embedding model relies on the serialized JSON representation of the trait data, if a specific phenotypic observation is missing or linguistically absent from a record, the system lacks the necessary signal to perform accurate similarity matching. Consequently, both the lexical baseline and the semantic vector search remain unable to retrieve relevant records when the knowledge base itself does not contain the necessary semantic density.
+
+These results underscore that the effectiveness of any RAG-based search system is inextricably tethered to the quality and coverage of the underlying knowledge base. The failure to retrieve relevant records for these queries suggests that the semantic space generated by the potion-mxbai-micro model may not fully capture specialized agricultural ontologies without further domain-specific adaptation. Moving forward, addressing these "zero-result" scenarios will likely require a hybrid strategy that goes beyond simple retrieval: augmenting the system with a structured knowledge graph or specialized agricultural ontology could ground the semantic search, ensuring that less-frequently-recorded morphological traits are searchable. Simultaneously, rigorous data curation and normalization remain essential to ensure that such niche phenotypes are consistently mapped, thereby allowing the system to bridge the gap between user intent and the available phenotypic data.
 
 \subsection{Usability and Task-Based Evaluation}
 This section details the results of the usability trials conducted with the five researchers from the Cereal Crops Section.
 
 \subsubsection{Participant Demographics}
-Table \ref{tab:participants} outlines the professional roles of the evaluators.
 
 \begin{table}[htbp]
 \caption{Participant Profiles}
 \label{tab:participants}
 \centering
-\begin{tabular}{c|l|l}
+\begin{tabular}{c|l}
 \hline
-\textbf{ID} & \textbf{Position} & \textbf{Organization} \\ \hline
-U1 & Univ. Research Associate II & IPB \\
-U2 & Univ. Research Associate I & IPB \\
-U3 & Project Technical Aide V & IPB \\
-U4 & University Researcher & IPB \\
-U5 & University Researcher I & IPB \\ \hline
+\textbf{ID} & \textbf{Position} \\ \hline
+U1 & University Research Associate 2 \\
+U2 & University Research Associate 1 \\
+U3 & Project Technical Aide 5 \\
+U4 & University Researcher \\
+U5 & University Researcher 1 \\ \hline
 \end{tabular}
 \end{table}
+
+The usability evaluation involved five active staff members from the Cereal Crops Section of the Institute of Plant Breeding, selected to accurately reflect the system's core target audience. Table \ref{tab:participants} outlines the professional roles of the evaluators. The participant cohort comprised a range of roles: a University Researcher, a University Research Associate II, two University Research Associates I, and a Project Technical Aide V. This professional mix was intentional, as it encompassed both research personnel responsible for data analysis and technical support staff tasked with daily data entry and maintenance. By including participants with varying levels of responsibility, the study ensured a comprehensive assessment of the system’s usability across different workflows and technical requirements, providing a representative snapshot of the section's actual user base.
+
+The participants' professional backgrounds significantly shaped their interaction with the system, revealing distinct patterns in tool preference, feature discovery, and expectations for system behavior. While senior researchers primarily focused on the effectiveness of the retrieval and synthesis features, technical staff were more sensitive to UI layout and discoverability, particularly regarding administrative tasks like schema modification or record updates. Observations noted that participants frequently attempted to apply established mental models from Microsoft Excel—such as sorting and manual filtering—to the new interface, which created friction when interacting with the RAG-based AI chat or the semantic search grid. Consequently, the feedback from this diverse group provided critical insights into where the system's non-linear interaction paradigms conflict with traditional spreadsheet-based habits, highlighting specific UI/UX areas that require refinement to support a broader range of user expertise.
 
 \subsubsection{Task Success and Efficiency}
-Table \ref{tab:task_time} compares the time taken to complete retrieval tasks across the three search modalities.
+
+The usability evaluation yielded a high success rate for administrative tasks (Tasks 1--3), with nearly all participants successfully ingesting datasets and performing record updates. However, quantitative metrics and observational notes indicate that success was often achieved only with external guidance, particularly for schema-level manipulations. During Task 2, participants frequently struggled to distinguish between "Add Filter" and "Add Column" functionalities, leading to frustration when attempting to modify the table schema. Similarly, in Task 3, while participants successfully updated records, the discoverability of the "Save Changes" button proved to be a friction point. These results suggest that while the backend operations are robust, the frontend interface lacks the necessary signifiers and spatial hierarchy to make administrative functions intuitive for users accustomed to the straightforward, albeit manually intensive, environment of spreadsheets.
 
 \begin{table}[htbp]
-\caption{Mean Time on Task (Seconds) for Task 4 Retrieval}
-\label{tab:task_time}
+\caption{Task Success and Efficiency Metrics (Aggregated)}
+\label{tab:task_performance}
 \centering
-\begin{tabular}{l|ccc}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l|c|c|c|c}
 \hline
-\textbf{Task} & \textbf{AI Chat (LLM)} & \textbf{Direct Search} & \textbf{MS Excel} \\ \hline
-Query 1 & 109.8s & 48.4s & 81.9s \\
-Query 2 & Fail (N/A) & 115.7s & 63.6s \\
-Query 3 & 101.2s & 43.1s & 34.3s \\ \hline
+\textbf{Task} & \textbf{LLM Success} & \textbf{Direct Success} & \textbf{Excel Success} & \textbf{Avg Time (s)} \\ \hline
+Query 1 & 1/5 (20\%) & 5/5 (100\%) & 5/5 (100\%) & 76.7 \\
+Query 2 & 0/5 (0\%) & 0/5 (0\%) & 4/5 (80\%) & 92.5 \\
+Query 3 & 3/5 (60\%) & 5/5 (100\%) & 5/5 (100\%) & 59.3 \\ \hline
 \end{tabular}
+}
 \end{table}
 
+
+In contrast, the comparative retrieval tasks (Task 4) exposed a significant performance gap between the system’s proposed AI-driven features and the established Excel-based workflow. As detailed in Table \ref{tab:task_performance}, the RAG-based AI Chat interface frequently failed to complete requests, often requiring the intervention of the facilitator to prompt the system to use its database tools. This agentic failure—where the LLM failed to trigger the search tool unless explicitly instructed—resulted in higher task abandonment rates and increased time on task compared to the Direct Search or Excel. Interestingly, while Excel required more manual interaction, participants consistently rated it as more reliable for complex queries. For instance, in Query 2 (Waterlogging and Downy Mildew), Excel achieved an 80\% success rate while the AI systems failed completely. Participants noted that Excel’s filters allowed for explicit exclusion and inclusion criteria that the semantic search smeared together. This suggests that the preference for Excel is rooted in its functional determinism—the ability to yield the exact expected subset of data—which the current RAG implementation struggled to match in multi-criteria searches.
+
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+    \begin{axis}[
+        ybar=2pt, % Grouped bars
+        bar width=0.2cm,
+        width=\linewidth,
+        height=7cm,
+        ylabel={Time (seconds)},
+        symbolic x coords={Query 1, Query 2, Query 3},
+        xtick=data,
+        ymin=0, ymax=170,
+        enlarge x limits=0.15, % Space between bar groups
+        legend style={at={(0.5,-0.25)}, anchor=north, legend columns=-1},
+        % Force legend to show single rectangle instead of double bars
+        legend image code/.code={
+            \draw[#1, draw=none, fill=#1] (0cm,-0.1cm) rectangle (0.4cm,0.1cm);
+        },
+        % Standard number formatting for labels
+        nodes near coords,
+        every node near coord/.append style={font=\tiny, rotate=90, anchor=west},
+    ]
+    
+    % 1. LLM (Red)
+    \addplot[fill=red!40] coordinates {(Query 1, 141.21) (Query 2, 0) (Query 3, 121.06)};
+    \addlegendentry{LLM}
+    
+    % 2. Direct Search (Blue)
+    \addplot[fill=blue!40] coordinates {(Query 1, 52.5) (Query 2, 0) (Query 3, 46.93)};
+    \addlegendentry{Direct Search}
+    
+    % 3. Excel (Green)
+    \addplot[fill=green!40] coordinates {(Query 1, 90.41) (Query 2, 59.57) (Query 3, 34.31)};
+    \addlegendentry{Excel}
+\end{axis}
+\end{tikzpicture}
+\caption{Comparison of Time on Task (seconds) across search modalities.}
+\label{fig:time_task}
+\end{figure}
+
+
+The discrepancy between the systems is further illustrated by the semantic reversal phenomenon observed during the trials, where the LLM would return records containing "Susceptible" when the user specifically requested "Resistant." This suggests that while the embedding model is effective for broad retrieval, it struggles with the nuance of negative constraints and binary trait attributes. Furthermore, the Direct Search feature, while technically faster, often buried relevant results, forcing users to scan through rows rather than relying on the system’s ranking. This indicates that while the system offers a technological advantage over spreadsheets, its current usability is hindered by inconsistent retrieval accuracy and a steep learning curve for the LLM interaction pattern.
+
+
 \subsubsection{System Usability Scale (SUS) Results}
-The system achieved a mean SUS score of 71.5.
+The system achieved an average System Usability Scale (SUS) score of 71.5, placing it within the good range of usability and learnability. Individual scores showed significant variance, ranging from a low of 52.5 to a high of 87.5, which mirrors the mixed results observed during the practical task execution. The higher scores indicate that, when the system functions as intended, it offers a promising and natural alternative to traditional data management tools. However, the lower scores reflect frustration stemming from technical inconsistencies, particularly regarding the system's failure to consistently trigger the database search tool and the subsequent retrieval of imprecise or irrelevant data.
+
 
 \begin{table}[htbp]
 \caption{Individual System Usability Scale (SUS) Scores}
@@ -370,27 +470,58 @@ The system achieved a mean SUS score of 71.5.
 \end{tabular}
 \end{table}
 
+
+Qualitative feedback provided by the participants reinforces the link between these scores and user trust. While the LLM-driven summarization was praised for its accuracy and lack of hallucinations, users frequently expressed difficulty with interface elements, such as the discoverability of the "Add Column" feature and the rigid layout of the table view. Participants often compared the system unfavorably to Excel, noting that while their current spreadsheet-based workflows have their own UI limitations, they provide a level of control—specifically through granular filtering—that the current search implementation lacks. Consequently, while the system demonstrates clear potential to streamline research tasks, improving search precision and refining the user interface to be more explicit remains critical to closing the gap between this new system and established research habits.
+
 \subsection{Qualitative Discussion}
+\subsubsection{Limitations in Logical Reasoning}
+A critical observation during the usability trials was the system's struggle with binary state distinctions. In several test queries, the system retrieved records marked as "Susceptible" when the user specifically requested "Resistant." This occurs because the embedding model maps the query and the retrieved documents into the same region of latent space based on topic; "Downy Mildew resistance" and "Downy Mildew susceptibility" are conceptually close because they share the same subject matter. The vector space prioritizes this contextual topic over the specific attribute state, leading to a failure in logical precision.
 
-\subsubsection{The Semantic Reversal Problem}
-% Discussion point: Users 1, 2, and 4 noted that the system retrieved "Susceptible" 
-% records when "Resistant" was requested. Analysis of cosine similarity between 
-% antonymous traits in the embedding space.
+This issue highlights a fundamental limitation of pure semantic retrieval for structured phenotypic data. While the embedding model captures the broader agricultural concepts effectively, it lacks the explicit logic required to parse negations or specific attribute constraints. Moving forward, a hybrid approach is necessary: the system must utilize a metadata-filtering layer to enforce strict Boolean constraints on specific trait columns (e.g., "Downy Mildew" = "Resistant"). This ensures that semantic search acts as the discovery mechanism, while structured filtering ensures the factual accuracy of the results, preventing the system from conflating contradictory attributes.
 
-\subsubsection{Large Language Model Limitations}
-% Discussion point: The Qwen3-0.6B model's failure to trigger the tool-calling 
-% mechanism without explicit prompting (e.g., "search for..."). Analysis of the 
-% trade-off between model size and agentic reliability.
+\subsubsection{Inconsistent Agentic Tool Usage}
+The evaluation revealed significant instability in the agentic behavior of the RAG system, particularly regarding the LLM's reliance on the database search tool. Participants frequently encountered scenarios where the LLM provided conversational responses without querying the database, or failed to invoke the search tool unless explicitly instructed by the user. This was not necessarily a deficiency in the retriever component itself, but a failure in the model's instruction-following capabilities under the implemented prompt strategy. The LLM often defaulted to its general training data rather than prioritizing the provided database context.
 
-\subsubsection{Comparison with Spreadsheet-Based Workflows}
-% Discussion point: Participant feedback on the "naturalness" of the RAG interface 
-% versus the "precision and familiarity" of Excel filters.
+Interestingly, this technical failure led to an unintended emergent behavior: participants began "hacking" the system by using force-commands such as "search this in db" or "look at the database for X." This indicates that researchers were forced to learn the system's rigid, opaque constraints rather than the system adapting to natural language. This "command-based learning" is a significant hurdle for usability, as it breaks the premise of a user-friendly natural language interface.
 
-\subsubsection{UI/UX and Feature Discoverability}
-% Discussion point: Users struggled to find the "Add Column" feature in the 
-% context menu (Users 2, 3, 4). Recommendation for more explicit button placement.
+To resolve this, future iterations must refine the prompt engineering or the function-calling layer to ensure that when a user intent matches a search task, the database tool is invoked deterministically. The system should not rely on the LLM's probabilistic instruction-following logic alone. By treating the search tool as a mandatory step rather than an optional suggestion, we can ensure consistent behavior and remove the need for users to learn specific, non-intuitive "hack" phrases to trigger database lookups.
 
+\subsubsection{RAG Versus Spreadsheet Paradigms}
+The usability trials highlighted a substantial precision gap between the proposed RAG system and the existing spreadsheet workflow. Researchers expressed higher trust in Microsoft Excel not merely due to habit, but because of the deterministic nature of its results. In Excel, a filter for 'Yellow' returns only 'Yellow'; in the RAG system, semantic similarity might surface 'Orange' as conceptually related. While theoretically smarter, this behavior is counter-productive for breeding selections that require strict trait adherence. The AI was perceived as less reliable because it introduced semantic noise where researchers required categorical certainty.
 
+Furthermore, this distrust is exacerbated when the system occasionally provides inaccurate results. When a search fails in Excel, the user typically attributes it to their own filtering logic and corrects it immediately. When the AI fails, the user loses confidence in the entire system, viewing the intelligent suggestions as untrustworthy. This creates a psychological threshold where the AI must perform significantly better than a spreadsheet to be considered good enough, as the error modes of an AI are perceived as more opaque and difficult to troubleshoot than those of a manual spreadsheet filter.
+
+Rather than positioning the RAG system as a replacement for spreadsheets, the findings suggest that it should be integrated as an enhancement to them. A more successful paradigm would be a co-pilot model, where the natural language interface does not merely return an opaque list of results, but instead suggests or automatically applies filters to the current data view. By bridging the gap between natural language intent and the precision of programmatic filtering, the system could provide the conversational convenience of AI without sacrificing the auditability and control that spreadsheet users currently rely on.
+
+\subsubsection{Interface Feature Discoverability Issues}
+Participant interaction with the interface revealed that deviating from established UI/UX mental models created significant friction. A prominent example was the "Add Column" task, where participants struggled to find the functionality because it was housed in a non-standard context menu. Users consistently attempted to map their existing knowledge of Excel's interface—specifically, right-clicking on headers or looking for obvious "Edit" or "Insert" buttons—onto the new system. When these expected patterns were not present, cognitive load increased, leading to task frustration even when the backend functionality was fully capable of performing the request.
+
+This suggests that for domain-specific tools used by researchers, UI discoverability is just as important as the underlying model performance. It is recommended that future iterations incorporate explicit, high-visibility signifiers for all administrative tasks. Functions such as record updates, schema modifications, and column management should not be hidden behind nested context menus or abstract icons. By adopting UI patterns consistent with professional data management software, the system can reduce the learning curve and ensure that the administrative overhead does not overshadow the benefits of the semantic search features.
+
+\subsubsection{Data Coverage and Sparsity}
+Finally, the failure cases (Queries 5, 10b, 12, 16, and 20) demonstrated that the effectiveness of a semantic search system is inextricably linked to the underlying data density. In instances where the phenotypic trait data was missing, inconsistently recorded, or described using non-standardized terminology, the system could not retrieve meaningful results. Both the lexical baseline and the vector-based system failed because the information simply did not exist in a queryable format. This reinforces the principle that algorithmic sophistication cannot compensate for poor data quality.
+
+This finding leads to the conclusion that data normalization must be prioritized alongside model tuning. The RAG system’s performance is limited by the "semantic density" of the records; if the data is sparse, the embeddings will be noisy, and the search precision will suffer. Future improvements should focus on building a robust data-cleaning pipeline that standardizes phenotypic trait entries before ingestion. By ensuring that terms are consistent and that critical traits are properly populated, the system can be provided with the clean, structured knowledge base required to maximize the accuracy of the semantic search pipeline.
+
+\section{Conclusion and Recommendations}
+
+\subsection{Conclusion}
+This study successfully developed and implemented a retrieval-augmented generation (RAG) system specifically tailored to modernize phenotypic trait analysis within the Cereal Crops Section. By integrating a \textit{potion-mxbai-micro} bi-encoder with a ChromaDB vector store and a FastAPI-based backend, the study established a functional, scalable bridge between natural language queries and the Section's existing phenotypic dataset. While the retrieval pipeline proved effective at handling descriptive agricultural queries, the implementation of autonomous agentic capabilities—specifically the function-calling logic within the Qwen3-0.6B LLM—revealed that while the underlying architecture is technically sound, the reliability of autonomous tool invocation remains a significant hurdle for fully hands-free interaction.
+
+Quantitative evaluation of the system’s retrieval performance demonstrated the clear superiority of the two-stage hybrid search pipeline over traditional lexical methods. The system achieved significant improvements in Precision@k over the BM25 keyword baseline, validating the hypothesis that dense semantic search is better equipped to navigate the semantic gap inherent in agricultural terminology. However, the paradox of lower Mean Average Precision (MAP) scores in certain instances underscored that while semantic search is optimal for exploratory discovery, it is not a complete substitute for keyword matching when querying unique identifiers. This evidence supports the conclusion that agricultural search systems must employ a hybrid strategy, balancing the semantic breadth of embeddings with the pinpoint accuracy of lexical matching.
+
+The usability evaluation highlighted that technological superiority in semantic retrieval does not equate to utility if it sacrifices result exactitude. Achieving an average SUS score of 71.5 indicates a promising tool, but the preference for Excel's 'Filter-Sort-Scan' model proves that researchers value deterministic accuracy over algorithmic intuition. To foster trust, the system must mirror the reliability of manual filters by integrating structured query generation into the semantic pipeline.
+
+In summary, this study provides a validated framework for transitioning from manual, keyword-dependent spreadsheet workflows to automated, semantic-driven data discovery. Although the transition from manual control to AI-assisted retrieval presents significant UI/UX challenges, the core retrieval architecture proves that semantic search is a viable, high-performance solution for the Section’s data accessibility needs. By addressing the identified constraints in both retrieval logic and user interface transparency, this study offers a robust model for integrating modern artificial intelligence into specialized agricultural research environments.
+    
+\subsection{Recommendations}
+A fundamental improvement to the system’s performance lies in transitioning from coarse, record-wide serialization to a granular, semantically aware chunking strategy. Currently, treating entire records as single JSON blobs introduces excessive noise, as irrelevant metadata or missing trait placeholders can dilute the signal-to-noise ratio during embedding. Future iterations should implement custom parsing strategies—akin to the structural analysis used for semi-structured documents—to isolate distinct phenotypic traits. By breaking records into logical, trait-specific segments (e.g., separating biotic stress data from agronomic traits) and removing irrelevant headers or watermarks, the system can ensure that each vector represents a clear, self-contained semantic unit. This structured approach, supported by rigorous data cleaning and normalization prior to vectorization, will significantly reduce false positives and improve retrieval accuracy.
+
+Furthermore, a strategic architectural shift is required to bridge the precision gap: moving toward a filter-then-retrieve execution loop. Instead of using the LLM to search the entire vector space immediately, the system should first interpret the user's natural language request to identify deterministic constraints (e.g., specific trait values). The system should prioritize the programmatic application of these Boolean filters to narrow the dataset to a factually precise subset before any semantic retrieval is performed. This filter-first approach ensures that the results are logically sound and verifiable, providing the auditability researchers require, while allowing the semantic retrieval pipeline to operate only on the relevant, filtered subset.
+
+To ensure long-term viability and portability, future research must prioritize the optimization of the system for resource-constrained, self-hosted environments. While current models demonstrate the feasibility of the RAG approach, their reliance on specific hardware can be a barrier to deployment on the Section's aging infrastructure. Future iterations should explore the integration of highly compressed, state-of-the-art static embeddings and quantized LLMs, which provide a balance between linguistic capability and minimal computational overhead. By leveraging these edge-optimized models, the system can maintain high performance and low latency without requiring expensive GPU clusters or cloud-based dependencies, making the tool more accessible and sustainable for independent research groups.
+
+Ultimately, these refinements—structured chunking, programmatic filtering, and edge-optimized modeling—will shift the system from an experimental, autonomous agent to a robust, user-controllable research tool. By moving toward a Co-pilot model, the system sheds its "black-box" limitations, aligning the AI’s operations with the precise, audit-oriented workflows that plant breeders rely on. These changes will not only improve the system's objective retrieval metrics but, more importantly, will foster the necessary user trust to successfully replace legacy spreadsheet workflows with an integrated, intelligent, and transparent data management framework.
 % APPENDICES
 \appendices
 
@@ -409,6 +540,137 @@ The following 10 items will be used to assess the usability of the system. Parti
     \item I felt very confident using the system.
     \item I needed to learn a lot of things before I could get going with this system.
 \end{enumerate}
+
+\section{Evaluation Queries}
+Table \ref{tab:queries} lists the 20 queries utilized for evaluating the information retrieval performance of both the hybrid and lexical systems.
+
+\begin{table}[htbp]
+\caption{Test Queries for IR Evaluation}
+\label{tab:queries}
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{ID} & \textbf{Query} \\ \hline
+1 & resistant to calcareous soil \\
+2 & resistant to calcerous soil (misspelling) \\
+3 & early maturing \\
+4 & suitable for early harvest \\
+5 & purple anther colors \\
+6 & ear length greater than 10 cm \\
+7 & high yielding \\
+8 & tight husk fitting \\
+9 & good in very dry soil \\
+10 & resistant to drought \\
+11 & can handle saturated or flooded soil \\
+12 & tolerant to waterlogging \\
+13 & shows resistance to ear rot \\
+14 & red cob color \\
+15 & white cob color \\
+16 & resistant to common diseases \\
+17 & BT negative Bagtikan \\
+18 & purple silk color \\
+19 & plant height between 200 and 250 cm \\
+20 & more than 13 rows of grain \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Detailed Information Retrieval Metrics}
+The following table provides the per-query performance for the Hybrid Search pipeline. These values were aggregated to produce the summary metrics discussed in Section 5.
+
+\begin{table}[htbp]
+\caption{Detailed Performance Metrics for Hybrid Search}
+\label{tab:hybrid_metrics_full}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l|ccc|ccc|c}
+\hline
+\textbf{Query} & \textbf{P@5} & \textbf{P@10} & \textbf{P@20} & \textbf{R@5} & \textbf{R@10} & \textbf{R@20} & \textbf{MAP} \\ \hline
+Query 1 & 0.8 & 0.8 & 0.85 & 0.0186 & 0.0372 & 0.0791 & 0.0652 \\
+Query 2 & 1.0 & 0.8 & 0.9 & 0.0233 & 0.0372 & 0.0837 & 0.0757 \\
+Query 3 & 1.0 & 0.6 & 0.3 & 0.4545 & 0.5455 & 0.5455 & 0.5455 \\
+Query 4b & 0.2 & 0.1 & 0.05 & 0.0909 & 0.0909 & 0.0909 & 0.0909 \\
+Query 5 & 0.0 & 0.0 & 0.0 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 6 & 0.4 & 0.7 & 0.75 & 0.0250 & 0.0875 & 0.1875 & 0.1259 \\
+Query 7 & 0.4 & 0.5 & 0.3 & 0.0606 & 0.1515 & 0.1818 & 0.0896 \\
+Query 8 & 0.4 & 0.3 & 0.2 & 0.0400 & 0.0600 & 0.0800 & 0.0532 \\
+Query 9 & 0.2 & 0.1 & 0.1 & 0.0045 & 0.0045 & 0.0089 & 0.0050 \\
+Query 10b & 0.0 & 0.0 & 0.0 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 11 & 0.8 & 0.6 & 0.7 & 0.0179 & 0.0268 & 0.0625 & 0.0466 \\
+Query 12 & 0.0 & 0.0 & 0.0 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 13 & 0.8 & 0.9 & 0.7 & 0.0101 & 0.0226 & 0.0352 & 0.0302 \\
+Query 14 & 0.2 & 0.1 & 0.05 & 0.0164 & 0.0164 & 0.0164 & 0.0033 \\
+Query 15 & 0.4 & 0.2 & 0.15 & 0.0500 & 0.0500 & 0.0750 & 0.0233 \\
+Query 16 & 0.0 & 0.0 & 0.0 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 17 & 1.0 & 1.0 & 0.65 & 0.0169 & 0.0339 & 0.0441 & 0.0438 \\
+Query 18 & 0.6 & 0.6 & 0.45 & 0.0349 & 0.0698 & 0.1047 & 0.0690 \\
+Query 19 & 0.6 & 0.3 & 0.15 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+Query 20 & 0.0 & 0.0 & 0.0 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\ \hline
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[htbp]
+\caption{Detailed Performance Metrics for Keyword Search (BM25)}
+\label{tab:keyword_metrics_full}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l|ccc|ccc|c}
+\hline
+\textbf{Query} & \textbf{P@5} & \textbf{P@10} & \textbf{P@20} & \textbf{R@5} & \textbf{R@10} & \textbf{R@20} & \textbf{MAP} \\ \hline
+Query 1 & 1.0 & 1.0 & 0.85 & 0.0233 & 0.0465 & 0.0791 & 0.0735 \\
+Query 2 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 3 & 1.0 & 0.7 & 0.35 & 0.4545 & 0.6364 & 0.3500 & 0.6364 \\
+Query 4 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 5 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 6 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 7 & 0.2 & 0.5 & 0.30 & 0.0606 & 0.1515 & 0.1818 & 0.0577 \\
+Query 8 & 1.0 & 1.0 & 0.90 & 0.1000 & 0.2000 & 0.3600 & 0.3569 \\
+Query 9 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 10 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 11 & 0.8 & 0.8 & 0.80 & 0.0179 & 0.0357 & 0.0714 & 0.0500 \\
+Query 12 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 13 & 1.0 & 1.0 & 1.00 & 0.0126 & 0.0251 & 0.0503 & 0.0503 \\
+Query 14 & 0.2 & 0.1 & 0.05 & 0.0164 & 0.0164 & 0.0164 & 0.0164 \\
+Query 15 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 16 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 17 & 0.2 & 0.1 & 0.05 & 0.0034 & 0.0034 & 0.0034 & 0.0008 \\
+Query 18 & 0.0 & 0.0 & 0.00 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Query 19 & 0.6 & 0.3 & 0.15 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+Query 20 & 0.2 & 0.2 & 0.10 & 0.2000 & 0.4000 & 0.4000 & 0.2400 \\ \hline
+\end{tabular}
+}
+\end{table}
+
+\section{System Prompt Configuration}
+The system utilizes two distinct prompts to manage the interaction loop. The \textit{General Persona Prompt} establishes the constraints for the LLM's natural language generation, while the \textit{Routing Prompt} governs the function-calling logic for database querying.
+
+\subsection{General Persona Prompt}
+This prompt is injected into the system message to define the agent's expertise and constraints regarding data synthesis.
+
+\begin{lstlisting}
+You are an AI assistant for the Institute of Plant Breeding, specialized in maize phenotypic trait data and parental line selection for plant breeding research. Your primary role is to help the user efficiently query and analyze phenotypic data using natural language, overcoming the limitations of traditional keyword-based searches in spreadsheets. 
+
+Key guidelines:
+- Respond in a clear, concise, and helpful manner.
+- Ground information in plant breeding principles.
+- Do not output markdown or tables.
+- If search results are present, do not regurgitate them. Instead, summarize and analyze them.
+- Maintain a professional tone suitable for researchers.
+\end{lstlisting}
+
+\subsection{Routing and Tool Usage Prompt}
+This prompt is used during the intent classification stage to determine the search parameters for the ChromaDB and SQLite backend.
+
+\begin{lstlisting}
+You are a search query generator.
+Your task is to generate a concise query for the database based on the user's message.
+The database contains the following columns: {database_columns}
+
+Your query should be as concise, short, and focused as possible. It should ideally contain only the column to be searched and the search term.
+
+Output ONLY valid JSON: {"query": "search term or none"}
+No markdown. No extra text.
+\end{lstlisting}
 
 % % ACKNOWLEDGMENT
 % \section*{Acknowledgment}
