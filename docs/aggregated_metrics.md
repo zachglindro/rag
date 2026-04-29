@@ -29,4 +29,4 @@ These were the aggregated metrics:
 
 Search,Precision5,Precision10,Precision20,Recall5,Recall10,Recall20,MAP
 Hybrid,0.44,0.38,0.315,0.09318,0.1169,0.1298,0.1134
-Keyword,0.31,0.285,0.2275,0.09443,0.1256,0.1241
+Keyword,0.31,0.285,0.2275,0.09443,0.1258,0.1256,0.1241
