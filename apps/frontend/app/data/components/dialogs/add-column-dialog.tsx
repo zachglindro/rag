@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react"
+import { memo, useState } from "react" // Removed useEffect
 import {
   Dialog,
   DialogContent,
@@ -40,27 +40,45 @@ export const AddColumnDialog = memo(function AddColumnDialog({
   isMutating,
   onConfirm,
 }: AddColumnDialogProps) {
+  // 1. Initialize state directly
   const [name, setName] = useState("")
   const [type, setType] = useState("string")
   const [defaultValue, setDefaultValue] = useState("")
   const [position, setPosition] = useState("end")
 
-  useEffect(() => {
-    if (isOpen) {
-      setName("")
-      setType("string")
-      setDefaultValue("")
-      setPosition("end")
+  // 2. Create a reset function
+  const resetForm = () => {
+    setName("")
+    setType("string")
+    setDefaultValue("")
+    setPosition("end")
+  }
+
+  // 3. Handle closing logic to reset state
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      resetForm()
     }
-  }, [isOpen])
+    onOpenChange(open)
+  }
 
   const handleConfirm = () => {
-    onConfirm({ name, type, defaultValue, position: columnPendingAdd ? undefined : position })
+    onConfirm({ 
+      name, 
+      type, 
+      defaultValue, 
+      position: columnPendingAdd ? undefined : position 
+    })
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      {/* 
+        4. Use a key based on isOpen. 
+        When the dialog is closed and reopened, the key change forces 
+        React to reset all local state automatically.
+      */}
+      <DialogContent key={isOpen ? "open" : "closed"}>
         <DialogHeader>
           <DialogTitle>Add New Column</DialogTitle>
           <DialogDescription>
@@ -138,7 +156,7 @@ export const AddColumnDialog = memo(function AddColumnDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
             disabled={isMutating}
           >
             Cancel
