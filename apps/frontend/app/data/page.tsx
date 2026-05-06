@@ -122,6 +122,7 @@ function DataPageContent() {
               onSaveChanges={actions.handleSaveSpreadsheetChanges}
               onOpenColumnAddDialog={() => actions.openColumnAddDialog(null)}
               onOpenBulkDeleteDialog={actions.openBulkDeleteDialog}
+              onExportSelected={() => actions.openExportDialog("selected")}
             />
           )}
 

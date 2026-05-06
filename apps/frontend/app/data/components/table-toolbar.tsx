@@ -13,6 +13,7 @@ interface TableToolbarProps {
   onSaveChanges: () => void
   onOpenColumnAddDialog: () => void
   onOpenBulkDeleteDialog: () => void
+  onExportSelected: () => void
 }
 
 export function TableToolbar({
@@ -27,6 +28,7 @@ export function TableToolbar({
   onSaveChanges,
   onOpenColumnAddDialog,
   onOpenBulkDeleteDialog,
+  onExportSelected,
 }: TableToolbarProps) {
   return (
     <div className="rounded-lg border p-4">
@@ -41,13 +43,21 @@ export function TableToolbar({
               {isSelectionMode ? "Cancel Selection" : "Select"}
             </Button>
             {isSelectionMode && selectedRowIds.size > 0 && (
-              <Button
-                variant="destructive"
-                onClick={onOpenBulkDeleteDialog}
-                disabled={isMutating}
-              >
-                Delete Selected ({selectedRowIds.size})
-              </Button>
+              <>
+                <Button
+                  onClick={onExportSelected}
+                  disabled={isMutating}
+                >
+                  Export Selected ({selectedRowIds.size})
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={onOpenBulkDeleteDialog}
+                  disabled={isMutating}
+                >
+                  Delete Selected ({selectedRowIds.size})
+                </Button>
+              </>
             )}
             <Button onClick={onEnterEditMode} disabled={isMutating}>
               Edit
