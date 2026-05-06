@@ -53,8 +53,15 @@ def initialize_database(db_path: Path) -> None:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         create_tables(cursor)
+        create_fts_table(cursor)
         conn.commit()
         conn.close()
         print("Database initialized (empty).")
     else:
+        # Ensure FTS table exists even for existing databases
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        create_fts_table(cursor)
+        conn.commit()
+        conn.close()
         print("Database already exists.")

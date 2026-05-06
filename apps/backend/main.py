@@ -387,6 +387,32 @@ def build_export_rows(
     return export_rows, ordered_export_columns
 
 
+def rebuild_fts_index(cursor: sqlite3.Cursor) -> None:
+    """Rebuild the FTS (Full-Text Search) index for keyword search."""
+    # Create FTS table if not exists
+    create_fts_table(cursor)
+
+    # Clear and rebuild
+    cursor.execute("DELETE FROM records_fts")
+
+    cursor.execute("""
+        SELECT id, data, natural_language_description
+        FROM records
+    """)
+    records = cursor.fetchall()
+
+    for record in records:
+        record_id, data, natural_description = record
+        content = build_searchable_text(parse_record_data(data), natural_description)
+        cursor.execute(
+            """
+            INSERT INTO records_fts (record_id, content)
+            VALUES (?, ?)
+        """,
+            (record_id, content),
+        )
+
+
 @app.post("/columns")
 async def add_column(request: ColumnRequest):
     conn = sqlite3.connect(DB_PATH)
@@ -472,6 +498,10 @@ async def add_column(request: ColumnRequest):
             )
 
         conn.commit()
+
+        # Rebuild FTS index after column addition
+        rebuild_fts_index(cursor)
+
         return {"message": f"Column '{request.column_name}' added successfully"}
     except sqlite3.IntegrityError:
         conn.rollback()
@@ -583,6 +613,10 @@ async def delete_column(request: DeleteColumnRequest):
             )
 
         conn.commit()
+
+        # Rebuild FTS index after column deletion
+        rebuild_fts_index(cursor)
+
         return {"status": "success", "deleted_column": column_name}
     except Exception as e:
         conn.rollback()
@@ -747,6 +781,10 @@ async def rename_column(request: RenameColumnRequest):
             )
 
         conn.commit()
+
+        # Rebuild FTS index after column rename
+        rebuild_fts_index(cursor)
+
         return {
             "status": "success",
             "renamed_column": old_column_name,
@@ -1374,6 +1412,16 @@ async def update_record(record_id: int, request: UpdateRecordRequest):
 
         conn.commit()
 
+        # Update FTS index for this record
+        content = build_searchable_text(request.data, new_description)
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO records_fts (record_id, content)
+            VALUES (?, ?)
+        """,
+            (record_id, content),
+        )
+
         cursor.execute(
             """
             SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
@@ -1456,6 +1504,10 @@ async def delete_record(record_id: int):
         vector_deleted = True
 
         conn.commit()
+
+        # Remove from FTS index
+        cursor.execute("DELETE FROM records_fts WHERE record_id = ?", (record_id,))
+
         return {"status": "success", "deleted_id": record_id}
     except HTTPException:
         conn.rollback()
@@ -2028,6 +2080,14 @@ async def bulk_delete_records(request: BulkDeleteRequest):
         vector_db.delete_by_ids([str(rid) for rid in existing_ids])
 
         conn.commit()
+
+        # Remove from FTS index
+        placeholders_fts = ",".join("?" for _ in existing_ids)
+        cursor.execute(
+            f"DELETE FROM records_fts WHERE record_id IN ({placeholders_fts})",
+            existing_ids,
+        )
+
         return {"status": "success", "deleted_count": len(existing_ids)}
     except Exception as e:
         conn.rollback()
