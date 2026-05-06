@@ -873,12 +873,12 @@ export default function Page() {
       <SidebarInset>
         <div className="relative flex min-h-svh flex-col bg-muted/30">
           {messages.length > 0 && (
-            <div className="absolute top-4 right-4 z-20">
+            <div className="fixed top-4 right-4 z-20">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={startNewChat}
-                className="h-9 gap-2 rounded-full bg-background px-4 shadow-sm hover:bg-muted"
+                className="h-9 gap-2 rounded-full bg-black px-4 text-white shadow-sm hover:bg-gray-900"
               >
                 <Plus className="h-4 w-4" />
                 <span className="text-xs font-medium">New Chat</span>
