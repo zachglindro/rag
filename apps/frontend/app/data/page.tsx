@@ -159,6 +159,7 @@ function DataPageContent() {
                   hasNext={state.hasNextPage}
                   onPrevious={() => actions.setSkip(Math.max(state.skip - state.pageSize, 0))}
                   onNext={() => actions.setSkip(state.skip + state.pageSize)}
+                  onPageChange={(page) => actions.setSkip((page - 1) * state.pageSize)}
                   disabled={state.isMutating || state.isEditMode}
                   totalCount={state.totalCount}
                 />
@@ -277,6 +278,7 @@ function DataPageContent() {
                   hasNext={state.hasNextPage}
                   onPrevious={() => actions.setSkip(Math.max(state.skip - state.pageSize, 0))}
                   onNext={() => actions.setSkip(state.skip + state.pageSize)}
+                  onPageChange={(page) => actions.setSkip((page - 1) * state.pageSize)}
                   disabled={state.isMutating || state.isEditMode}
                   totalCount={state.totalCount}
                 />
