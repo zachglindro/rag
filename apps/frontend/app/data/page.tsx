@@ -885,7 +885,7 @@ function DataPageContent() {
   )
 
   const openColumnAddDialog = useCallback(
-    (column: { key: string; label: string }) => {
+    (column: { key: string; label: string } | null) => {
       setColumnPendingAdd(column)
       setIsColumnAddDialogOpen(true)
     },
@@ -1024,8 +1024,9 @@ function DataPageContent() {
     name: string
     type: string
     defaultValue: string
+    position?: string
   }) => {
-    if (!columnPendingAdd) return
+    if (!columnPendingAdd && !data.position) return
     const trimmedName = data.name.trim()
     if (!trimmedName) {
       toast.error("Column name cannot be empty")
@@ -1034,14 +1035,32 @@ function DataPageContent() {
 
     setIsMutating(true)
     try {
-      // Determine the order for the new column (to the right of the current one)
-      const targetIndex = metadata.findIndex(
-        (m) => m.column_name === columnPendingAdd.key
-      )
-      const targetMeta = metadata[targetIndex]
-      const newOrder = targetMeta
-        ? (targetMeta.order ?? 0) + 1
-        : metadata.length
+      // Determine the order for the new column
+      let newOrder: number
+      if (columnPendingAdd) {
+        // Existing logic for context menu
+        const targetIndex = metadata.findIndex(
+          (m) => m.column_name === columnPendingAdd.key
+        )
+        const targetMeta = metadata[targetIndex]
+        newOrder = targetMeta
+          ? (targetMeta.order ?? 0) + 1
+          : metadata.length
+      } else {
+        // New logic for position selection
+        const position = data.position!
+        if (position === "beginning") {
+          newOrder = 0
+        } else if (position === "end") {
+          newOrder = Math.max(...metadata.map(m => m.order ?? 0), -1) + 1
+        } else if (position.startsWith("after-")) {
+          const afterKey = position.slice(6)
+          const afterMeta = metadata.find(m => m.column_name === afterKey)
+          newOrder = (afterMeta?.order ?? 0) + 1
+        } else {
+          newOrder = metadata.length
+        }
+      }
 
       // Format default value for backend (must be valid JSON)
       let formattedDefault = data.defaultValue.trim()
@@ -1307,6 +1326,13 @@ function DataPageContent() {
                     </Button>
                     <Button onClick={enterEditMode} disabled={isMutating}>
                       Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => openColumnAddDialog(null)}
+                      disabled={isMutating}
+                    >
+                      Add Column
                     </Button>
                   </>
                 )}
@@ -1574,6 +1600,7 @@ function DataPageContent() {
             isOpen={isColumnAddDialogOpen}
             onOpenChange={setIsColumnAddDialogOpen}
             columnPendingAdd={columnPendingAdd}
+            visibleColumns={visibleColumns}
             isMutating={isMutating}
             onConfirm={handleConfirmColumnAdd}
           />

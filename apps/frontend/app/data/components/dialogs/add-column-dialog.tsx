@@ -1,4 +1,4 @@
-import { memo, useState } from "react"
+import { memo, useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -22,11 +22,13 @@ interface AddColumnDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   columnPendingAdd: { key: string; label: string } | null
+  visibleColumns: { key: string; label: string }[]
   isMutating: boolean
   onConfirm: (data: {
     name: string
     type: string
     defaultValue: string
+    position?: string
   }) => void
 }
 
@@ -34,15 +36,26 @@ export const AddColumnDialog = memo(function AddColumnDialog({
   isOpen,
   onOpenChange,
   columnPendingAdd,
+  visibleColumns,
   isMutating,
   onConfirm,
 }: AddColumnDialogProps) {
   const [name, setName] = useState("")
   const [type, setType] = useState("string")
   const [defaultValue, setDefaultValue] = useState("")
+  const [position, setPosition] = useState("end")
+
+  useEffect(() => {
+    if (isOpen) {
+      setName("")
+      setType("string")
+      setDefaultValue("")
+      setPosition("end")
+    }
+  }, [isOpen])
 
   const handleConfirm = () => {
-    onConfirm({ name, type, defaultValue })
+    onConfirm({ name, type, defaultValue, position: columnPendingAdd ? undefined : position })
   }
 
   return (
@@ -51,8 +64,9 @@ export const AddColumnDialog = memo(function AddColumnDialog({
         <DialogHeader>
           <DialogTitle>Add New Column</DialogTitle>
           <DialogDescription>
-            Add a new column to the right of &quot;
-            {columnPendingAdd?.label}&quot;.
+            {columnPendingAdd
+              ? `Add a new column to the right of "${columnPendingAdd.label}".`
+              : "Add a new column at the selected position."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -82,6 +96,27 @@ export const AddColumnDialog = memo(function AddColumnDialog({
               </SelectContent>
             </Select>
           </div>
+          {!columnPendingAdd && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="col-position" className="text-right text-sm">
+                Position
+              </label>
+              <Select value={position} onValueChange={setPosition}>
+                <SelectTrigger className="col-span-3" id="col-position">
+                  <SelectValue placeholder="Select position" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="beginning">At the beginning</SelectItem>
+                  {visibleColumns.map((column) => (
+                    <SelectItem key={`after-${column.key}`} value={`after-${column.key}`}>
+                      After {column.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="end">At the end</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-4 items-center gap-4">
             <div className="text-right">
               <label htmlFor="col-default" className="text-sm font-medium">
