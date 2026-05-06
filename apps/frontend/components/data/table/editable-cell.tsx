@@ -10,6 +10,7 @@ export const EditableCell = memo(function EditableCell({
   onUpdateDraftCell,
   isMutating,
   changed,
+  isFirstColumn = false,
 }: {
   rowId: number
   columnKey: string
@@ -17,6 +18,7 @@ export const EditableCell = memo(function EditableCell({
   onUpdateDraftCell: (rowId: number, columnKey: string, value: string) => void
   isMutating: boolean
   changed: boolean
+  isFirstColumn?: boolean
 }) {
   const [value, setValue] = useState(initialValue)
 
@@ -25,7 +27,7 @@ export const EditableCell = memo(function EditableCell({
   }, [rowId, columnKey, value, onUpdateDraftCell])
 
   return (
-    <TableCell>
+    <TableCell className={cn(isFirstColumn && "sticky left-0 z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]")}>
       <div className="w-[300px]">
         <Textarea
           value={value}

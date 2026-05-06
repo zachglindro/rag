@@ -108,7 +108,7 @@ export const DataTableRow = memo(function DataTableRow({
             </TableCell>
           )}
 
-          {visibleColumns.map((column) => {
+          {visibleColumns.map((column, index) => {
             const originalValue = toEditableCellValue(row.data?.[column.key])
             const draftValue = rowDraft?.[column.key]
             const cellValue = draftValue ?? originalValue
@@ -125,12 +125,13 @@ export const DataTableRow = memo(function DataTableRow({
                   onUpdateDraftCell={onUpdateDraftCell}
                   isMutating={isMutating}
                   changed={changed}
+                  isFirstColumn={index === 0}
                 />
               )
             }
 
             return (
-              <TableCell key={`${row.id}-${column.key}`}>
+              <TableCell key={`${row.id}-${column.key}`} className={cn(index === 0 && "sticky left-0 z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]")}>
                 <div className="max-w-[400px] break-words whitespace-normal">
                   {stringifyValue(row.data?.[column.key])}
                 </div>

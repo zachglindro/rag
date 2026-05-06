@@ -22,6 +22,7 @@ import {
 import Link from "next/link"
 import { Suspense } from "react"
 import { Loader2, ChevronUp, ChevronDown } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { useDataManagement } from "./hooks/use-data-management"
 import { DataTableRow } from "@/components/data/table/data-table-row"
 import { DeleteConfirmDialog } from "./components/dialogs/delete-confirm-dialog"
@@ -177,15 +178,16 @@ function DataPageContent() {
                           />
                         </TableHead>
                       )}
-                      {state.allColumns.map((column) => (
+                      {state.allColumns.map((column, index) => (
                         <ContextMenu key={column.key}>
                           <ContextMenuTrigger asChild>
                             <TableHead
-                              className={
+                              className={cn(
                                 column.key === "id"
                                   ? "w-20 cursor-pointer"
-                                  : "cursor-pointer"
-                              }
+                                  : "cursor-pointer",
+                                index === 0 && "sticky left-0 z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
+                              )}
                               onClick={() => actions.handleSort(column.key)}
                             >
                               {column.label}
