@@ -322,6 +322,7 @@ async function streamGenerateTokens(
 
 async function getSearchQuery(
   conversationMessages: Array<{ role: string; content: string }>,
+  databaseColumns: string[],
   signal?: AbortSignal,
   log?: (message: string) => void
 ): Promise<string> {
@@ -346,6 +347,7 @@ async function getSearchQuery(
       routingMessages,
       ROUTER_MAX_TOKENS,
       "routing",
+      databaseColumns,
       signal
     )
 
@@ -643,8 +645,21 @@ export default function Page() {
         content: message.content,
       }))
 
+      // Fetch column metadata for the backend
+      let databaseColumns: string[] = []
+      try {
+        const colResponse = await fetch(`${BACKEND_URL}/column-metadata`)
+        if (colResponse.ok) {
+          const colData = (await colResponse.json()) as { column_name: string }[]
+          databaseColumns = colData.map((c) => c.column_name)
+        }
+      } catch (e) {
+        setDebugLogs((prev) => [...prev, `Error fetching columns: ${e}`])
+      }
+
       const searchQuery = await getSearchQuery(
         conversationMessages,
+        databaseColumns,
         abortController.signal,
         (log: string) => setDebugLogs((prev: string[]) => [...prev, log])
       )
@@ -698,18 +713,6 @@ export default function Page() {
               }
             })
           : conversationMessages
-
-      // Fetch column metadata for the backend
-      let databaseColumns: string[] = []
-      try {
-        const colResponse = await fetch(`${BACKEND_URL}/column-metadata`)
-        if (colResponse.ok) {
-          const colData = (await colResponse.json()) as { column_name: string }[]
-          databaseColumns = colData.map((c) => c.column_name)
-        }
-      } catch (e) {
-        setDebugLogs((prev) => [...prev, `Error fetching columns: ${e}`])
-      }
 
       const inputText = requestMessages
         .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
