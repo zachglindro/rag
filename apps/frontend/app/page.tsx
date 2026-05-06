@@ -650,7 +650,9 @@ export default function Page() {
       try {
         const colResponse = await fetch(`${BACKEND_URL}/column-metadata`)
         if (colResponse.ok) {
-          const colData = (await colResponse.json()) as { column_name: string }[]
+          const colData = (await colResponse.json()) as {
+            column_name: string
+          }[]
           databaseColumns = colData.map((c) => c.column_name)
         }
       } catch (e) {
