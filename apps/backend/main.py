@@ -1806,16 +1806,8 @@ async def rebuild_compare_index():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
-        # Check if table exists
-        cursor.execute("""
-            SELECT name FROM sqlite_master
-            WHERE type='table' AND name='records_fts'
-        """)
-        if cursor.fetchone() is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Compare mode not set up. Call /compare/setup first.",
-            )
+        # Create FTS table if not exists
+        create_fts_table(cursor)
 
         # Clear and rebuild
         cursor.execute("DELETE FROM records_fts")
@@ -1847,8 +1839,6 @@ async def rebuild_compare_index():
         return CompareRebuildResponse(
             indexed_count=indexed_count, rebuild_duration_ms=duration_ms
         )
-    except HTTPException:
-        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Rebuild failed: {str(e)}")

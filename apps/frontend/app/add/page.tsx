@@ -9,10 +9,23 @@ import { UploadStep } from "@/components/add/upload-step"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { useEffect, useState, useCallback, useMemo } from "react"
+import { toast } from "sonner"
 
 interface ColumnMapping {
   origColumn: string
   mappedColumn: string
+}
+
+const BACKEND_URL = "http://localhost:8000"
+
+async function rebuildCompareIndex(): Promise<void> {
+  const response = await fetch(`${BACKEND_URL}/compare/rebuild`, {
+    method: "POST",
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || "Rebuild failed")
+  }
 }
 
 export default function AddPage() {
@@ -60,8 +73,16 @@ export default function AddPage() {
     setCurrentStep(step)
   }
 
-  const handleIngestionComplete = () => {
+  const handleIngestionComplete = async () => {
     setIsIngestionComplete(true)
+    try {
+      await rebuildCompareIndex()
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Index rebuild failed"
+      )
+      console.error(error)
+    }
   }
 
   const steps = useMemo(() => {
