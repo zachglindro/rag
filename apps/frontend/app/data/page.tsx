@@ -397,7 +397,7 @@ function DataPageContent() {
 
         const [searchResponse, metadataResponse] = await Promise.all([
           fetch(
-            `${endpoint}?query=${encodeURIComponent(appliedSearchQuery)}&top_k=50&sort_by=${encodeURIComponent(sortColumn)}&sort_order=${sortDirection}`
+            `${endpoint}?query=${encodeURIComponent(appliedSearchQuery)}&top_k=50`
           ),
           fetch(`${BACKEND_URL}/column-metadata`),
         ])
