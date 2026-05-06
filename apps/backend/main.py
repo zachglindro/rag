@@ -173,6 +173,7 @@ class GenerateRequest(BaseModel):
     messages: list[dict[str, str]]
     max_tokens: int = 1024
     task: str = "general"
+    database_columns: list[str] | None = None
 
 
 class GenerateResponse(BaseModel):
@@ -2436,6 +2437,7 @@ async def generate_response_endpoint(
                 request.max_tokens,
                 request.task,
                 stream=True,
+                database_columns=request.database_columns,
             )
 
             while True:

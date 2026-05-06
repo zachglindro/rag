@@ -201,6 +201,7 @@ async function streamGenerateTokens(
   requestMessages: Array<{ role: string; content: string }>,
   maxTokens: number,
   task: string = "general",
+  databaseColumns?: string[],
   signal?: AbortSignal,
   onToken?: (token: string) => void
 ): Promise<string> {
@@ -214,6 +215,7 @@ async function streamGenerateTokens(
       messages: requestMessages,
       max_tokens: maxTokens,
       task: task,
+      database_columns: databaseColumns,
     }),
   })
 
@@ -697,6 +699,18 @@ export default function Page() {
             })
           : conversationMessages
 
+      // Fetch column metadata for the backend
+      let databaseColumns: string[] = []
+      try {
+        const colResponse = await fetch(`${BACKEND_URL}/column-metadata`)
+        if (colResponse.ok) {
+          const colData = (await colResponse.json()) as { column_name: string }[]
+          databaseColumns = colData.map((c) => c.column_name)
+        }
+      } catch (e) {
+        setDebugLogs((prev) => [...prev, `Error fetching columns: ${e}`])
+      }
+
       const inputText = requestMessages
         .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
         .join("\n\n")
@@ -713,6 +727,7 @@ export default function Page() {
         requestMessages,
         responseMaxTokens,
         "general",
+        databaseColumns,
         abortController.signal,
         (token) => {
           if (activeRequestIdRef.current !== requestId) {
