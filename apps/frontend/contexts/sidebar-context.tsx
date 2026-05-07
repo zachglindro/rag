@@ -24,6 +24,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
             { title: "Add", enabled: true },
             { title: "Data", enabled: true },
             { title: "Compare", enabled: true },
+            { title: "History", enabled: true },
           ]
     }
     return []

@@ -37,6 +37,19 @@ def create_tables(cursor: sqlite3.Cursor) -> None:
         )
     """)
 
+    # History table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            action_type TEXT NOT NULL,  -- e.g., 'RECORD_ADDED', 'RECORD_UPDATED', 'RECORD_DELETED', 'COLUMN_ADDED', 'COLUMN_DELETED', 'COLUMN_RENAMED', 'DATABASE_RESET'
+            user_name TEXT,
+            details TEXT NOT NULL,  -- JSON object containing action-specific details
+            affected_records INTEGER,  -- Number of records affected (for bulk operations)
+            affected_column TEXT  -- Column name for column operations
+        )
+    """)
+
 
 def create_fts_table(cursor: sqlite3.Cursor) -> None:
     # FTS5 virtual table for keyword search
@@ -58,10 +71,24 @@ def initialize_database(db_path: Path) -> None:
         conn.close()
         print("Database initialized (empty).")
     else:
-        # Ensure FTS table exists even for existing databases
+        # Ensure FTS table and history table exist even for existing databases
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         create_fts_table(cursor)
+
+        # Ensure history table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                action_type TEXT NOT NULL,
+                user_name TEXT,
+                details TEXT NOT NULL,
+                affected_records INTEGER,
+                affected_column TEXT
+            )
+        """)
+
         conn.commit()
         conn.close()
         print("Database already exists.")

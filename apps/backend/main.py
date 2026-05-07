@@ -269,6 +269,21 @@ class CompareRebuildResponse(BaseModel):
     rebuild_duration_ms: int
 
 
+class HistoryEntry(BaseModel):
+    id: int
+    timestamp: str
+    action_type: str
+    user_name: str | None = None
+    details: dict[str, Any]
+    affected_records: int | None = None
+    affected_column: str | None = None
+
+
+class HistoryResponse(BaseModel):
+    entries: list[HistoryEntry]
+    total_count: int
+
+
 def infer_column_data_type(values: list[Any]) -> str:
     for value in values:
         if value is None:
@@ -413,6 +428,25 @@ def rebuild_fts_index(cursor: sqlite3.Cursor) -> None:
         )
 
 
+def log_history(
+    cursor: sqlite3.Cursor,
+    action_type: str,
+    user_name: str | None = None,
+    details: dict | None = None,
+    affected_records: int | None = None,
+    affected_column: str | None = None,
+) -> None:
+    """Log an action to the history table."""
+    details_json = json.dumps(details or {})
+    cursor.execute(
+        """
+        INSERT INTO history (action_type, user_name, details, affected_records, affected_column)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (action_type, user_name, details_json, affected_records, affected_column),
+    )
+
+
 @app.post("/columns")
 async def add_column(request: ColumnRequest):
     conn = sqlite3.connect(DB_PATH)
@@ -496,6 +530,19 @@ async def add_column(request: ColumnRequest):
                 "UPDATE records SET natural_language_description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (new_descriptions[i], record_id),
             )
+
+        # Log history
+        log_history(
+            cursor,
+            action_type="COLUMN_ADDED",
+            details={
+                "column_name": request.column_name,
+                "display_name": request.display_name,
+                "data_type": request.data_type,
+                "is_required": request.is_required,
+            },
+            affected_column=request.column_name,
+        )
 
         conn.commit()
 
@@ -611,6 +658,14 @@ async def delete_column(request: DeleteColumnRequest):
                 "UPDATE records SET natural_language_description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (new_descriptions[i], record_id),
             )
+
+        # Log history
+        log_history(
+            cursor,
+            action_type="COLUMN_DELETED",
+            details={"column_name": column_name},
+            affected_column=column_name,
+        )
 
         conn.commit()
 
@@ -779,6 +834,17 @@ async def rename_column(request: RenameColumnRequest):
                 "UPDATE records SET natural_language_description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (new_descriptions[i], record_id),
             )
+
+        # Log history
+        log_history(
+            cursor,
+            action_type="COLUMN_RENAMED",
+            details={
+                "old_column_name": old_column_name,
+                "new_column_name": request.new_column.column_name,
+            },
+            affected_column=old_column_name,
+        )
 
         conn.commit()
 
@@ -1194,6 +1260,19 @@ async def ingest_records(request: IngestRequest):
                     + "\n"
                 )
 
+            # Log history
+            log_history(
+                cursor,
+                action_type="RECORDS_INGESTED",
+                user_name=request.user_name,
+                details={
+                    "inserted_count": inserted_count,
+                    "updated_count": updated_count,
+                    "mapping": mapping_dict,
+                },
+                affected_records=inserted_count + updated_count,
+            )
+
             conn.commit()
             yield (
                 json.dumps({"type": "progress", "progress": 100, "message": "Done!"})
@@ -1410,6 +1489,18 @@ async def update_record(record_id: int, request: UpdateRecordRequest):
         )
         vector_updated = True
 
+        # Log history
+        log_history(
+            cursor,
+            action_type="RECORD_UPDATED",
+            user_name=request.user_name,
+            details={
+                "record_id": record_id,
+                "old_data": old_data,
+                "new_data": request.data,
+            },
+        )
+
         conn.commit()
 
         # Update FTS index for this record
@@ -1502,6 +1593,13 @@ async def delete_record(record_id: int):
 
         vector_db.delete_by_ids([str(record_id)])
         vector_deleted = True
+
+        # Log history
+        log_history(
+            cursor,
+            action_type="RECORD_DELETED",
+            details={"record_id": record_id, "deleted_data": existing_data},
+        )
 
         conn.commit()
 
@@ -1749,7 +1847,15 @@ async def reset_database():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
-        # Drop existing tables
+        # Log history BEFORE resetting
+        log_history(
+            cursor,
+            action_type="DATABASE_RESET",
+            details={"action": "full_database_reset"},
+        )
+        conn.commit()
+
+        # Drop existing tables (but keep history table)
         cursor.execute("DROP TABLE IF EXISTS records")
         cursor.execute("DROP TABLE IF EXISTS column_metadata")
         cursor.execute("DROP TABLE IF EXISTS records_fts")
@@ -2014,6 +2120,48 @@ async def search_records_keyword(
         return RecordSearchResponse(
             query=cleaned_query, top_k=top_k, records=limited_rows
         )
+    finally:
+        conn.close()
+
+
+@app.get("/history", response_model=HistoryResponse)
+async def get_history(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
+):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # Get total count
+        cursor.execute("SELECT COUNT(*) FROM history")
+        total_count = cursor.fetchone()[0]
+
+        # Get paginated history entries
+        cursor.execute(
+            """
+            SELECT id, timestamp, action_type, user_name, details, affected_records, affected_column
+            FROM history
+            ORDER BY timestamp DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, skip),
+        )
+        rows = cursor.fetchall()
+
+        entries = []
+        for row in rows:
+            entry = HistoryEntry(
+                id=row[0],
+                timestamp=row[1],
+                action_type=row[2],
+                user_name=row[3],
+                details=json.loads(row[4]),
+                affected_records=row[5],
+                affected_column=row[6],
+            )
+            entries.append(entry)
+
+        return HistoryResponse(entries=entries, total_count=total_count)
     finally:
         conn.close()
 

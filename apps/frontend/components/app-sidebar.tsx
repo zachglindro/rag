@@ -10,6 +10,7 @@ import {
   PlusCircle,
   Settings,
   User,
+  Clock,
 } from "lucide-react"
 import { useSidebarSettings } from "@/contexts/sidebar-context"
 
@@ -43,6 +44,7 @@ const navItems = [
   { title: "Add", icon: PlusCircle, href: "/add" },
   { title: "Data", icon: Database, href: "/data" },
   { title: "Compare", icon: BarChart2, href: "/compare" },
+  { title: "History", icon: Clock, href: "/history" },
   { title: "Settings", icon: Settings, href: "/settings" },
 ]
 
