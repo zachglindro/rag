@@ -27,6 +27,7 @@ import {
 import { useEffect, useState, useMemo } from "react"
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { BACKEND_URL } from "@/app/data/types"
 
 interface ColumnMapping {
   origColumn: string
@@ -93,7 +94,7 @@ export function TemplatePreviewStep({
         }
 
         const response = await fetch(
-          "http://localhost:8000/records/check-existence",
+          `${BACKEND_URL}/records/check-existence`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

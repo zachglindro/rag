@@ -10,13 +10,12 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { toast } from "sonner"
+import { BACKEND_URL } from "@/app/data/types"
 
 interface ColumnMapping {
   origColumn: string
   mappedColumn: string
 }
-
-const BACKEND_URL = "http://localhost:8000"
 
 async function rebuildCompareIndex(): Promise<void> {
   const response = await fetch(`${BACKEND_URL}/compare/rebuild`, {
@@ -40,7 +39,7 @@ export default function AddPage() {
   useEffect(() => {
     const checkDatabase = async () => {
       try {
-        const response = await fetch("http://localhost:8000/records/count")
+        const response = await fetch(`${BACKEND_URL}/records/count`)
         const data = await response.json()
         setHasData(data.count > 0)
       } catch (error) {

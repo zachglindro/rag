@@ -22,8 +22,7 @@ import {
 import { Loader2, RefreshCw, Search } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-
-const BACKEND_URL = "http://localhost:8000"
+import { BACKEND_URL } from "@/app/data/types"
 
 interface CompareStatusResponse {
   ready: boolean

@@ -31,8 +31,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
+import { BACKEND_URL } from "@/app/data/types"
 
-const BACKEND_URL = "http://localhost:8000"
 const HISTORY_URL = `${BACKEND_URL}/history`
 const PAGE_SIZE = 50
 

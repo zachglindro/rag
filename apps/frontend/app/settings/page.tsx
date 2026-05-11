@@ -34,6 +34,7 @@ import {
 import { useSidebarSettings } from "@/contexts/sidebar-context"
 import { Reorder } from "framer-motion"
 import { Input } from "@/components/ui/input"
+import { BACKEND_URL } from "@/app/data/types"
 
 interface ModelInfo {
   id: string
@@ -107,7 +108,7 @@ export default function Settings() {
 
   const fetchModelSettings = async () => {
     try {
-      const response = await fetch("http://localhost:8000/settings/model")
+      const response = await fetch(`${BACKEND_URL}/settings/model`)
       if (!response.ok) throw new Error("Failed to fetch model settings")
       const data: ModelSettingsResponse = await response.json()
       setActiveModel(data.active_model)
@@ -142,7 +143,7 @@ export default function Settings() {
     setIsSwitching(true)
     setSwitchSuccess(false) // Reset success state
     try {
-      const response = await fetch("http://localhost:8000/settings/model", {
+      const response = await fetch(`${BACKEND_URL}/settings/model`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model_id: modelId }),
@@ -171,7 +172,7 @@ export default function Settings() {
 
   const fetchBackupSettings = async () => {
     try {
-      const response = await fetch("http://localhost:8000/settings/backup")
+      const response = await fetch(`${BACKEND_URL}/settings/backup`)
       if (!response.ok) throw new Error("Failed to fetch backup settings")
       const data: BackupSettings = await response.json()
       setBackupSettings(data)
@@ -185,7 +186,7 @@ export default function Settings() {
     if (!backupSettings) return
     setIsSavingBackup(true)
     try {
-      const response = await fetch("http://localhost:8000/settings/backup", {
+      const response = await fetch(`${BACKEND_URL}/settings/backup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(backupSettings),
@@ -209,7 +210,7 @@ export default function Settings() {
     setIsBackingUpNow(true)
     try {
       const response = await fetch(
-        "http://localhost:8000/settings/backup/now",
+        `${BACKEND_URL}/settings/backup/now`,
         {
           method: "POST",
         }
@@ -226,7 +227,7 @@ export default function Settings() {
 
   const handleReset = async () => {
     try {
-      const response = await fetch("http://localhost:8000/reset-database", {
+      const response = await fetch(`${BACKEND_URL}/reset-database`, {
         method: "POST",
       })
       if (!response.ok) {
@@ -253,7 +254,7 @@ export default function Settings() {
     setIsExporting(true)
     try {
       const response = await fetch(
-        `http://localhost:8000/export-data?format=${exportFormat}`
+        `${BACKEND_URL}/export-data?format=${exportFormat}`
       )
       if (!response.ok) {
         throw new Error("Export failed")

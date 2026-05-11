@@ -5,6 +5,7 @@ import { Database, Upload, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { BACKEND_URL } from "@/app/data/types"
 
 interface UploadStepProps {
   onFileSelect: (file: File) => void
@@ -67,7 +68,7 @@ export function UploadStep({
   const uploadFile = async (file: File) => {
     const formData = new FormData()
     formData.append("file", file)
-    const response = await fetch("http://localhost:8000/upload", {
+    const response = await fetch(`${BACKEND_URL}/upload`, {
       method: "POST",
       body: formData,
     })

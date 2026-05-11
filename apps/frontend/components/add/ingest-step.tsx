@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress"
 import { Check, Loader2, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { BACKEND_URL } from "@/app/data/types"
 
 const startedIngestionKeys = new Set<string>()
 
@@ -62,7 +63,7 @@ export function IngestStep({
 
         const mappedIdColumn = idColumn
 
-        const response = await fetch("http://localhost:8000/ingest", {
+        const response = await fetch(`${BACKEND_URL}/ingest`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

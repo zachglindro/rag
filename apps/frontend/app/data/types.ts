@@ -38,7 +38,7 @@ export interface FilterCondition {
   value: string
 }
 
-export const BACKEND_URL = "http://localhost:8000"
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 export const BOOLEAN_TRUE_VALUES = new Set(["true", "1", "yes"])
 export const BOOLEAN_FALSE_VALUES = new Set(["false", "0", "no"])
 

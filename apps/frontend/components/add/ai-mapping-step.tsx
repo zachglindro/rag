@@ -25,6 +25,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { BACKEND_URL } from "@/app/data/types"
 
 // Define the type for mapping suggestions from the API
 interface MappingSuggestion {
@@ -131,7 +132,7 @@ export function AIMappingStep({
         setIsSuggestionsLoading(true)
         try {
           const response = await fetch(
-            "http://localhost:8000/suggest-mappings",
+            `${BACKEND_URL}/suggest-mappings`,
             {
               method: "POST",
               headers: {
@@ -175,7 +176,7 @@ export function AIMappingStep({
   useEffect(() => {
     const fetchColumns = async () => {
       try {
-        const response = await fetch("http://localhost:8000/column-metadata")
+        const response = await fetch(`${BACKEND_URL}/column-metadata`)
         const data = await response.json()
         const columns = data.map((col: ColumnMetadata) => ({
           value: col.column_name,

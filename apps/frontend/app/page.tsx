@@ -27,8 +27,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
+import { BACKEND_URL } from "@/app/data/types"
 
-const BACKEND_URL = "http://localhost:8000"
 const GENERATE_URL = `${BACKEND_URL}/generate`
 const RAG_TOP_K = 5
 const ROUTER_MAX_TOKENS = 80
