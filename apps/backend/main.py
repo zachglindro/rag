@@ -2,6 +2,7 @@ import difflib
 import io
 import importlib
 import json
+import re
 import sqlite3
 import asyncio
 import time
@@ -325,6 +326,39 @@ def parse_record_data(data_value: Any) -> dict[str, Any]:
             return {"_raw": data_value}
 
     return {}
+
+
+def natural_sort_key(value: Any) -> tuple:
+    """
+    Generate a natural sort key for case-insensitive alphanumeric sorting.
+    Treats numeric parts as numbers, not strings, enabling natural ordering.
+    Example: "file2" < "file10" (not "file10" < "file2")
+
+    Args:
+        value: Any value to sort (None, number, string, etc.)
+
+    Returns:
+        A tuple suitable for natural sorting (works with Python's sort functions)
+    """
+    if value is None:
+        # Return a key that sorts None values first, wrapped in tuple for consistency
+        return ((float("-inf"), ""),)
+
+    # Convert to lowercase string for case-insensitive comparison
+    s = str(value).lower()
+
+    # Split by digits and non-digits, keeping the separators
+    parts: list[tuple[int, int | str]] = []
+    for part in re.split(r"(\d+)", s):
+        if part:  # Skip empty strings from split
+            if part.isdigit():
+                # Numeric parts: use (1, int_value) so numbers sort numerically
+                parts.append((1, int(part)))
+            else:
+                # Text parts: use (0, string) for text sorting
+                parts.append((0, part))
+
+    return tuple(parts) if parts else ((0, ""),)
 
 
 def build_searchable_text(
@@ -1310,40 +1344,17 @@ async def get_records(
     cursor = conn.cursor()
 
     try:
-        # Build ORDER BY clause
-        sort_order_upper = sort_order.upper()
-        top_level_columns = {
-            "id",
-            "natural_language_description",
-            "created_at",
-            "updated_at",
-            "created_by",
-            "updated_by",
-        }
-
-        if sort_by in top_level_columns:
-            if sort_by == "id":
-                order_clause = f"ORDER BY {sort_by} {sort_order_upper}"
-            else:
-                # Use COLLATE NOCASE for case-insensitive string/timestamp sorting
-                order_clause = f"ORDER BY {sort_by} COLLATE NOCASE {sort_order_upper}"
-        else:
-            # Assume sort_by is a data column, use json_extract
-            # Added COLLATE NOCASE for case-insensitive sorting
-            order_clause = f"ORDER BY json_extract(data, '$.{sort_by}') COLLATE NOCASE {sort_order_upper}"
-
+        # Fetch all records (without pagination - we'll sort and paginate in Python)
         cursor.execute(
-            f"""
+            """
             SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
             FROM records
-            {order_clause}
-            LIMIT ? OFFSET ?
-            """,
-            (limit, skip),
+            """
         )
         rows = cursor.fetchall()
 
-        records = [
+        # Convert to RecordRow objects
+        all_records = [
             RecordRow(
                 id=row[0],
                 data=parse_record_data(row[1]),
@@ -1356,7 +1367,32 @@ async def get_records(
             for row in rows
         ]
 
-        return RecordListResponse(records=records, skip=skip, limit=limit)
+        # Apply natural sorting
+        reverse = sort_order == "desc"
+        top_level_columns = {
+            "id",
+            "natural_language_description",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        }
+
+        def sort_key_func(record):
+            if sort_by in top_level_columns:
+                value = getattr(record, sort_by)
+            else:
+                # Data column
+                value = record.data.get(sort_by)
+
+            return natural_sort_key(value)
+
+        all_records.sort(key=sort_key_func, reverse=reverse)
+
+        # Apply pagination
+        paginated_records = all_records[skip : skip + limit]
+
+        return RecordListResponse(records=paginated_records, skip=skip, limit=limit)
     finally:
         conn.close()
 
@@ -1819,21 +1855,16 @@ async def search_records(
         def sort_key(row):
             # Check for top-level attributes first
             if sort_by == "id":
-                return row.id
+                return (1, row.id)  # (1, numeric) for special numeric handling
             elif sort_by == "distance":
-                return row.distance if row.distance is not None else float("inf")
+                return (1, row.distance if row.distance is not None else float("inf"))
             elif hasattr(row, sort_by):
                 val = getattr(row, sort_by)
-                if val is None:
-                    return ""
-                return str(val).lower() if isinstance(val, str) else val
+                return natural_sort_key(val)
             else:
                 # Assume data field
                 value = row.data.get(sort_by)
-                if value is None:
-                    return ""
-                # Handle mixed types by converting to string and use .lower() for case-insensitive sorting
-                return str(value).lower()
+                return natural_sort_key(value)
 
         ordered_rows.sort(key=sort_key, reverse=reverse)
 
