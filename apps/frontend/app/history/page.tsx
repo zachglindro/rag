@@ -32,8 +32,11 @@ import {
   getActionColor,
   formatTimestamp,
   formatDetails,
+  getRecordIdFromEntry,
+  canViewRecordInData,
 } from "@/lib/history-utils"
 import { HistoryDetailDialog } from "@/components/history-detail-dialog"
+import { useRouter } from "next/navigation"
 
 function HistoryPageContent() {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
@@ -42,6 +45,7 @@ function HistoryPageContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
+  const router = useRouter()
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
@@ -73,6 +77,13 @@ function HistoryPageContent() {
   const handleViewDetails = (entry: HistoryEntry) => {
     setSelectedEntry(entry)
     setShowDetailsDialog(true)
+  }
+
+  const handleGoToRecord = (entry: HistoryEntry) => {
+    const recordId = getRecordIdFromEntry(entry)
+    if (recordId !== null) {
+      router.push(`/data?highlight=${recordId}`)
+    }
   }
 
   return (
@@ -137,13 +148,24 @@ function HistoryPageContent() {
                             {formatDetails(entry.details, entry.action_type)}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewDetails(entry)}
-                            >
-                              View
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              {canViewRecordInData(entry) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleGoToRecord(entry)}
+                                >
+                                  Go to Record
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewDetails(entry)}
+                              >
+                                View
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

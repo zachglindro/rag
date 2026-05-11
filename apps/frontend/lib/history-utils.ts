@@ -106,3 +106,18 @@ export function formatDetails(
       return "View details for more information"
   }
 }
+
+export function getRecordIdFromEntry(entry: HistoryEntry): number | null {
+  switch (entry.action_type) {
+    case "RECORD_UPDATED":
+    case "RECORD_DELETED":
+      return entry.details.record_id ? Number(entry.details.record_id) : null
+    default:
+      return null
+  }
+}
+
+export function canViewRecordInData(entry: HistoryEntry): boolean {
+  // Only RECORD_UPDATED entries can be viewed directly (deleted records won't exist)
+  return entry.action_type === "RECORD_UPDATED"
+}
