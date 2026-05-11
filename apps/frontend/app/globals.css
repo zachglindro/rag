@@ -126,3 +126,57 @@
     @apply font-sans;
     }
 }
+
+/* Pinned columns styles */
+.pin-table {
+  --col-0-width: 0px;
+  --col-1-width: 0px;
+  --col-2-width: 0px;
+  --col-3-width: 0px;
+  --col-4-width: 0px;
+  --col-5-width: 0px;
+  --col-6-width: 0px;
+  --col-7-width: 0px;
+  --col-8-width: 0px;
+  --col-9-width: 0px;
+}
+
+.pin-table .pin-col-0 {
+  left: var(--col-0-width);
+}
+
+.pin-table .pin-col-1 {
+  left: var(--col-1-width);
+}
+
+.pin-table .pin-col-2 {
+  left: var(--col-2-width);
+}
+
+.pin-table .pin-col-3 {
+  left: var(--col-3-width);
+}
+
+.pin-table .pin-col-4 {
+  left: var(--col-4-width);
+}
+
+.pin-table .pin-col-5 {
+  left: var(--col-5-width);
+}
+
+.pin-table .pin-col-6 {
+  left: var(--col-6-width);
+}
+
+.pin-table .pin-col-7 {
+  left: var(--col-7-width);
+}
+
+.pin-table .pin-col-8 {
+  left: var(--col-8-width);
+}
+
+.pin-table .pin-col-9 {
+  left: var(--col-9-width);
+}

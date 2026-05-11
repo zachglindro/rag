@@ -38,6 +38,7 @@ interface DataTableRowProps {
   onOpenBulkDeleteDialog: () => void
   onOpenExportDialog: (scope: "all" | "selected") => void
   isHighlighted?: boolean
+  pinnedColumnsCount?: number
 }
 
 export const DataTableRow = memo(function DataTableRow({
@@ -56,6 +57,7 @@ export const DataTableRow = memo(function DataTableRow({
   onOpenBulkDeleteDialog,
   onOpenExportDialog,
   isHighlighted,
+  pinnedColumnsCount = 0,
 }: DataTableRowProps) {
   const rowRef = useRef<HTMLTableRowElement>(null)
 
@@ -115,6 +117,11 @@ export const DataTableRow = memo(function DataTableRow({
             const changed =
               draftValue !== undefined && draftValue !== originalValue
 
+            const isPinned = index < pinnedColumnsCount
+            const stickyClass = isPinned
+              ? "sticky z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
+              : ""
+
             if (isEditMode) {
               return (
                 <EditableCell
@@ -125,13 +132,18 @@ export const DataTableRow = memo(function DataTableRow({
                   onUpdateDraftCell={onUpdateDraftCell}
                   isMutating={isMutating}
                   changed={changed}
-                  isFirstColumn={index === 0}
+                  isPinned={isPinned}
+                  pinIndex={index}
+                  className={stickyClass}
                 />
               )
             }
 
             return (
-              <TableCell key={`${row.id}-${column.key}`} className={cn(index === 0 && "sticky left-0 z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]")}>
+              <TableCell
+                key={`${row.id}-${column.key}`}
+                className={cn(stickyClass, isPinned && `pin-col-${index}`)}
+              >
                 <div className="max-w-[400px] break-words whitespace-normal">
                   {stringifyValue(row.data?.[column.key])}
                 </div>

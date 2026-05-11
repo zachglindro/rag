@@ -7,6 +7,7 @@ interface TableToolbarProps {
   isMutating: boolean
   hasPendingChanges: boolean
   selectedRowIds: Set<number>
+  pinnedColumnsCount: number
   onToggleSelectionMode: () => void
   onEnterEditMode: () => void
   onExitEditMode: () => void
@@ -14,6 +15,7 @@ interface TableToolbarProps {
   onOpenColumnAddDialog: () => void
   onOpenBulkDeleteDialog: () => void
   onExportSelected: () => void
+  onPinnedColumnsChange: (count: number) => void
 }
 
 export function TableToolbar({
@@ -22,6 +24,7 @@ export function TableToolbar({
   isMutating,
   hasPendingChanges,
   selectedRowIds,
+  pinnedColumnsCount,
   onToggleSelectionMode,
   onEnterEditMode,
   onExitEditMode,
@@ -29,6 +32,7 @@ export function TableToolbar({
   onOpenColumnAddDialog,
   onOpenBulkDeleteDialog,
   onExportSelected,
+  onPinnedColumnsChange,
 }: TableToolbarProps) {
   return (
     <div className="rounded-lg border p-4">
@@ -69,6 +73,21 @@ export function TableToolbar({
             >
               Add Column
             </Button>
+            <div className="flex items-center gap-2 ml-2 pl-2 border-l">
+              <label htmlFor="pinned-columns" className="text-sm text-muted-foreground">
+                Pin columns:
+              </label>
+              <input
+                id="pinned-columns"
+                type="number"
+                min="0"
+                max="20"
+                value={pinnedColumnsCount}
+                onChange={(e) => onPinnedColumnsChange(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                disabled={isMutating}
+                className="w-12 h-8 px-2 py-1 border rounded text-sm"
+              />
+            </div>
           </>
         )}
         {isEditMode && (

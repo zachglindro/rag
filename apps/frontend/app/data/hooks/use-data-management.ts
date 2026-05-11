@@ -57,6 +57,8 @@ export function useDataManagement() {
   const [filters, setFilters] = useState<FilterCondition[]>([])
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
+  const [pinnedColumnsCount, setPinnedColumnsCount] = useState(3)
+
   const [columnPendingDelete, setColumnPendingDelete] = useState<{
     key: string
     label: string
@@ -315,6 +317,17 @@ export function useDataManagement() {
   useEffect(() => {
     localStorage.setItem("pageSize", pageSize.toString())
   }, [pageSize])
+
+  useEffect(() => {
+    const stored = localStorage.getItem("pinnedColumnsCount")
+    if (stored) {
+      setPinnedColumnsCount(parseInt(stored, 10))
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem("pinnedColumnsCount", pinnedColumnsCount.toString())
+  }, [pinnedColumnsCount])
 
   const visibleColumns = useMemo(() => {
     if (metadata.length > 0) {
@@ -950,6 +963,7 @@ export function useDataManagement() {
       hasPendingChanges,
       originalEditableValuesByRow,
       highlightId,
+      pinnedColumnsCount,
     },
     actions: {
       setSkip,
@@ -998,6 +1012,7 @@ export function useDataManagement() {
       handleClearAllFilters,
       openExportDialog,
       openBulkDeleteDialog,
+      setPinnedColumnsCount,
     },
   }
 }

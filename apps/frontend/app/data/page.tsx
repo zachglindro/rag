@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import Link from "next/link"
-import { Suspense } from "react"
+import { Suspense, useEffect, useRef } from "react"
 import { Loader2, ChevronUp, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useDataManagement } from "./hooks/use-data-management"
@@ -38,6 +38,39 @@ import { toEditableCellValue } from "./utils"
 
 function DataPageContent() {
   const { state, actions } = useDataManagement()
+  const tableRef = useRef<HTMLTableElement>(null)
+
+  // Measure and update column widths for pinned columns
+  useEffect(() => {
+    if (!tableRef.current) return
+
+    const updateColumnWidths = () => {
+      const headerRow = tableRef.current?.querySelector("thead tr")
+      if (!headerRow) return
+
+      const cells = Array.from(headerRow.querySelectorAll("th"))
+      let cumulativeWidth = 0
+
+      cells.forEach((cell, index) => {
+        const width = cell.offsetWidth
+        tableRef.current?.style.setProperty(`--col-${index}-width`, `${cumulativeWidth}px`)
+        cumulativeWidth += width
+      })
+    }
+
+    // Measure on mount and when the table changes
+    updateColumnWidths()
+
+    // Use ResizeObserver to handle dynamic resizing
+    const resizeObserver = new ResizeObserver(updateColumnWidths)
+    if (tableRef.current) {
+      resizeObserver.observe(tableRef.current)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [state.allColumns, state.isSelectionMode, state.pinnedColumnsCount])
 
   return (
     <>
@@ -112,6 +145,7 @@ function DataPageContent() {
               isMutating={state.isMutating}
               hasPendingChanges={state.hasPendingChanges}
               selectedRowIds={state.selectedRowIds}
+              pinnedColumnsCount={state.pinnedColumnsCount}
               onToggleSelectionMode={() => {
                 actions.setIsSelectionMode(!state.isSelectionMode)
                 if (state.isSelectionMode) {
@@ -124,6 +158,7 @@ function DataPageContent() {
               onOpenColumnAddDialog={() => actions.openColumnAddDialog(null)}
               onOpenBulkDeleteDialog={actions.openBulkDeleteDialog}
               onExportSelected={() => actions.openExportDialog("selected")}
+              onPinnedColumnsChange={actions.setPinnedColumnsCount}
             />
           )}
 
@@ -166,11 +201,11 @@ function DataPageContent() {
               )}
 
               <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
-                <Table>
+                <Table ref={tableRef} className="pin-table">
                   <TableHeader>
                     <TableRow>
                       {state.isSelectionMode && (
-                        <TableHead className="w-[40px]">
+                        <TableHead className="w-[40px] pin-col-0">
                           <input
                             type="checkbox"
                             checked={state.isAllFilteredSelected}
@@ -179,52 +214,61 @@ function DataPageContent() {
                           />
                         </TableHead>
                       )}
-                      {state.allColumns.map((column, index) => (
-                        <ContextMenu key={column.key}>
-                          <ContextMenuTrigger asChild>
-                            <TableHead
-                              className={cn(
-                                column.key === "id"
-                                  ? "w-20 cursor-pointer"
-                                  : "cursor-pointer",
-                                index === 0 && "sticky left-0 z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
-                              )}
-                              onClick={() => actions.handleSort(column.key)}
-                            >
-                              {column.label}
-                              {state.sortColumn === column.key &&
-                                (state.sortDirection === "asc" ? (
-                                  <ChevronUp className="ml-1 inline h-4 w-4" />
-                                ) : (
-                                  <ChevronDown className="ml-1 inline h-4 w-4" />
-                                ))}
-                            </TableHead>
-                          </ContextMenuTrigger>
-                          <ContextMenuContent>
-                            <ContextMenuLabel>{column.label}</ContextMenuLabel>
-                            <ContextMenuSeparator />
-                            <ContextMenuItem
-                              onSelect={() => actions.openColumnAddDialog(column)}
-                              disabled={state.isEditMode || state.isMutating}
-                            >
-                              Add Column
-                            </ContextMenuItem>
-                            <ContextMenuItem
-                              onSelect={() => actions.openColumnRenameDialog(column)}
-                              disabled={state.isEditMode || state.isMutating}
-                            >
-                              Rename
-                            </ContextMenuItem>
-                            <ContextMenuItem
-                              variant="destructive"
-                              onSelect={() => actions.openColumnDeleteDialog(column)}
-                              disabled={state.isEditMode || state.isMutating}
-                            >
-                              Delete
-                            </ContextMenuItem>
-                          </ContextMenuContent>
-                        </ContextMenu>
-                      ))}
+                      {state.allColumns.map((column, index) => {
+                        const isPinned = index < state.pinnedColumnsCount
+                        const pinIndex = state.isSelectionMode ? index + 1 : index
+                        const stickyClass = isPinned
+                          ? "sticky z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
+                          : ""
+
+                        return (
+                          <ContextMenu key={column.key}>
+                            <ContextMenuTrigger asChild>
+                              <TableHead
+                                className={cn(
+                                  column.key === "id"
+                                    ? "w-20 cursor-pointer"
+                                    : "cursor-pointer",
+                                  stickyClass,
+                                  isPinned && `pin-col-${pinIndex}`
+                                )}
+                                onClick={() => actions.handleSort(column.key)}
+                              >
+                                {column.label}
+                                {state.sortColumn === column.key &&
+                                  (state.sortDirection === "asc" ? (
+                                    <ChevronUp className="ml-1 inline h-4 w-4" />
+                                  ) : (
+                                    <ChevronDown className="ml-1 inline h-4 w-4" />
+                                  ))}
+                              </TableHead>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuLabel>{column.label}</ContextMenuLabel>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem
+                                onSelect={() => actions.openColumnAddDialog(column)}
+                                disabled={state.isEditMode || state.isMutating}
+                              >
+                                Add Column
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onSelect={() => actions.openColumnRenameDialog(column)}
+                                disabled={state.isEditMode || state.isMutating}
+                              >
+                                Rename
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                variant="destructive"
+                                onSelect={() => actions.openColumnDeleteDialog(column)}
+                                disabled={state.isEditMode || state.isMutating}
+                              >
+                                Delete
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        )
+                      })}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -246,6 +290,7 @@ function DataPageContent() {
                         onOpenBulkDeleteDialog={actions.openBulkDeleteDialog}
                         onOpenExportDialog={actions.openExportDialog}
                         isHighlighted={row.id === state.highlightId}
+                        pinnedColumnsCount={state.pinnedColumnsCount}
                       />
                     ))}
                     {state.filteredRows.length === 0 && (

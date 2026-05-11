@@ -10,7 +10,9 @@ export const EditableCell = memo(function EditableCell({
   onUpdateDraftCell,
   isMutating,
   changed,
-  isFirstColumn = false,
+  isPinned = false,
+  pinIndex,
+  className,
 }: {
   rowId: number
   columnKey: string
@@ -18,7 +20,9 @@ export const EditableCell = memo(function EditableCell({
   onUpdateDraftCell: (rowId: number, columnKey: string, value: string) => void
   isMutating: boolean
   changed: boolean
-  isFirstColumn?: boolean
+  isPinned?: boolean
+  pinIndex?: number
+  className?: string
 }) {
   const [value, setValue] = useState(initialValue)
 
@@ -27,7 +31,7 @@ export const EditableCell = memo(function EditableCell({
   }, [rowId, columnKey, value, onUpdateDraftCell])
 
   return (
-    <TableCell className={cn(isFirstColumn && "sticky left-0 z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]")}>
+    <TableCell className={cn(className, isPinned && `pin-col-${pinIndex}`)}>
       <div className="w-[300px]">
         <Textarea
           value={value}
