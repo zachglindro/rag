@@ -18,34 +18,40 @@ export function UserNamePrompt() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = React.useState(false)
   const [name, setName] = React.useState("")
+  const [isMandatory, setIsMandatory] = React.useState(false)
 
   const isMandatoryRoute =
     pathname.startsWith("/add") || pathname.startsWith("/data")
 
   React.useEffect(() => {
+    if (typeof window === "undefined") return
+
     const storedName = localStorage.getItem("userName")
+    const mandatory = isMandatoryRoute && !storedName
+    setIsMandatory(mandatory)
+
     if (!storedName) {
       setIsOpen(true)
     }
-  }, [pathname]) // Re-check on navigation
+  }, [pathname, isMandatoryRoute]) // Re-check on navigation
 
   const handleSave = () => {
     if (name.trim()) {
-      localStorage.setItem("userName", name.trim())
+      if (typeof window !== "undefined") {
+        localStorage.setItem("userName", name.trim())
+      }
       setIsOpen(false)
     }
   }
 
   const handleOpenChange = (open: boolean) => {
     // If it's a mandatory route and no name is stored, don't allow closing
-    if (isMandatoryRoute && !localStorage.getItem("userName")) {
+    if (isMandatory) {
       setIsOpen(true)
       return
     }
     setIsOpen(open)
   }
-
-  const isMandatory = isMandatoryRoute && !localStorage.getItem("userName")
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
