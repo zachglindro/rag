@@ -2,3 +2,4 @@
 models/
 *.xlsx
 *.csv
+build/
