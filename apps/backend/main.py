@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 import pandas as pd
 from db.init_db import initialize_database, create_fts_table
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from preprocessing.description_builder import build_natural_language_description
 from pydantic import BaseModel
@@ -70,6 +70,10 @@ vectordb = None  # Will be set in lifespan
 embedder = None  # Will be set in lifespan
 reranker = None  # Will be set in lifespan
 
+# Model availability flags
+llm_available: bool = False
+embedding_model_available: bool = False
+
 
 def is_online_model(model_id: str) -> bool:
     return model_id in ONLINE_MODEL_REGISTRY
@@ -99,19 +103,56 @@ def load_model(model_id: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_database(DB_PATH)
-    global loaded_llms
-    loaded_llms[active_model_id] = load_model(active_model_id)
+
+    # Try to load LLM
+    global loaded_llms, llm_available
+    try:
+        loaded_llms[active_model_id] = load_model(active_model_id)
+        llm_available = True
+        print(f"Active model loaded successfully: {active_model_id}")
+    except OSError as e:
+        llm_available = False
+        print(f"LLM model not found: {e}")
+    except Exception as e:
+        llm_available = False
+        print(f"Error loading LLM model: {e}")
+
+    # Try to initialize vector DB
     global vectordb
-    vectordb = ChromaVectorDB()
-    global embedder
-    embedder = EmbeddingService()
+    try:
+        vectordb = ChromaVectorDB()
+        print(
+            f"ChromaDB initialized with persist directory: {vectordb.persist_directory}"
+        )
+        print("ChromaDB collection 'trait_embeddings' ready")
+    except Exception as e:
+        print(f"Error initializing ChromaDB: {e}")
+        vectordb = None
+
+    # Try to initialize embedder
+    global embedder, embedding_model_available
+    try:
+        embedder = EmbeddingService()
+        embedding_model_available = True
+        print("Embedding service initialized")
+    except OSError as e:
+        embedding_model_available = False
+        embedder = None
+        print(f"Embedding model not found: {e}")
+    except Exception as e:
+        embedding_model_available = False
+        embedder = None
+        print(f"Error initializing embedding service: {e}")
+
+    # Try to initialize reranker
     global reranker
-    reranker = CrossEncoderReranker()
-    print(f"ChromaDB initialized with persist directory: {vectordb.persist_directory}")
-    print("ChromaDB collection 'trait_embeddings' ready")
-    print("Embedding service initialized")
-    print("CrossEncoder reranker initialized")
-    print(f"Active model: {active_model_id}")
+    try:
+        reranker = CrossEncoderReranker()
+        print("CrossEncoder reranker initialized")
+    except Exception as e:
+        print(f"Error initializing reranker: {e}")
+        reranker = None
+
     # Start backup scheduler
     asyncio.create_task(backup_scheduler())
     yield
@@ -242,6 +283,11 @@ class ModelSettingsResponse(BaseModel):
 
 class SwitchModelRequest(BaseModel):
     model_id: str
+
+
+class ModelStatusResponse(BaseModel):
+    llm_available: bool
+    embedding_model_available: bool
 
 
 class CompareSetupResponse(BaseModel):
@@ -1682,12 +1728,21 @@ async def search_records(
     if not cleaned_query:
         raise HTTPException(status_code=400, detail="Query must not be empty")
 
-    embedder_instance = get_embedder()
-    vector_db = get_vectordb()
+    # If embedding model is not available, fall back to keyword search
+    if not embedding_model_available:
+        return await search_records_keyword(query, top_k, sort_by, sort_order)
+
+    try:
+        embedder_instance = get_embedder()
+        vector_db = get_vectordb()
+    except RuntimeError:
+        # Fallback to keyword search if embedder/vector_db not available
+        return await search_records_keyword(query, top_k, sort_by, sort_order)
 
     query_embedding = embedder_instance.embed(cleaned_query)
     if not query_embedding:
-        raise HTTPException(status_code=500, detail="Failed to embed query")
+        # Fallback to keyword search if embedding fails
+        return await search_records_keyword(query, top_k, sort_by, sort_order)
 
     rerank_candidate_count = 20
     combined_record_ids: set[int] = set()
@@ -1701,8 +1756,9 @@ async def search_records(
             n_results=rerank_candidate_count,
             include=["distances"],
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
+    except Exception:
+        # Fallback to keyword search on semantic search failure
+        return await search_records_keyword(query, top_k, sort_by, sort_order)
 
     raw_ids = retrieval.get("ids", [[]])
     raw_distances = retrieval.get("distances", [[]])
@@ -2648,9 +2704,29 @@ def get_reranker() -> CrossEncoderReranker:
 
 
 @app.post("/generate")
-async def generate_response_endpoint(
-    request: GenerateRequest, llm_instance: Any = Depends(get_llm)
-):
+async def generate_response_endpoint(request: GenerateRequest):
+    # Check if LLM is available
+    if not llm_available:
+
+        async def error_stream():
+            payload = json.dumps(
+                {"error": "The large language model isn't downloaded."}
+            )
+            yield f"data: {payload}\n\n"
+
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+
+    try:
+        llm_instance = get_llm()
+    except RuntimeError as err:
+        error_msg = str(err)
+
+        async def error_stream():
+            payload = json.dumps({"error": error_msg})
+            yield f"data: {payload}\n\n"
+
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+
     end_of_stream = object()
 
     def next_token_or_end(token_iterator):
@@ -2684,3 +2760,11 @@ async def generate_response_endpoint(
             yield f"data: {payload}\n\n"
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+
+@app.get("/model-status", response_model=ModelStatusResponse)
+async def get_model_status():
+    """Check if the LLM and embedding models are available."""
+    return ModelStatusResponse(
+        llm_available=llm_available, embedding_model_available=embedding_model_available
+    )

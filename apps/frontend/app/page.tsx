@@ -492,6 +492,7 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasRecords, setHasRecords] = useState<boolean | null>(null)
+  const [llmAvailable, setLlmAvailable] = useState<boolean | null>(null)
   const [enableDebugging, setEnableDebugging] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("enableDebugging") === "true"
@@ -549,6 +550,29 @@ export default function Page() {
     }
 
     void fetchRecordCount()
+  }, [])
+
+  useEffect(() => {
+    const fetchModelStatus = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/model-status`)
+        if (response.ok) {
+          const data: { llm_available: boolean; embedding_model_available: boolean } = await response.json()
+          setLlmAvailable(data.llm_available)
+          
+          // If embedding model is not available, switch to keyword search
+          if (!data.embedding_model_available) {
+            setSearchType("keyword")
+            localStorage.setItem("searchType", "keyword")
+          }
+        }
+      } catch {
+        // If the API is unavailable, assume models are available
+        setLlmAvailable(true)
+      }
+    }
+
+    void fetchModelStatus()
   }, [])
 
   useEffect(() => {
@@ -614,6 +638,12 @@ export default function Page() {
   const sendMessage = async (content?: string) => {
     const nextContent = (content ?? inputValue).trim()
     if (!nextContent || isLoadingRef.current) {
+      return
+    }
+
+    // Check if LLM is available
+    if (llmAvailable === false) {
+      setError("The large language model isn't downloaded.")
       return
     }
 
@@ -824,6 +854,11 @@ export default function Page() {
 
   const renderComposer = (isCentered: boolean) => (
     <div className={`mx-auto w-full ${isCentered ? "max-w-4xl" : "max-w-3xl"}`}>
+      {llmAvailable === false && (
+        <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-center text-sm text-amber-800">
+          The large language model isn&apos;t downloaded.
+        </div>
+      )}
       <div className="flex items-end gap-2 rounded-[30px] border bg-background p-2.5 shadow-sm">
         <Textarea
           ref={textareaRef}
@@ -838,7 +873,7 @@ export default function Page() {
               void sendMessage()
             }
           }}
-          disabled={isLoading}
+          disabled={isLoading || llmAvailable === false}
         />
 
         <div className="flex items-center gap-1 pb-1">
@@ -853,7 +888,7 @@ export default function Page() {
 
               void sendMessage()
             }}
-            disabled={!isLoading && !inputValue.trim()}
+            disabled={(!isLoading && !inputValue.trim()) || llmAvailable === false}
             aria-label={isLoading ? "Stop generation" : "Send message"}
           >
             {isLoading ? (
