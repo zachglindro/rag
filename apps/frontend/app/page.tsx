@@ -557,7 +557,10 @@ export default function Page() {
       try {
         const response = await fetch(`${BACKEND_URL}/model-status`)
         if (response.ok) {
-          const data: { llm_available: boolean; embedding_model_available: boolean } = await response.json()
+          const data: {
+            llm_available: boolean
+            embedding_model_available: boolean
+          } = await response.json()
           setLlmAvailable(data.llm_available)
 
           // If embedding model is not available, switch to keyword search
@@ -888,7 +891,9 @@ export default function Page() {
 
               void sendMessage()
             }}
-            disabled={(!isLoading && !inputValue.trim()) || llmAvailable === false}
+            disabled={
+              (!isLoading && !inputValue.trim()) || llmAvailable === false
+            }
             aria-label={isLoading ? "Stop generation" : "Send message"}
           >
             {isLoading ? (
