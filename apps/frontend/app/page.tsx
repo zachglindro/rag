@@ -559,7 +559,7 @@ export default function Page() {
         if (response.ok) {
           const data: { llm_available: boolean; embedding_model_available: boolean } = await response.json()
           setLlmAvailable(data.llm_available)
-          
+
           // If embedding model is not available, switch to keyword search
           if (!data.embedding_model_available) {
             setSearchType("keyword")
@@ -948,14 +948,24 @@ export default function Page() {
           ) : messages.length === 0 ? (
             <div className="flex flex-1 items-center px-4 sm:px-8">
               <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-8">
-                <Image
-                  src="/cropped-IPB-logo.webp"
-                  alt="IPB Logo"
-                  width={180}
-                  height={180}
-                  priority
-                  className="h-auto w-auto"
-                />
+                <div className="flex items-center gap-6">
+                  <Image
+                    src="/ics-logo.png"
+                    alt="ICS Logo"
+                    width={180}
+                    height={180}
+                    priority
+                    className="h-auto w-auto"
+                  />
+                  <Image
+                    src="/cropped-IPB-logo.webp"
+                    alt="IPB Logo"
+                    width={180}
+                    height={180}
+                    priority
+                    className="h-auto w-auto"
+                  />
+                </div>
                 <h1 className="text-center text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
                   Cereal Crops Search
                 </h1>
