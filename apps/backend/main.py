@@ -1125,6 +1125,8 @@ async def ingest_records(request: IngestRequest):
         inserted_ids: list[int] = []
         updated_ids: list[int] = []
         vector_db = None
+        embedder_instance = None
+        embeddings: list[Any] = []
 
         try:
             yield (
@@ -1177,44 +1179,85 @@ async def ingest_records(request: IngestRequest):
                     {
                         "type": "progress",
                         "progress": 10,
-                        "message": "Connecting to vector database...",
+                        "message": "Preparing to ingest records...",
                     }
                 )
                 + "\n"
             )
 
-            embedder_instance = get_embedder()
-            vector_db = get_vectordb()
+            # Try to get embedder and vector DB, but don't fail if unavailable
+            embedder_available = False
+            vectordb_available = False
+            try:
+                embedder_instance = get_embedder()
+                embedder_available = True
+            except RuntimeError:
+                print("Embedding service not available, will ingest without embeddings")
 
-            # Batch embeddings in chunks to show progress
-            batch_size = 32
-            embeddings = []
-            for i in range(0, len(descriptions), batch_size):
-                batch = descriptions[i : i + batch_size]
-                batch_embeddings = embedder_instance.embed_batch(batch)
-                embeddings.extend(batch_embeddings)
+            try:
+                vector_db = get_vectordb()
+                vectordb_available = True
+            except RuntimeError:
+                print("Vector DB not available, will ingest without vector embeddings")
 
-                # Progress from 10 to 40
-                p = 10 + int(
-                    (min(i + batch_size, len(descriptions))) / len(descriptions) * 30
-                )
+            # Generate embeddings only if embedder is available
+            if embedder_available:
+                assert embedder_instance is not None
                 yield (
                     json.dumps(
                         {
                             "type": "progress",
-                            "progress": p,
-                            "message": f"Generating embeddings ({min(i + batch_size, len(descriptions))}/{len(descriptions)})...",
+                            "progress": 15,
+                            "message": "Generating embeddings...",
                         }
                     )
                     + "\n"
                 )
 
-            if len(embeddings) != len(transformed_rows):
+                # Batch embeddings in chunks to show progress
+                batch_size = 32
+                for i in range(0, len(descriptions), batch_size):
+                    batch = descriptions[i : i + batch_size]
+                    batch_embeddings = embedder_instance.embed_batch(batch)
+                    embeddings.extend(batch_embeddings)
+
+                    # Progress from 15 to 40
+                    p = 15 + int(
+                        (min(i + batch_size, len(descriptions)))
+                        / len(descriptions)
+                        * 25
+                    )
+                    yield (
+                        json.dumps(
+                            {
+                                "type": "progress",
+                                "progress": p,
+                                "message": f"Generating embeddings ({min(i + batch_size, len(descriptions))}/{len(descriptions)})...",
+                            }
+                        )
+                        + "\n"
+                    )
+
+                if len(embeddings) != len(transformed_rows):
+                    yield (
+                        json.dumps(
+                            {"type": "error", "detail": "Embedding count mismatch"}
+                        )
+                        + "\n"
+                    )
+                    return
+            else:
+                # If no embedder, update progress without embeddings
                 yield (
-                    json.dumps({"type": "error", "detail": "Embedding count mismatch"})
+                    json.dumps(
+                        {
+                            "type": "progress",
+                            "progress": 40,
+                            "message": "Skipping embeddings (model not available)...",
+                        }
+                    )
                     + "\n"
                 )
-                return
 
             conn.execute("BEGIN")
 
@@ -1290,9 +1333,9 @@ async def ingest_records(request: IngestRequest):
                     inserted_ids.append(int(record_id))
                     inserted_count += 1
 
-                # Progress from 40 to 90
+                # Progress from 40 to 75
                 if (i + 1) % 10 == 0 or (i + 1) == total_rows:
-                    p = 40 + int((i + 1) / total_rows * 50)
+                    p = 40 + int((i + 1) / total_rows * 35)
                     yield (
                         json.dumps(
                             {
@@ -1304,37 +1347,110 @@ async def ingest_records(request: IngestRequest):
                         + "\n"
                     )
 
-            # Update vector DB for all
+            # Update FTS index for all affected records
             all_affected_ids = inserted_ids + updated_ids
-            str_ids = [str(rid) for rid in all_affected_ids]
-            metadatas: list[Any] = [{"record_id": rid} for rid in all_affected_ids]
-
             total_affected = len(all_affected_ids)
-            vector_batch_size = 32
 
-            for i in range(0, total_affected, vector_batch_size):
-                batch_ids = str_ids[i : i + vector_batch_size]
-                batch_docs = descriptions[i : i + vector_batch_size]
-                batch_embeddings = embeddings[i : i + vector_batch_size]
-                batch_metadatas = metadatas[i : i + vector_batch_size]
-
-                vector_db.upsert_documents(
-                    ids=batch_ids,
-                    documents=batch_docs,
-                    embeddings=batch_embeddings,
-                    metadatas=batch_metadatas,
-                )
-
-                # Progress from 92 to 98
-                p = 92 + int(
-                    (min(i + vector_batch_size, total_affected)) / total_affected * 6
-                )
+            if total_affected > 0:
                 yield (
                     json.dumps(
                         {
                             "type": "progress",
-                            "progress": p,
-                            "message": f"Syncing vector database ({min(i + vector_batch_size, total_affected)}/{total_affected})...",
+                            "progress": 75,
+                            "message": "Updating search index...",
+                        }
+                    )
+                    + "\n"
+                )
+
+                for i, record_id in enumerate(all_affected_ids):
+                    # Get the record data and description
+                    cursor.execute(
+                        "SELECT data, natural_language_description FROM records WHERE id = ?",
+                        (record_id,),
+                    )
+                    result = cursor.fetchone()
+                    if result:
+                        row_data = parse_record_data(result[0])
+                        description = result[1]
+                        searchable_text = build_searchable_text(row_data, description)
+                        cursor.execute(
+                            """
+                            INSERT OR REPLACE INTO records_fts (record_id, content)
+                            VALUES (?, ?)
+                            """,
+                            (record_id, searchable_text),
+                        )
+
+                    # Progress from 75 to 90
+                    if (i + 1) % 10 == 0 or (i + 1) == total_affected:
+                        p = 75 + int((i + 1) / total_affected * 15)
+                        yield (
+                            json.dumps(
+                                {
+                                    "type": "progress",
+                                    "progress": p,
+                                    "message": f"Updating search index ({i + 1}/{total_affected})...",
+                                }
+                            )
+                            + "\n"
+                        )
+
+            # Update vector DB only if available and embeddings exist
+            if vectordb_available and embedder_available and embeddings:
+                assert vector_db is not None
+                yield (
+                    json.dumps(
+                        {
+                            "type": "progress",
+                            "progress": 90,
+                            "message": "Syncing vector database...",
+                        }
+                    )
+                    + "\n"
+                )
+
+                str_ids = [str(rid) for rid in all_affected_ids]
+                metadatas: list[Any] = [{"record_id": rid} for rid in all_affected_ids]
+                vector_batch_size = 32
+
+                for i in range(0, total_affected, vector_batch_size):
+                    batch_ids = str_ids[i : i + vector_batch_size]
+                    batch_docs = descriptions[i : i + vector_batch_size]
+                    batch_embeddings = embeddings[i : i + vector_batch_size]
+                    batch_metadatas = metadatas[i : i + vector_batch_size]
+
+                    vector_db.upsert_documents(
+                        ids=batch_ids,
+                        documents=batch_docs,
+                        embeddings=batch_embeddings,
+                        metadatas=batch_metadatas,
+                    )
+
+                    # Progress from 90 to 98
+                    p = 90 + int(
+                        (min(i + vector_batch_size, total_affected))
+                        / total_affected
+                        * 8
+                    )
+                    yield (
+                        json.dumps(
+                            {
+                                "type": "progress",
+                                "progress": p,
+                                "message": f"Syncing vector database ({min(i + vector_batch_size, total_affected)}/{total_affected})...",
+                            }
+                        )
+                        + "\n"
+                    )
+            elif not embedder_available or not vectordb_available:
+                # Skip vector DB sync if not available
+                yield (
+                    json.dumps(
+                        {
+                            "type": "progress",
+                            "progress": 98,
+                            "message": "Skipping vector database sync (service not available)...",
                         }
                     )
                     + "\n"
@@ -1349,6 +1465,7 @@ async def ingest_records(request: IngestRequest):
                     "inserted_count": inserted_count,
                     "updated_count": updated_count,
                     "mapping": mapping_dict,
+                    "embeddings_enabled": embedder_available,
                 },
                 affected_records=inserted_count + updated_count,
             )
