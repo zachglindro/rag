@@ -66,6 +66,9 @@ export default function Settings() {
   const [mounted, setMounted] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
+  const [isResetHistoryDialogOpen, setIsResetHistoryDialogOpen] =
+    useState(false)
+  const [isResettingHistory, setIsResettingHistory] = useState(false)
   const [selectedModelToSwitch, setSelectedModelToSwitch] = useState<string>("")
   const [activeModel, setActiveModel] = useState<string>("")
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
@@ -209,12 +212,9 @@ export default function Settings() {
   const handleManualBackup = async () => {
     setIsBackingUpNow(true)
     try {
-      const response = await fetch(
-        `${BACKEND_URL}/settings/backup/now`,
-        {
-          method: "POST",
-        }
-      )
+      const response = await fetch(`${BACKEND_URL}/settings/backup/now`, {
+        method: "POST",
+      })
       if (!response.ok) throw new Error("Backup failed")
       toast.success("Backup created successfully")
       fetchBackupSettings() // Refresh last backup time
@@ -237,6 +237,24 @@ export default function Settings() {
       setIsDialogOpen(false)
     } catch {
       toast.error("Failed to reset database")
+    }
+  }
+
+  const handleResetHistory = async () => {
+    setIsResettingHistory(true)
+    try {
+      const response = await fetch(`${BACKEND_URL}/history/reset`, {
+        method: "POST",
+      })
+      if (!response.ok) {
+        throw new Error("Reset history failed")
+      }
+      toast.success("History log reset successfully")
+      setIsResetHistoryDialogOpen(false)
+    } catch {
+      toast.error("Failed to reset history log")
+    } finally {
+      setIsResettingHistory(false)
     }
   }
 
@@ -677,6 +695,52 @@ export default function Settings() {
                           </Button>
                           <Button variant="destructive" onClick={handleReset}>
                             Reset
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+
+                  <div>
+                    <Dialog
+                      open={isResetHistoryDialogOpen}
+                      onOpenChange={setIsResetHistoryDialogOpen}
+                    >
+                      <DialogTrigger asChild>
+                        <Button variant="outline">Reset History Log</Button>
+                      </DialogTrigger>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Clear all entries from the history log.
+                      </p>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Reset History Log</DialogTitle>
+                          <DialogDescription>
+                            This will permanently delete all history entries.
+                            This action cannot be undone.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <Button
+                            variant="outline"
+                            onClick={() => setIsResetHistoryDialogOpen(false)}
+                            disabled={isResettingHistory}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={handleResetHistory}
+                            disabled={isResettingHistory}
+                          >
+                            {isResettingHistory ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Resetting...
+                              </>
+                            ) : (
+                              "Reset"
+                            )}
                           </Button>
                         </DialogFooter>
                       </DialogContent>

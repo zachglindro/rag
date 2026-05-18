@@ -2253,6 +2253,22 @@ async def get_history(
         conn.close()
 
 
+@app.post("/history/reset")
+async def reset_history():
+    """Reset (clear) the history log."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM history")
+        conn.commit()
+        return {"message": "History log reset successfully", "cleared": True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
 @app.get("/settings/model", response_model=ModelSettingsResponse)
 async def get_model_settings():
     available_models = []
