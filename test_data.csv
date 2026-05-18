@@ -1,0 +1,13 @@
+local_name,accession_number,province,kernel_type,kernel_color,plant_height_cm,waterlogging_resistance,downy_mildew_resistance,drought_tolerance,husk_fit,maturity,silk_color
+IPB-99,APN-001,Laguna,Flint,Yellow,210,Resistant,Susceptible,High,Tight,Early,Purple
+Calumpit-A,APN-264,Bulacan,Dent,Orange,185,Intermediate,Resistant,Low,Loose,Late,Green
+Bagtikan-X,APN-502,Antique,Flint,White,245,Susceptible,Resistant,Medium,Tight,Intermediate,Yellow
+Flooded-King,APN-881,Pampanga,Pop,White,150,Can handle saturated soil,Intermediate,Low,Normal,Very Early,Purple
+Dry-Hardy,APN-902,Isabela,Dent,Yellow,195,Low,Susceptible,Thrives in very dry soil,Tight,Early,Red
+Tall-Tower,APN-112,Cagayan,Flint,White,350,Resistant,Resistant,High,Normal,Late,Pink
+Short-Stub,APN-113,Iloilo,Flint,Yellow,85,Intermediate,Susceptible,Medium,Loose,Early,Purple
+Disease-Probe,APN-444,Quezon,Dent,Red,205,Resistant,Highly Susceptible,Low,Tight,Intermediate,Green
+Ghost-Line,APN-999,,,,,Resistant,,,Tight,,
+Calcerous-Gold,APN-005,Pangasinan,Flint,Yellow,215,Intermediate,Intermediate,High,Normal,Early,Purple
+Quick-Grain,APN-007,Bukidnon,Dent,White,180,Resistant,Resistant,High,Tight,90 days to harvest,Red
+Late-Bloomer,APN-008,Tarlac,Flint,Orange,220,Intermediate,Intermediate,Medium,Normal,Late,Purple

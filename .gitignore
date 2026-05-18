@@ -1,5 +1,4 @@
 .vscode/
 models/
 *.xlsx
-*.csv
 build/
