@@ -2068,6 +2068,7 @@ async def reset_database():
         from db.init_db import create_tables
 
         create_tables(cursor)
+        create_fts_table(cursor)
 
         conn.commit()
 
