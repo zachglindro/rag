@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Iterable
 
@@ -10,14 +11,12 @@ class EmbeddingService:
         model_path: str | None = None,
         batch_size: int = 16,
     ):
-        default_model_path = (
-            Path(__file__).resolve().parents[3] / "models" / "potion-mxbai-micro"
-        )
-        resolved_model_path = (
-            Path(model_path).expanduser().resolve()
-            if model_path
-            else default_model_path
-        )
+        if model_path is None:
+            # Use MODELS_PATH env var or fall back to relative path
+            models_dir = Path(os.getenv("MODELS_PATH", "../../../models"))
+            resolved_model_path = models_dir / "potion-mxbai-micro"
+        else:
+            resolved_model_path = Path(model_path).expanduser().resolve()
 
         if not resolved_model_path.exists():
             raise OSError(f"Embedding model path not found: {resolved_model_path}")
