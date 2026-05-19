@@ -266,6 +266,9 @@ export default function Settings() {
   const handleSearchTypeChange = (value: "semantic" | "keyword") => {
     setSearchType(value)
     localStorage.setItem("searchType", value)
+    const searchTypeLabel =
+      value === "semantic" ? "Semantic Search" : "Keyword Search"
+    toast.success(`Switched to ${searchTypeLabel}`)
   }
 
   const handleExportData = async () => {
