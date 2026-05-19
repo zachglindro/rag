@@ -37,4 +37,4 @@ ENV MODELS_PATH=/models
 EXPOSE 8000
 
 # Run entrypoint script
-CMD ["./entrypoint.sh"]
+CMD ["/bin/bash", "./entrypoint.sh"]
