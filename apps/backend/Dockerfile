@@ -19,9 +19,6 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copy application code
 COPY apps/backend ./
 
-# Copy .env file
-COPY apps/backend/.env ./
-
 # Copy models download script
 COPY apps/backend/download_models.py ./download_models.py
 
