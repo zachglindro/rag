@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from "react"
 import { cn } from "@/lib/utils"
+import { GripVertical } from "lucide-react"
 
 interface ColumnResizeHandleProps {
   onResize: (delta: number) => void
@@ -53,11 +54,13 @@ export function ColumnResizeHandle({
         e.stopPropagation()
       }}
       className={cn(
-        "absolute top-0 right-0 h-full w-2 cursor-col-resize bg-transparent transition-colors select-none hover:bg-primary/50",
-        isResizing && "bg-primary",
+        "absolute top-0 right-0 flex h-full w-5 cursor-col-resize items-center justify-center transition-colors select-none hover:bg-muted/50",
+        isResizing && "bg-muted/50",
         className
       )}
       title={`Resize ${columnLabel}`}
-    />
+    >
+      <GripVertical className="h-3 w-3 text-muted-foreground opacity-40 transition-opacity hover:opacity-80" />
+    </div>
   )
 }
