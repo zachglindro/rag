@@ -22,14 +22,14 @@ except ImportError:
     sys.exit(1)
 
 
-def download_models(models_dir=None):
+def download_models(models_dir=None, include_qwen=False):
     """Download all required models."""
     # Use provided models_dir or default to ./models
     if models_dir is None:
         models_dir = Path("models")
     else:
         models_dir = Path(models_dir)
-    
+
     # Define models to download
     models = [
         {
@@ -42,12 +42,17 @@ def download_models(models_dir=None):
             "model_name": "potion-mxbai-micro",
             "description": "Potion MXBai Micro",
         },
-        {
-            "repo_id": "Qwen/Qwen3-0.6B",
-            "model_name": "Qwen3-0.6B",
-            "description": "Qwen 3 0.6B",
-        },
     ]
+
+    # Optionally add Qwen model
+    if include_qwen:
+        models.append(
+            {
+                "repo_id": "Qwen/Qwen3-0.6B",
+                "model_name": "Qwen3-0.6B",
+                "description": "Qwen 3 0.6B",
+            }
+        )
 
     # Create models directory if it doesn't exist
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -92,9 +97,15 @@ def download_models(models_dir=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download models for RAG project")
-    parser.add_argument("--models-dir", type=str, default=None, help="Directory to store models")
+    parser.add_argument(
+        "--models-dir", type=str, default=None, help="Directory to store models"
+    )
+    parser.add_argument(
+        "--include-qwen", action="store_true", help="Also download Qwen3-0.6B model"
+    )
     args = parser.parse_args()
-    
-    success = download_models(models_dir=args.models_dir)
-    sys.exit(0 if success else 1)
 
+    success = download_models(
+        models_dir=args.models_dir, include_qwen=args.include_qwen
+    )
+    sys.exit(0 if success else 1)

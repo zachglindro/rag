@@ -61,6 +61,8 @@ cp .env.example .env  # or create manually with your API keys
 
 # Download models (first run)
 python download_models.py
+# Optional: Include Qwen3-0.6B model
+# python download_models.py --include-qwen
 
 # Start the server
 python main.py
