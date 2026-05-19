@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 COPY . .
 
 # Copy models download script from root
-COPY ../../download_models.py ./download_models.py
+COPY download_models.py ./download_models.py
 
 # Copy entrypoint script
 COPY entrypoint.sh ./
