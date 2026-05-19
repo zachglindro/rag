@@ -10,7 +10,11 @@ import {
   BACKEND_URL,
   FilterCondition,
 } from "../types"
-import { applyRowFilters, toEditableCellValue, parseEditedCellValue } from "../utils"
+import {
+  applyRowFilters,
+  toEditableCellValue,
+  parseEditedCellValue,
+} from "../utils"
 
 export function useDataManagement() {
   const searchParams = useSearchParams()
@@ -120,35 +124,6 @@ export function useDataManagement() {
       })
     }
   }, [filteredRows, isAllFilteredSelected])
-
-  const handleConfirmBulkDelete = useCallback(async () => {
-    if (selectedRowIds.size === 0) return
-
-    setIsMutating(true)
-    try {
-      const response = await fetch(`${BACKEND_URL}/records/bulk-delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ ids: Array.from(selectedRowIds) }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Bulk delete failed")
-      }
-
-      const result = await response.json()
-      toast.success(`Deleted ${result.deleted_count} records`)
-      setSelectedRowIds(new Set())
-      setIsBulkDeleteDialogOpen(false)
-      await refreshAfterMutation(true)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete records")
-    } finally {
-      setIsMutating(false)
-    }
-  }, [selectedRowIds])
 
   useEffect(() => {
     if (!initialType) {
@@ -290,6 +265,47 @@ export function useDataManagement() {
     highlightId,
   ])
 
+  const refreshAfterMutation = useCallback(
+    async (isDeleteAction: boolean) => {
+      if (isDeleteAction && !isSearchMode && rows.length === 1 && skip > 0) {
+        setSkip((previous) => Math.max(previous - pageSize, 0))
+        return
+      }
+
+      await fetchData()
+    },
+    [isSearchMode, rows.length, skip, pageSize, fetchData]
+  )
+
+  const handleConfirmBulkDelete = useCallback(async () => {
+    if (selectedRowIds.size === 0) return
+
+    setIsMutating(true)
+    try {
+      const response = await fetch(`${BACKEND_URL}/records/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ids: Array.from(selectedRowIds) }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Bulk delete failed")
+      }
+
+      const result = await response.json()
+      toast.success(`Deleted ${result.deleted_count} records`)
+      setSelectedRowIds(new Set())
+      setIsBulkDeleteDialogOpen(false)
+      await refreshAfterMutation(true)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete records")
+    } finally {
+      setIsMutating(false)
+    }
+  }, [selectedRowIds, refreshAfterMutation])
+
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "searchType") {
@@ -409,15 +425,6 @@ export function useDataManagement() {
     setSortColumn("id")
     setSortDirection("asc")
   }, [editingRowId])
-
-  const refreshAfterMutation = async (isDeleteAction: boolean) => {
-    if (isDeleteAction && !isSearchMode && rows.length === 1 && skip > 0) {
-      setSkip((previous) => Math.max(previous - pageSize, 0))
-      return
-    }
-
-    await fetchData()
-  }
 
   const enterEditMode = useCallback((rowId: number) => {
     setEditingRowId(rowId)
@@ -573,13 +580,10 @@ export function useDataManagement() {
     }
   }, [draftCells, rows, visibleColumns, exitEditMode, refreshAfterMutation])
 
-  const handleContextEditRow = useCallback(
-    (row: RecordRow) => {
-      setEditingRowId(row.id)
-      toast.message(`Edit mode enabled for row ${row.id}`)
-    },
-    []
-  )
+  const handleContextEditRow = useCallback((row: RecordRow) => {
+    setEditingRowId(row.id)
+    toast.message(`Edit mode enabled for row ${row.id}`)
+  }, [])
 
   const openDeleteDialog = useCallback((row: RecordRow) => {
     setRecordPendingDelete(row)
@@ -681,158 +685,162 @@ export function useDataManagement() {
     }
   }, [columnPendingDelete, fetchData])
 
-  const handleConfirmColumnRename = useCallback(async (newName: string) => {
-    if (!columnPendingRename) {
-      return
-    }
-
-    const trimmedName = newName.trim()
-    if (!trimmedName) {
-      toast.error("Name cannot be empty")
-      return
-    }
-
-    setIsMutating(true)
-    try {
-      // Fetch current metadata to preserve other fields
-      const metadataResponse = await fetch(`${BACKEND_URL}/column-metadata`)
-      if (!metadataResponse.ok) {
-        throw new Error("Failed to fetch column metadata")
-      }
-      const metadata: ColumnMetadataRow[] = await metadataResponse.json()
-      const currentMeta = metadata.find(
-        (m) => m.column_name === columnPendingRename.key
-      )
-      if (!currentMeta) {
-        throw new Error("Column metadata not found")
+  const handleConfirmColumnRename = useCallback(
+    async (newName: string) => {
+      if (!columnPendingRename) {
+        return
       }
 
-      const renameRequest = {
-        old_column_name: columnPendingRename.key,
-        new_column: {
-          column_name: trimmedName,
-          display_name: trimmedName,
-          data_type: currentMeta.data_type,
-          is_required: currentMeta.is_required,
-          default_value: currentMeta.default_value || "null",
-          order: currentMeta.order || 0,
-          description: currentMeta.description || "",
-        },
+      const trimmedName = newName.trim()
+      if (!trimmedName) {
+        toast.error("Name cannot be empty")
+        return
       }
 
-      const response = await fetch(`${BACKEND_URL}/columns`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(renameRequest),
-      })
-
-      if (!response.ok) {
-        const detail = await response.text()
-        throw new Error(detail || "Failed to rename column")
-      }
-
-      toast.success(`Column renamed to '${trimmedName}'`)
-      setIsColumnRenameDialogOpen(false)
-      setColumnPendingRename(null)
-      await fetchData() // Refresh data and metadata
-    } catch (error) {
-      toast.error(
-        `Failed to rename column: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
-    } finally {
-      setIsMutating(false)
-    }
-  }, [columnPendingRename, fetchData])
-
-  const handleConfirmColumnAdd = useCallback(async (data: {
-    name: string
-    type: string
-    defaultValue: string
-    position?: string
-  }) => {
-    if (!columnPendingAdd && !data.position) return
-    const trimmedName = data.name.trim()
-    if (!trimmedName) {
-      toast.error("Column name cannot be empty")
-      return
-    }
-
-    setIsMutating(true)
-    try {
-      // Determine the order for the new column
-      let newOrder: number
-      if (columnPendingAdd) {
-        // Existing logic for context menu
-        const targetIndex = metadata.findIndex(
-          (m) => m.column_name === columnPendingAdd.key
+      setIsMutating(true)
+      try {
+        // Fetch current metadata to preserve other fields
+        const metadataResponse = await fetch(`${BACKEND_URL}/column-metadata`)
+        if (!metadataResponse.ok) {
+          throw new Error("Failed to fetch column metadata")
+        }
+        const metadata: ColumnMetadataRow[] = await metadataResponse.json()
+        const currentMeta = metadata.find(
+          (m) => m.column_name === columnPendingRename.key
         )
-        const targetMeta = metadata[targetIndex]
-        newOrder = targetMeta
-          ? (targetMeta.order ?? 0) + 1
-          : metadata.length
-      } else {
-        // New logic for position selection
-        const position = data.position!
-        if (position === "beginning") {
-          newOrder = 0
-        } else if (position === "end") {
-          newOrder = Math.max(...metadata.map(m => m.order ?? 0), -1) + 1
-        } else if (position.startsWith("after-")) {
-          const afterKey = position.slice(6)
-          const afterMeta = metadata.find(m => m.column_name === afterKey)
-          newOrder = (afterMeta?.order ?? 0) + 1
+        if (!currentMeta) {
+          throw new Error("Column metadata not found")
+        }
+
+        const renameRequest = {
+          old_column_name: columnPendingRename.key,
+          new_column: {
+            column_name: trimmedName,
+            display_name: trimmedName,
+            data_type: currentMeta.data_type,
+            is_required: currentMeta.is_required,
+            default_value: currentMeta.default_value || "null",
+            order: currentMeta.order || 0,
+            description: currentMeta.description || "",
+          },
+        }
+
+        const response = await fetch(`${BACKEND_URL}/columns`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(renameRequest),
+        })
+
+        if (!response.ok) {
+          const detail = await response.text()
+          throw new Error(detail || "Failed to rename column")
+        }
+
+        toast.success(`Column renamed to '${trimmedName}'`)
+        setIsColumnRenameDialogOpen(false)
+        setColumnPendingRename(null)
+        await fetchData() // Refresh data and metadata
+      } catch (error) {
+        toast.error(
+          `Failed to rename column: ${error instanceof Error ? error.message : "Unknown error"}`
+        )
+      } finally {
+        setIsMutating(false)
+      }
+    },
+    [columnPendingRename, fetchData]
+  )
+
+  const handleConfirmColumnAdd = useCallback(
+    async (data: {
+      name: string
+      type: string
+      defaultValue: string
+      position?: string
+    }) => {
+      if (!columnPendingAdd && !data.position) return
+      const trimmedName = data.name.trim()
+      if (!trimmedName) {
+        toast.error("Column name cannot be empty")
+        return
+      }
+
+      setIsMutating(true)
+      try {
+        // Determine the order for the new column
+        let newOrder: number
+        if (columnPendingAdd) {
+          // Existing logic for context menu
+          const targetIndex = metadata.findIndex(
+            (m) => m.column_name === columnPendingAdd.key
+          )
+          const targetMeta = metadata[targetIndex]
+          newOrder = targetMeta ? (targetMeta.order ?? 0) + 1 : metadata.length
         } else {
-          newOrder = metadata.length
+          // New logic for position selection
+          const position = data.position!
+          if (position === "beginning") {
+            newOrder = 0
+          } else if (position === "end") {
+            newOrder = Math.max(...metadata.map((m) => m.order ?? 0), -1) + 1
+          } else if (position.startsWith("after-")) {
+            const afterKey = position.slice(6)
+            const afterMeta = metadata.find((m) => m.column_name === afterKey)
+            newOrder = (afterMeta?.order ?? 0) + 1
+          } else {
+            newOrder = metadata.length
+          }
         }
-      }
 
-      // Format default value for backend (must be valid JSON)
-      let formattedDefault = data.defaultValue.trim()
-      if (!formattedDefault || formattedDefault.toLowerCase() === "null") {
-        formattedDefault = "null"
-      } else if (data.type === "string" || data.type === "text") {
-        formattedDefault = JSON.stringify(formattedDefault)
-      } else if (data.type === "number") {
-        if (isNaN(Number(formattedDefault))) {
-          formattedDefault = "0"
+        // Format default value for backend (must be valid JSON)
+        let formattedDefault = data.defaultValue.trim()
+        if (!formattedDefault || formattedDefault.toLowerCase() === "null") {
+          formattedDefault = "null"
+        } else if (data.type === "string" || data.type === "text") {
+          formattedDefault = JSON.stringify(formattedDefault)
+        } else if (data.type === "number") {
+          if (isNaN(Number(formattedDefault))) {
+            formattedDefault = "0"
+          }
         }
+
+        const response = await fetch(`${BACKEND_URL}/columns`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            column_name: trimmedName,
+            display_name: trimmedName,
+            data_type: data.type,
+            is_required: false,
+            default_value: formattedDefault,
+            order: newOrder,
+            description: "",
+          }),
+        })
+
+        if (!response.ok) {
+          const detail = await response.text()
+          throw new Error(detail || "Failed to add column")
+        }
+
+        toast.success(`Column '${trimmedName}' added successfully`)
+        setIsColumnAddDialogOpen(false)
+        setColumnPendingAdd(null)
+        await fetchData()
+      } catch (error) {
+        toast.error(
+          `Failed to add column: ${error instanceof Error ? error.message : "Unknown error"}`
+        )
+      } finally {
+        setIsMutating(false)
       }
-
-      const response = await fetch(`${BACKEND_URL}/columns`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          column_name: trimmedName,
-          display_name: trimmedName,
-          data_type: data.type,
-          is_required: false,
-          default_value: formattedDefault,
-          order: newOrder,
-          description: "",
-        }),
-      })
-
-      if (!response.ok) {
-        const detail = await response.text()
-        throw new Error(detail || "Failed to add column")
-      }
-
-      toast.success(`Column '${trimmedName}' added successfully`)
-      setIsColumnAddDialogOpen(false)
-      setColumnPendingAdd(null)
-      await fetchData()
-    } catch (error) {
-      toast.error(
-        `Failed to add column: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
-    } finally {
-      setIsMutating(false)
-    }
-  }, [columnPendingAdd, metadata, fetchData])
+    },
+    [columnPendingAdd, metadata, fetchData]
+  )
 
   const handleExportData = useCallback(async () => {
     setIsExporting(true)
@@ -869,35 +877,34 @@ export function useDataManagement() {
     }
   }, [exportFormat, exportScope, selectedRowIds])
 
-  const handleAddFilter = useCallback((filter: {
-    columnKey: string
-    operator: string
-    value: string
-  }) => {
-    if (!filter.columnKey.trim()) {
-      toast.error("Please select a column")
-      return
-    }
+  const handleAddFilter = useCallback(
+    (filter: { columnKey: string; operator: string; value: string }) => {
+      if (!filter.columnKey.trim()) {
+        toast.error("Please select a column")
+        return
+      }
 
-    if (!filter.value.trim()) {
-      toast.error("Please enter a filter value")
-      return
-    }
+      if (!filter.value.trim()) {
+        toast.error("Please enter a filter value")
+        return
+      }
 
-    const newFilter: FilterCondition = {
-      id: `${Date.now()}-${Math.random()}`,
-      columnKey: filter.columnKey,
-      operator: filter.operator,
-      value: filter.value,
-    }
+      const newFilter: FilterCondition = {
+        id: `${Date.now()}-${Math.random()}`,
+        columnKey: filter.columnKey,
+        operator: filter.operator,
+        value: filter.value,
+      }
 
-    setFilters((prev) => [...prev, newFilter])
+      setFilters((prev) => [...prev, newFilter])
 
-    setIsFilterDialogOpen(false)
-    toast.success(
-      `Filter added: ${filter.columnKey} ${filter.operator} "${filter.value}"`
-    )
-  }, [])
+      setIsFilterDialogOpen(false)
+      toast.success(
+        `Filter added: ${filter.columnKey} ${filter.operator} "${filter.value}"`
+      )
+    },
+    []
+  )
 
   const handleRemoveFilter = useCallback((filterId: string) => {
     setFilters((prev) => prev.filter((f) => f.id !== filterId))
