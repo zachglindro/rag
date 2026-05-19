@@ -2,6 +2,7 @@ import difflib
 import io
 import importlib
 import json
+import os
 import re
 import sqlite3
 import asyncio
@@ -32,10 +33,11 @@ DB_PATH = Path(__file__).parent / "db.sqlite3"
 MINIMUM_RERANK_SCORE = 0
 
 # Local model registry: maps model IDs to local paths
+MODELS_PATH = Path(os.getenv("MODELS_PATH", "/models"))
 LOCAL_MODEL_REGISTRY = {
-    "gemma-4-e2b-it": Path(__file__).resolve().parents[2] / "models" / "gemma-4-E2B-it",
-    "qwen3-0.6b": Path(__file__).resolve().parents[2] / "models" / "Qwen3-0.6B",
-    "qwen3.5-0.8b": Path(__file__).resolve().parents[2] / "models" / "qwen3.5-0.8b",
+    "gemma-4-e2b-it": MODELS_PATH / "gemma-4-E2B-it",
+    "qwen3-0.6b": MODELS_PATH / "Qwen3-0.6B",
+    "qwen3.5-0.8b": MODELS_PATH / "qwen3.5-0.8b",
 }
 
 # Online model registry: maps model IDs to provider descriptors

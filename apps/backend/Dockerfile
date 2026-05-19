@@ -19,8 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copy application code
 COPY apps/backend ./
 
-# Copy models download script from root
-COPY download_models.py ./download_models.py
+# Copy models download script
+COPY apps/backend/download_models.py ./download_models.py
 
 # Copy entrypoint script
 COPY apps/backend/entrypoint.sh ./
