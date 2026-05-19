@@ -1,10 +1,10 @@
-from typing import Any
+from typing import Any, Optional
 from pathlib import Path
 from sentence_transformers import CrossEncoder
 
 
 class CrossEncoderReranker:
-    def __init__(self, model_name: str = None):
+    def __init__(self, model_name: Optional[str] = None):
         if model_name is None:
             # Use local model path
             model_path = (
