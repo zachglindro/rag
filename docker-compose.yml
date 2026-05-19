@@ -11,8 +11,6 @@ services:
     volumes:
       - ./models:/models
       - ./apps/backend:/app
-    env_file:
-      - ./apps/backend/.env
     networks:
       - rag-network
 
