@@ -10,6 +10,7 @@ This script downloads:
 Models are stored in the ./models directory (created automatically if it doesn't exist).
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -21,8 +22,14 @@ except ImportError:
     sys.exit(1)
 
 
-def download_models():
+def download_models(models_dir=None):
     """Download all required models."""
+    # Use provided models_dir or default to ./models
+    if models_dir is None:
+        models_dir = Path("models")
+    else:
+        models_dir = Path(models_dir)
+    
     # Define models to download
     models = [
         {
@@ -43,7 +50,6 @@ def download_models():
     ]
 
     # Create models directory if it doesn't exist
-    models_dir = Path("models")
     models_dir.mkdir(parents=True, exist_ok=True)
     print(f"Models directory: {models_dir.resolve()}\n")
 
@@ -85,5 +91,10 @@ def download_models():
 
 
 if __name__ == "__main__":
-    success = download_models()
+    parser = argparse.ArgumentParser(description="Download models for RAG project")
+    parser.add_argument("--models-dir", type=str, default=None, help="Directory to store models")
+    args = parser.parse_args()
+    
+    success = download_models(models_dir=args.models_dir)
     sys.exit(0 if success else 1)
+
