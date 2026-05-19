@@ -40,6 +40,8 @@ interface DataTableRowProps {
   onOpenExportDialog: (scope: "all" | "selected") => void
   isHighlighted?: boolean
   pinnedColumnsCount?: number
+  columnWidths?: Record<string, number>
+  getColumnWidth?: (columnKey: string) => number
 }
 
 export const DataTableRow = memo(function DataTableRow({
@@ -60,6 +62,7 @@ export const DataTableRow = memo(function DataTableRow({
   onOpenExportDialog,
   isHighlighted,
   pinnedColumnsCount = 0,
+  getColumnWidth = () => 150,
 }: DataTableRowProps) {
   const rowRef = useRef<HTMLTableRowElement>(null)
 
@@ -101,7 +104,7 @@ export const DataTableRow = memo(function DataTableRow({
           data-state={isSelected ? "selected" : undefined}
         >
           {isSelectionMode && (
-            <TableCell className="w-[40px]">
+            <TableCell className="w-[40px]" style={{ width: "40px" }}>
               <input
                 type="checkbox"
                 checked={isSelected}
@@ -124,6 +127,8 @@ export const DataTableRow = memo(function DataTableRow({
               ? "sticky z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
               : ""
 
+            const columnWidth = getColumnWidth(column.key)
+
             const isRowBeingEdited = globalEditMode || row.id === editingRowId
 
             if (isRowBeingEdited) {
@@ -139,6 +144,7 @@ export const DataTableRow = memo(function DataTableRow({
                   isPinned={isPinned}
                   pinIndex={index}
                   className={stickyClass}
+                  columnWidth={columnWidth}
                 />
               )
             }
@@ -147,8 +153,12 @@ export const DataTableRow = memo(function DataTableRow({
               <TableCell
                 key={`${row.id}-${column.key}`}
                 className={cn(stickyClass, isPinned && `pin-col-${index}`)}
+                style={{ width: `${columnWidth}px` }}
               >
-                <div className="max-w-[400px] break-words whitespace-normal">
+                <div
+                  style={{ maxWidth: `${columnWidth - 16}px` }}
+                  className="break-words whitespace-normal"
+                >
                   {stringifyValue(row.data?.[column.key])}
                 </div>
               </TableCell>

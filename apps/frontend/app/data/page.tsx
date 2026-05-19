@@ -24,7 +24,9 @@ import { Suspense, useEffect, useRef } from "react"
 import { Loader2, ChevronUp, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useDataManagement } from "./hooks/use-data-management"
+import { useColumnWidths } from "./hooks/use-column-widths"
 import { DataTableRow } from "@/components/data/table/data-table-row"
+import { ColumnResizeHandle } from "@/components/data/table/column-resize-handle"
 import { DeleteConfirmDialog } from "./components/dialogs/delete-confirm-dialog"
 import { RenameColumnDialog } from "./components/dialogs/rename-column-dialog"
 import { AddColumnDialog } from "./components/dialogs/add-column-dialog"
@@ -39,12 +41,15 @@ import { toEditableCellValue } from "./utils"
 function DataPageContent() {
   const { state, actions } = useDataManagement()
   const tableRef = useRef<HTMLTableElement>(null)
+  const { columnWidths, updateColumnWidth, getColumnWidth } = useColumnWidths(
+    state.allColumns
+  )
 
   // Measure and update column widths for pinned columns
   useEffect(() => {
     if (!tableRef.current) return
 
-    const updateColumnWidths = () => {
+    const updatePinnedColumnWidths = () => {
       const headerRow = tableRef.current?.querySelector("thead tr")
       if (!headerRow) return
 
@@ -62,10 +67,10 @@ function DataPageContent() {
     }
 
     // Measure on mount and when the table changes
-    updateColumnWidths()
+    updatePinnedColumnWidths()
 
     // Use ResizeObserver to handle dynamic resizing
-    const resizeObserver = new ResizeObserver(updateColumnWidths)
+    const resizeObserver = new ResizeObserver(updatePinnedColumnWidths)
     if (tableRef.current) {
       resizeObserver.observe(tableRef.current)
     }
@@ -225,11 +230,18 @@ function DataPageContent() {
                 )}
 
                 <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
-                  <Table ref={tableRef} className="pin-table">
+                  <Table
+                    ref={tableRef}
+                    className="pin-table"
+                    style={{ tableLayout: "fixed", width: "100%" }}
+                  >
                     <TableHeader>
                       <TableRow>
                         {state.isSelectionMode && (
-                          <TableHead className="pin-col-0 w-[40px]">
+                          <TableHead
+                            className="pin-col-0"
+                            style={{ width: "40px" }}
+                          >
                             <input
                               type="checkbox"
                               checked={state.isAllFilteredSelected}
@@ -246,18 +258,21 @@ function DataPageContent() {
                           const stickyClass = isPinned
                             ? "sticky z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
                             : ""
+                          const columnWidth = getColumnWidth(column.key)
 
                           return (
                             <ContextMenu key={column.key}>
                               <ContextMenuTrigger asChild>
                                 <TableHead
                                   className={cn(
+                                    "relative",
                                     column.key === "id"
                                       ? "w-20 cursor-pointer"
                                       : "cursor-pointer",
                                     stickyClass,
                                     isPinned && `pin-col-${pinIndex}`
                                   )}
+                                  style={{ width: `${columnWidth}px` }}
                                   onClick={() => actions.handleSort(column.key)}
                                 >
                                   {column.label}
@@ -267,6 +282,15 @@ function DataPageContent() {
                                     ) : (
                                       <ChevronDown className="ml-1 inline h-4 w-4" />
                                     ))}
+                                  <ColumnResizeHandle
+                                    onResize={(delta) => {
+                                      updateColumnWidth(
+                                        column.key,
+                                        columnWidth + delta
+                                      )
+                                    }}
+                                    columnLabel={column.label}
+                                  />
                                 </TableHead>
                               </ContextMenuTrigger>
                               <ContextMenuContent>
@@ -326,6 +350,8 @@ function DataPageContent() {
                           onOpenExportDialog={actions.openExportDialog}
                           isHighlighted={row.id === state.highlightId}
                           pinnedColumnsCount={state.pinnedColumnsCount}
+                          columnWidths={columnWidths}
+                          getColumnWidth={getColumnWidth}
                         />
                       ))}
                       {state.filteredRows.length === 0 && (
