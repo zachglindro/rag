@@ -1,0 +1,11 @@
+node_modules
+.next
+.env.local
+.env.*.local
+.git
+.gitignore
+dist
+build
+.npm
+.eslintcache
+.turbo
