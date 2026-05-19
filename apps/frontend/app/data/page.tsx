@@ -53,7 +53,10 @@ function DataPageContent() {
 
       cells.forEach((cell, index) => {
         const width = cell.offsetWidth
-        tableRef.current?.style.setProperty(`--col-${index}-width`, `${cumulativeWidth}px`)
+        tableRef.current?.style.setProperty(
+          `--col-${index}-width`,
+          `${cumulativeWidth}px`
+        )
         cumulativeWidth += width
       })
     }
@@ -72,6 +75,9 @@ function DataPageContent() {
     }
   }, [state.allColumns, state.isSelectionMode, state.pinnedColumnsCount])
 
+  // Compute isEditMode for backward compatibility
+  const isEditMode = state.editingRowId !== null
+
   return (
     <>
       <AppSidebar />
@@ -88,7 +94,7 @@ function DataPageContent() {
             initialValue={state.appliedSearchQuery}
             onSearch={actions.handleApplySearch}
             onClear={actions.handleClearSearch}
-            isEditMode={state.isEditMode}
+            isEditMode={isEditMode}
             isMutating={state.isMutating}
             isSearchMode={state.isSearchMode}
           />
@@ -100,17 +106,19 @@ function DataPageContent() {
             onAddAnother={() => actions.setIsFilterDialogOpen(true)}
           />
 
-          {state.filters.length === 0 && !state.isEditMode && state.totalCount > 0 && (
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => actions.setIsFilterDialogOpen(true)}
-              >
-                + Add Filter
-              </Button>
-            </div>
-          )}
+          {state.filters.length === 0 &&
+            !isEditMode &&
+            state.totalCount > 0 && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => actions.setIsFilterDialogOpen(true)}
+                >
+                  + Add Filter
+                </Button>
+              </div>
+            )}
 
           {state.isLoading && (
             <div className="rounded-lg border p-6 text-sm text-muted-foreground">
@@ -121,221 +129,254 @@ function DataPageContent() {
           {!state.isLoading && state.error && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6">
               <p className="text-sm text-destructive">{state.error}</p>
-              <Button className="mt-4" onClick={actions.fetchData} variant="outline">
+              <Button
+                className="mt-4"
+                onClick={actions.fetchData}
+                variant="outline"
+              >
                 Retry
               </Button>
             </div>
           )}
 
-          {!state.isLoading && !state.error && state.totalCount === 0 && !state.isSearchMode && (
-            <div className="rounded-lg border p-6">
-              <p className="text-sm text-muted-foreground">
-                There is currently no data in the database.
-              </p>
-              <Button className="mt-4" asChild>
-                <Link href="/add">Add Data</Link>
-              </Button>
-            </div>
-          )}
-
-          {!state.isLoading && !state.error && (state.totalCount > 0 || state.isSearchMode) && (
-            <TableToolbar
-              isEditMode={state.isEditMode}
-              isSelectionMode={state.isSelectionMode}
-              isMutating={state.isMutating}
-              hasPendingChanges={state.hasPendingChanges}
-              selectedRowIds={state.selectedRowIds}
-              pinnedColumnsCount={state.pinnedColumnsCount}
-              onToggleSelectionMode={() => {
-                actions.setIsSelectionMode(!state.isSelectionMode)
-                if (state.isSelectionMode) {
-                  actions.setSelectedRowIds(new Set())
-                }
-              }}
-              onEnterEditMode={actions.enterEditMode}
-              onExitEditMode={actions.exitEditMode}
-              onSaveChanges={actions.handleSaveSpreadsheetChanges}
-              onOpenColumnAddDialog={() => actions.openColumnAddDialog(null)}
-              onOpenBulkDeleteDialog={actions.openBulkDeleteDialog}
-              onExportSelected={() => actions.openExportDialog("selected")}
-              onPinnedColumnsChange={actions.setPinnedColumnsCount}
-            />
-          )}
-
-          {!state.isLoading && !state.error && (state.totalCount > 0 || state.isSearchMode) && (
-            <div className="flex w-full min-w-0 flex-col gap-4">
-              {state.isRefreshing && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Refreshing records...
-                </div>
-              )}
-
-              {state.isSearchMode ? (
-                <div className="text-sm text-muted-foreground">
-                  {state.searchType === "keyword" ? "Keyword " : "Semantic "} search
-                  for &quot;{state.appliedSearchQuery}&quot; returned {state.rows.length}{" "}
-                  results.
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  Showing {state.skip + 1}-{Math.min(state.skip + state.rows.length, state.totalCount)}{" "}
-                  of {state.totalCount}
-                </div>
-              )}
-
-              {!state.isSearchMode && (
-                <DataPagination
-                  currentPage={state.currentPage}
-                  totalPages={state.totalPages}
-                  pageSize={state.pageSize}
-                  setPageSize={actions.setPageSize}
-                  hasPrevious={state.hasPreviousPage}
-                  hasNext={state.hasNextPage}
-                  onPrevious={() => actions.setSkip(Math.max(state.skip - state.pageSize, 0))}
-                  onNext={() => actions.setSkip(state.skip + state.pageSize)}
-                  onPageChange={(page) => actions.setSkip((page - 1) * state.pageSize)}
-                  disabled={state.isMutating || state.isEditMode}
-                  totalCount={state.totalCount}
-                />
-              )}
-
-              <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
-                <Table ref={tableRef} className="pin-table">
-                  <TableHeader>
-                    <TableRow>
-                      {state.isSelectionMode && (
-                        <TableHead className="w-[40px] pin-col-0">
-                          <input
-                            type="checkbox"
-                            checked={state.isAllFilteredSelected}
-                            onChange={actions.toggleSelectAll}
-                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                          />
-                        </TableHead>
-                      )}
-                      {state.allColumns.map((column, index) => {
-                        const isPinned = index < state.pinnedColumnsCount
-                        const pinIndex = state.isSelectionMode ? index + 1 : index
-                        const stickyClass = isPinned
-                          ? "sticky z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
-                          : ""
-
-                        return (
-                          <ContextMenu key={column.key}>
-                            <ContextMenuTrigger asChild>
-                              <TableHead
-                                className={cn(
-                                  column.key === "id"
-                                    ? "w-20 cursor-pointer"
-                                    : "cursor-pointer",
-                                  stickyClass,
-                                  isPinned && `pin-col-${pinIndex}`
-                                )}
-                                onClick={() => actions.handleSort(column.key)}
-                              >
-                                {column.label}
-                                {state.sortColumn === column.key &&
-                                  (state.sortDirection === "asc" ? (
-                                    <ChevronUp className="ml-1 inline h-4 w-4" />
-                                  ) : (
-                                    <ChevronDown className="ml-1 inline h-4 w-4" />
-                                  ))}
-                              </TableHead>
-                            </ContextMenuTrigger>
-                            <ContextMenuContent>
-                              <ContextMenuLabel>{column.label}</ContextMenuLabel>
-                              <ContextMenuSeparator />
-                              <ContextMenuItem
-                                onSelect={() => actions.openColumnAddDialog(column)}
-                                disabled={state.isEditMode || state.isMutating}
-                              >
-                                Add Column
-                              </ContextMenuItem>
-                              <ContextMenuItem
-                                onSelect={() => actions.openColumnRenameDialog(column)}
-                                disabled={state.isEditMode || state.isMutating}
-                              >
-                                Rename
-                              </ContextMenuItem>
-                              <ContextMenuItem
-                                variant="destructive"
-                                onSelect={() => actions.openColumnDeleteDialog(column)}
-                                disabled={state.isEditMode || state.isMutating}
-                              >
-                                Delete
-                              </ContextMenuItem>
-                            </ContextMenuContent>
-                          </ContextMenu>
-                        )
-                      })}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {state.filteredRows.map((row) => (
-                      <DataTableRow
-                        key={row.id}
-                        row={row}
-                        visibleColumns={state.visibleColumns}
-                        isEditMode={state.isEditMode}
-                        isMutating={state.isMutating}
-                        isSelectionMode={state.isSelectionMode}
-                        isSelected={state.selectedRowIds.has(row.id)}
-                        onToggleSelection={actions.toggleRowSelection}
-                        rowDraft={state.draftCells[row.id]}
-                        toEditableCellValue={toEditableCellValue}
-                        onUpdateDraftCell={actions.updateDraftCell}
-                        onContextEditRow={actions.handleContextEditRow}
-                        onOpenDeleteDialog={actions.openDeleteDialog}
-                        onOpenBulkDeleteDialog={actions.openBulkDeleteDialog}
-                        onOpenExportDialog={actions.openExportDialog}
-                        isHighlighted={row.id === state.highlightId}
-                        pinnedColumnsCount={state.pinnedColumnsCount}
-                      />
-                    ))}
-                    {state.filteredRows.length === 0 && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={
-                            state.allColumns.length + (state.isSelectionMode ? 1 : 0)
-                          }
-                          className="h-24 text-center text-muted-foreground"
-                        >
-                          {state.isSearchMode && state.rows.length === 0
-                            ? "No results found for your search."
-                            : state.filters.length > 0
-                              ? "No records match the current filters."
-                              : "No records to display."}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+          {!state.isLoading &&
+            !state.error &&
+            state.totalCount === 0 &&
+            !state.isSearchMode && (
+              <div className="rounded-lg border p-6">
+                <p className="text-sm text-muted-foreground">
+                  There is currently no data in the database.
+                </p>
+                <Button className="mt-4" asChild>
+                  <Link href="/add">Add Data</Link>
+                </Button>
               </div>
+            )}
 
-              {!state.isSearchMode && (
-                <DataPagination
-                  currentPage={state.currentPage}
-                  totalPages={state.totalPages}
-                  pageSize={state.pageSize}
-                  setPageSize={actions.setPageSize}
-                  hasPrevious={state.hasPreviousPage}
-                  hasNext={state.hasNextPage}
-                  onPrevious={() => actions.setSkip(Math.max(state.skip - state.pageSize, 0))}
-                  onNext={() => actions.setSkip(state.skip + state.pageSize)}
-                  onPageChange={(page) => actions.setSkip((page - 1) * state.pageSize)}
-                  disabled={state.isMutating || state.isEditMode}
-                  totalCount={state.totalCount}
-                />
-              )}
-            </div>
-          )}
+          {!state.isLoading &&
+            !state.error &&
+            (state.totalCount > 0 || state.isSearchMode) && (
+              <TableToolbar
+                isEditMode={isEditMode}
+                isSelectionMode={state.isSelectionMode}
+                isMutating={state.isMutating}
+                hasPendingChanges={state.hasPendingChanges}
+                selectedRowIds={state.selectedRowIds}
+                pinnedColumnsCount={state.pinnedColumnsCount}
+                onToggleSelectionMode={() => {
+                  actions.setIsSelectionMode(!state.isSelectionMode)
+                  if (state.isSelectionMode) {
+                    actions.setSelectedRowIds(new Set())
+                  }
+                }}
+                onExitEditMode={actions.exitEditMode}
+                onSaveChanges={actions.handleSaveSpreadsheetChanges}
+                onOpenColumnAddDialog={() => actions.openColumnAddDialog(null)}
+                onOpenBulkDeleteDialog={actions.openBulkDeleteDialog}
+                onExportSelected={() => actions.openExportDialog("selected")}
+                onPinnedColumnsChange={actions.setPinnedColumnsCount}
+              />
+            )}
 
-          {!state.isLoading && !state.error && state.totalCount > 0 && state.metadata.length === 0 && (
-            <div className="rounded-lg border border-amber-400/40 bg-amber-50 p-4 text-sm text-amber-900">
-              Column metadata is empty. Columns are inferred from record keys.
-            </div>
-          )}
+          {!state.isLoading &&
+            !state.error &&
+            (state.totalCount > 0 || state.isSearchMode) && (
+              <div className="flex w-full min-w-0 flex-col gap-4">
+                {state.isRefreshing && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Refreshing records...
+                  </div>
+                )}
+
+                {state.isSearchMode ? (
+                  <div className="text-sm text-muted-foreground">
+                    {state.searchType === "keyword" ? "Keyword " : "Semantic "}{" "}
+                    search for &quot;{state.appliedSearchQuery}&quot; returned{" "}
+                    {state.rows.length} results.
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    Showing {state.skip + 1}-
+                    {Math.min(state.skip + state.rows.length, state.totalCount)}{" "}
+                    of {state.totalCount}
+                  </div>
+                )}
+
+                {!state.isSearchMode && (
+                  <DataPagination
+                    currentPage={state.currentPage}
+                    totalPages={state.totalPages}
+                    pageSize={state.pageSize}
+                    setPageSize={actions.setPageSize}
+                    hasPrevious={state.hasPreviousPage}
+                    hasNext={state.hasNextPage}
+                    onPrevious={() =>
+                      actions.setSkip(Math.max(state.skip - state.pageSize, 0))
+                    }
+                    onNext={() => actions.setSkip(state.skip + state.pageSize)}
+                    onPageChange={(page) =>
+                      actions.setSkip((page - 1) * state.pageSize)
+                    }
+                    disabled={state.isMutating || isEditMode}
+                    totalCount={state.totalCount}
+                  />
+                )}
+
+                <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
+                  <Table ref={tableRef} className="pin-table">
+                    <TableHeader>
+                      <TableRow>
+                        {state.isSelectionMode && (
+                          <TableHead className="pin-col-0 w-[40px]">
+                            <input
+                              type="checkbox"
+                              checked={state.isAllFilteredSelected}
+                              onChange={actions.toggleSelectAll}
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                          </TableHead>
+                        )}
+                        {state.allColumns.map((column, index) => {
+                          const isPinned = index < state.pinnedColumnsCount
+                          const pinIndex = state.isSelectionMode
+                            ? index + 1
+                            : index
+                          const stickyClass = isPinned
+                            ? "sticky z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
+                            : ""
+
+                          return (
+                            <ContextMenu key={column.key}>
+                              <ContextMenuTrigger asChild>
+                                <TableHead
+                                  className={cn(
+                                    column.key === "id"
+                                      ? "w-20 cursor-pointer"
+                                      : "cursor-pointer",
+                                    stickyClass,
+                                    isPinned && `pin-col-${pinIndex}`
+                                  )}
+                                  onClick={() => actions.handleSort(column.key)}
+                                >
+                                  {column.label}
+                                  {state.sortColumn === column.key &&
+                                    (state.sortDirection === "asc" ? (
+                                      <ChevronUp className="ml-1 inline h-4 w-4" />
+                                    ) : (
+                                      <ChevronDown className="ml-1 inline h-4 w-4" />
+                                    ))}
+                                </TableHead>
+                              </ContextMenuTrigger>
+                              <ContextMenuContent>
+                                <ContextMenuLabel>
+                                  {column.label}
+                                </ContextMenuLabel>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem
+                                  onSelect={() =>
+                                    actions.openColumnAddDialog(column)
+                                  }
+                                  disabled={isEditMode || state.isMutating}
+                                >
+                                  Add Column
+                                </ContextMenuItem>
+                                <ContextMenuItem
+                                  onSelect={() =>
+                                    actions.openColumnRenameDialog(column)
+                                  }
+                                  disabled={isEditMode || state.isMutating}
+                                >
+                                  Rename
+                                </ContextMenuItem>
+                                <ContextMenuItem
+                                  variant="destructive"
+                                  onSelect={() =>
+                                    actions.openColumnDeleteDialog(column)
+                                  }
+                                  disabled={isEditMode || state.isMutating}
+                                >
+                                  Delete
+                                </ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          )
+                        })}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {state.filteredRows.map((row) => (
+                        <DataTableRow
+                          key={row.id}
+                          row={row}
+                          visibleColumns={state.visibleColumns}
+                          editingRowId={state.editingRowId}
+                          isMutating={state.isMutating}
+                          isSelectionMode={state.isSelectionMode}
+                          isSelected={state.selectedRowIds.has(row.id)}
+                          onToggleSelection={actions.toggleRowSelection}
+                          rowDraft={state.draftCells[row.id]}
+                          toEditableCellValue={toEditableCellValue}
+                          onUpdateDraftCell={actions.updateDraftCell}
+                          onContextEditRow={actions.handleContextEditRow}
+                          onOpenDeleteDialog={actions.openDeleteDialog}
+                          onOpenBulkDeleteDialog={actions.openBulkDeleteDialog}
+                          onOpenExportDialog={actions.openExportDialog}
+                          isHighlighted={row.id === state.highlightId}
+                          pinnedColumnsCount={state.pinnedColumnsCount}
+                        />
+                      ))}
+                      {state.filteredRows.length === 0 && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={
+                              state.allColumns.length +
+                              (state.isSelectionMode ? 1 : 0)
+                            }
+                            className="h-24 text-center text-muted-foreground"
+                          >
+                            {state.isSearchMode && state.rows.length === 0
+                              ? "No results found for your search."
+                              : state.filters.length > 0
+                                ? "No records match the current filters."
+                                : "No records to display."}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {!state.isSearchMode && (
+                  <DataPagination
+                    currentPage={state.currentPage}
+                    totalPages={state.totalPages}
+                    pageSize={state.pageSize}
+                    setPageSize={actions.setPageSize}
+                    hasPrevious={state.hasPreviousPage}
+                    hasNext={state.hasNextPage}
+                    onPrevious={() =>
+                      actions.setSkip(Math.max(state.skip - state.pageSize, 0))
+                    }
+                    onNext={() => actions.setSkip(state.skip + state.pageSize)}
+                    onPageChange={(page) =>
+                      actions.setSkip((page - 1) * state.pageSize)
+                    }
+                    disabled={state.isMutating || isEditMode}
+                    totalCount={state.totalCount}
+                  />
+                )}
+              </div>
+            )}
+
+          {!state.isLoading &&
+            !state.error &&
+            state.totalCount > 0 &&
+            state.metadata.length === 0 && (
+              <div className="rounded-lg border border-amber-400/40 bg-amber-50 p-4 text-sm text-amber-900">
+                Column metadata is empty. Columns are inferred from record keys.
+              </div>
+            )}
 
           <DeleteConfirmDialog
             isOpen={state.isDeleteDialogOpen}

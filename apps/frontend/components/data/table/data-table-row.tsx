@@ -25,7 +25,7 @@ import { EditableCell } from "./editable-cell"
 interface DataTableRowProps {
   row: RecordRow
   visibleColumns: VisibleColumn[]
-  isEditMode: boolean
+  editingRowId: number | null
   isMutating: boolean
   isSelectionMode: boolean
   isSelected: boolean
@@ -44,7 +44,7 @@ interface DataTableRowProps {
 export const DataTableRow = memo(function DataTableRow({
   row,
   visibleColumns,
-  isEditMode,
+  editingRowId,
   isMutating,
   isSelectionMode,
   isSelected,
@@ -122,7 +122,9 @@ export const DataTableRow = memo(function DataTableRow({
               ? "sticky z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
               : ""
 
-            if (isEditMode) {
+            const isRowBeingEdited = row.id === editingRowId
+
+            if (isRowBeingEdited) {
               return (
                 <EditableCell
                   key={`${row.id}-${column.key}`}

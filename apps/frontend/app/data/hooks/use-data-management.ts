@@ -32,7 +32,7 @@ export function useDataManagement() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isEditMode, setIsEditMode] = useState(false)
+  const [editingRowId, setEditingRowId] = useState<number | null>(null)
   const [draftCells, setDraftCells] = useState<
     Record<number, Record<string, string>>
   >({})
@@ -355,7 +355,7 @@ export function useDataManagement() {
 
   const handleSort = useCallback(
     (columnKey: string) => {
-      if (isEditMode) return
+      if (editingRowId !== null) return
       if (sortColumn === columnKey) {
         setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
       } else {
@@ -364,7 +364,7 @@ export function useDataManagement() {
       }
       setSkip(0)
     },
-    [isEditMode, sortColumn]
+    [editingRowId, sortColumn]
   )
 
   const hasPreviousPage = skip > 0
@@ -399,7 +399,7 @@ export function useDataManagement() {
   }, [])
 
   const handleClearSearch = useCallback(() => {
-    if (isEditMode) {
+    if (editingRowId !== null) {
       toast.error("Exit edit mode before changing the search query")
       return
     }
@@ -408,7 +408,7 @@ export function useDataManagement() {
     setSkip(0)
     setSortColumn("id")
     setSortDirection("asc")
-  }, [isEditMode])
+  }, [editingRowId])
 
   const refreshAfterMutation = async (isDeleteAction: boolean) => {
     if (isDeleteAction && !isSearchMode && rows.length === 1 && skip > 0) {
@@ -419,12 +419,12 @@ export function useDataManagement() {
     await fetchData()
   }
 
-  const enterEditMode = useCallback(() => {
-    setIsEditMode(true)
+  const enterEditMode = useCallback((rowId: number) => {
+    setEditingRowId(rowId)
   }, [])
 
   const exitEditMode = useCallback(() => {
-    setIsEditMode(false)
+    setEditingRowId(null)
     setDraftCells({})
     setDirtyCellCount(0)
   }, [])
@@ -575,12 +575,10 @@ export function useDataManagement() {
 
   const handleContextEditRow = useCallback(
     (row: RecordRow) => {
-      if (!isEditMode) {
-        setIsEditMode(true)
-        toast.message(`Edit mode enabled for row ${row.id}`)
-      }
+      setEditingRowId(row.id)
+      toast.message(`Edit mode enabled for row ${row.id}`)
     },
-    [isEditMode]
+    []
   )
 
   const openDeleteDialog = useCallback((row: RecordRow) => {
@@ -927,7 +925,7 @@ export function useDataManagement() {
       isLoading,
       isRefreshing,
       error,
-      isEditMode,
+      editingRowId,
       draftCells,
       recordPendingDelete,
       isDeleteDialogOpen,
@@ -968,7 +966,7 @@ export function useDataManagement() {
     actions: {
       setSkip,
       setSearchType,
-      setIsEditMode,
+      setEditingRowId,
       setIsDeleteDialogOpen,
       setRecordPendingDelete,
       setIsExportDialogOpen,

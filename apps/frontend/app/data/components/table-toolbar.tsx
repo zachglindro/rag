@@ -9,7 +9,6 @@ interface TableToolbarProps {
   selectedRowIds: Set<number>
   pinnedColumnsCount: number
   onToggleSelectionMode: () => void
-  onEnterEditMode: () => void
   onExitEditMode: () => void
   onSaveChanges: () => void
   onOpenColumnAddDialog: () => void
@@ -26,7 +25,6 @@ export function TableToolbar({
   selectedRowIds,
   pinnedColumnsCount,
   onToggleSelectionMode,
-  onEnterEditMode,
   onExitEditMode,
   onSaveChanges,
   onOpenColumnAddDialog,
@@ -48,10 +46,7 @@ export function TableToolbar({
             </Button>
             {isSelectionMode && selectedRowIds.size > 0 && (
               <>
-                <Button
-                  onClick={onExportSelected}
-                  disabled={isMutating}
-                >
+                <Button onClick={onExportSelected} disabled={isMutating}>
                   Export Selected ({selectedRowIds.size})
                 </Button>
                 <Button
@@ -63,9 +58,6 @@ export function TableToolbar({
                 </Button>
               </>
             )}
-            <Button onClick={onEnterEditMode} disabled={isMutating}>
-              Edit
-            </Button>
             <Button
               variant="outline"
               onClick={onOpenColumnAddDialog}
@@ -73,8 +65,11 @@ export function TableToolbar({
             >
               Add Column
             </Button>
-            <div className="flex items-center gap-2 ml-2 pl-2 border-l">
-              <label htmlFor="pinned-columns" className="text-sm text-muted-foreground">
+            <div className="ml-2 flex items-center gap-2 border-l pl-2">
+              <label
+                htmlFor="pinned-columns"
+                className="text-sm text-muted-foreground"
+              >
                 Pin columns:
               </label>
               <input
@@ -83,9 +78,13 @@ export function TableToolbar({
                 min="0"
                 max="20"
                 value={pinnedColumnsCount}
-                onChange={(e) => onPinnedColumnsChange(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                onChange={(e) =>
+                  onPinnedColumnsChange(
+                    Math.max(0, parseInt(e.target.value, 10) || 0)
+                  )
+                }
                 disabled={isMutating}
-                className="w-12 h-8 px-2 py-1 border rounded text-sm"
+                className="h-8 w-12 rounded border px-2 py-1 text-sm"
               />
             </div>
           </>
