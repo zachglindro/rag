@@ -9,6 +9,7 @@ interface TableToolbarProps {
   selectedRowIds: Set<number>
   pinnedColumnsCount: number
   onToggleSelectionMode: () => void
+  onEnterEditMode: () => void
   onExitEditMode: () => void
   onSaveChanges: () => void
   onOpenColumnAddDialog: () => void
@@ -25,6 +26,7 @@ export function TableToolbar({
   selectedRowIds,
   pinnedColumnsCount,
   onToggleSelectionMode,
+  onEnterEditMode,
   onExitEditMode,
   onSaveChanges,
   onOpenColumnAddDialog,
@@ -58,6 +60,9 @@ export function TableToolbar({
                 </Button>
               </>
             )}
+            <Button onClick={onEnterEditMode} disabled={isMutating}>
+              Edit
+            </Button>
             <Button
               variant="outline"
               onClick={onOpenColumnAddDialog}

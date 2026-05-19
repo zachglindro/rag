@@ -37,6 +37,7 @@ export function useDataManagement() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingRowId, setEditingRowId] = useState<number | null>(null)
+  const [globalEditMode, setGlobalEditMode] = useState(false)
   const [draftCells, setDraftCells] = useState<
     Record<number, Record<string, string>>
   >({})
@@ -430,8 +431,13 @@ export function useDataManagement() {
     setEditingRowId(rowId)
   }, [])
 
+  const enterGlobalEditMode = useCallback(() => {
+    setGlobalEditMode(true)
+  }, [])
+
   const exitEditMode = useCallback(() => {
     setEditingRowId(null)
+    setGlobalEditMode(false)
     setDraftCells({})
     setDirtyCellCount(0)
   }, [])
@@ -582,7 +588,6 @@ export function useDataManagement() {
 
   const handleContextEditRow = useCallback((row: RecordRow) => {
     setEditingRowId(row.id)
-    toast.message(`Edit mode enabled for row ${row.id}`)
   }, [])
 
   const openDeleteDialog = useCallback((row: RecordRow) => {
@@ -933,6 +938,7 @@ export function useDataManagement() {
       isRefreshing,
       error,
       editingRowId,
+      globalEditMode,
       draftCells,
       recordPendingDelete,
       isDeleteDialogOpen,
@@ -999,6 +1005,7 @@ export function useDataManagement() {
       handleClearSearch,
       refreshAfterMutation,
       enterEditMode,
+      enterGlobalEditMode,
       exitEditMode,
       updateDraftCell,
       handleSaveSpreadsheetChanges,

@@ -76,7 +76,7 @@ function DataPageContent() {
   }, [state.allColumns, state.isSelectionMode, state.pinnedColumnsCount])
 
   // Compute isEditMode for backward compatibility
-  const isEditMode = state.editingRowId !== null
+  const isEditMode = state.editingRowId !== null || state.globalEditMode
 
   return (
     <>
@@ -169,6 +169,7 @@ function DataPageContent() {
                     actions.setSelectedRowIds(new Set())
                   }
                 }}
+                onEnterEditMode={actions.enterGlobalEditMode}
                 onExitEditMode={actions.exitEditMode}
                 onSaveChanges={actions.handleSaveSpreadsheetChanges}
                 onOpenColumnAddDialog={() => actions.openColumnAddDialog(null)}
@@ -311,6 +312,7 @@ function DataPageContent() {
                           row={row}
                           visibleColumns={state.visibleColumns}
                           editingRowId={state.editingRowId}
+                          globalEditMode={state.globalEditMode}
                           isMutating={state.isMutating}
                           isSelectionMode={state.isSelectionMode}
                           isSelected={state.selectedRowIds.has(row.id)}

@@ -26,6 +26,7 @@ interface DataTableRowProps {
   row: RecordRow
   visibleColumns: VisibleColumn[]
   editingRowId: number | null
+  globalEditMode?: boolean
   isMutating: boolean
   isSelectionMode: boolean
   isSelected: boolean
@@ -45,6 +46,7 @@ export const DataTableRow = memo(function DataTableRow({
   row,
   visibleColumns,
   editingRowId,
+  globalEditMode = false,
   isMutating,
   isSelectionMode,
   isSelected,
@@ -122,7 +124,7 @@ export const DataTableRow = memo(function DataTableRow({
               ? "sticky z-10 bg-background border-r shadow-[inset_-2px_0_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_-2px_0_0_0_rgba(108,117,125,0.5)]"
               : ""
 
-            const isRowBeingEdited = row.id === editingRowId
+            const isRowBeingEdited = globalEditMode || row.id === editingRowId
 
             if (isRowBeingEdited) {
               return (
