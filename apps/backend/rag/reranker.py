@@ -1,3 +1,4 @@
+import os
 from typing import Any, Optional
 from pathlib import Path
 from sentence_transformers import CrossEncoder
@@ -6,13 +7,10 @@ from sentence_transformers import CrossEncoder
 class CrossEncoderReranker:
     def __init__(self, model_name: Optional[str] = None):
         if model_name is None:
-            # Use local model path
-            model_path = (
-                Path(__file__).resolve().parents[3]
-                / "models"
-                / "jina-reranker-v1-tiny-en"
-            )
-            model_name = str(model_path)
+            # Use MODELS_PATH env var or fall back to relative path
+            models_dir = Path(os.getenv("MODELS_PATH", "../../../models"))
+            model_name = str(models_dir / "jina-reranker-v1-tiny-en")
+        
         self.model = CrossEncoder(model_name, trust_remote_code=True)
 
     def rerank(

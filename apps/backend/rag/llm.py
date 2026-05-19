@@ -46,25 +46,24 @@ __all__ = [
 
 class GemmaLLM:
     def __init__(self, model_path: str | None = None, enable_thinking: bool = False):
-        default_model_path = (
-            Path(__file__).resolve().parents[3] / "models" / "gemma-4-E2B-it"
-        )
-        resolved_model_path = (
-            Path(model_path).expanduser().resolve()
-            if model_path
-            else default_model_path
-        )
+        if model_path is None:
+            # Use MODELS_PATH env var or fall back to relative path
+            import os
+            models_dir = Path(os.getenv("MODELS_PATH", "../../../models"))
+            resolved_model_path = models_dir / "gemma-4-E2B-it"
+        else:
+            resolved_model_path = Path(model_path).expanduser().resolve()
 
         if not resolved_model_path.exists():
             raise OSError(f"Model path not found: {resolved_model_path}")
 
-        model_path = str(resolved_model_path)
+        model_path_str = str(resolved_model_path)
 
-        self.processor = AutoProcessor.from_pretrained(model_path)
+        self.processor = AutoProcessor.from_pretrained(model_path_str)
         # AutoProcessor wraps the tokenizer needed for text streaming.
         self.tokenizer = getattr(self.processor, "tokenizer", self.processor)
         self.model: Any = AutoModelForCausalLM.from_pretrained(
-            model_path,
+            model_path_str,
             torch_dtype="auto",
             device_map="auto",
         )
