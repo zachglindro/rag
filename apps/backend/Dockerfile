@@ -10,20 +10,20 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements files
-COPY requirements.txt requirements-dev.txt ./
+COPY apps/backend/requirements.txt apps/backend/requirements-dev.txt ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir -r requirements-dev.txt
 
 # Copy application code
-COPY . .
+COPY apps/backend ./
 
 # Copy models download script from root
 COPY download_models.py ./download_models.py
 
 # Copy entrypoint script
-COPY entrypoint.sh ./
+COPY apps/backend/entrypoint.sh ./
 RUN chmod +x ./entrypoint.sh
 
 # Create models directory
