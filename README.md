@@ -3,7 +3,7 @@
 A modern, full-stack system for building intelligent search and question-answering applications with hybrid search (semantic + keyword) capabilities.
 
 
-RAG combines vector-based semantic search with traditional keyword search (BM25) to create a powerful retrieval-augmented generation system. Upload your data, choose from multiple LLM providers (local or cloud-based), and get intelligent responses grounded in your dataset.
+RAG combines vector-based semantic search with traditional keyword search (BM25) to create a powerful retrieval-augmented generation system. Upload your data and get intelligent responses grounded in your dataset.
 
 **Key capabilities:**
 - **Hybrid search**: Combines semantic embeddings and keyword search for best results
