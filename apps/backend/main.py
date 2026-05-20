@@ -35,9 +35,7 @@ MINIMUM_RERANK_SCORE = 0
 # Local model registry: maps model IDs to local paths
 MODELS_PATH = Path(os.getenv("MODELS_PATH", "/models"))
 LOCAL_MODEL_REGISTRY = {
-    "gemma-4-e2b-it": MODELS_PATH / "gemma-4-E2B-it",
     "qwen3-0.6b": MODELS_PATH / "Qwen3-0.6B",
-    "qwen3.5-0.8b": MODELS_PATH / "qwen3.5-0.8b",
 }
 
 # Online model registry: maps model IDs to provider descriptors
@@ -55,9 +53,7 @@ MODEL_REGISTRY = {
 }
 
 MODEL_LABELS = {
-    "gemma-4-e2b-it": "Gemma 4 (Slowest)",
     "qwen3-0.6b": "Qwen 3 (Fast)",
-    "qwen3.5-0.8b": "Qwen 3.5 (Slow)",
     "groq": "Groq",
     "gemini-online": "Gemini Online",
 }
@@ -2405,9 +2401,13 @@ async def get_model_settings():
             # Check if local model is downloaded
             is_downloaded = True
             if source == "local":
-                model_path = Path(model_value) if isinstance(model_value, str) else Path(str(model_value))
+                model_path = (
+                    Path(model_value)
+                    if isinstance(model_value, str)
+                    else Path(str(model_value))
+                )
                 is_downloaded = model_path.exists()
-            
+
             available_models.append(
                 ModelInfo(
                     id=model_id,
@@ -2603,14 +2603,14 @@ class ModelDownloadResponse(BaseModel):
 async def download_qwen_model():
     """Download the Qwen 3.0.6B model if not already present."""
     global loaded_llms
-    
+
     qwen_model_path = LOCAL_MODEL_REGISTRY.get("qwen3-0.6b")
-    
+
     if not qwen_model_path:
         raise HTTPException(status_code=400, detail="Qwen model not configured")
-    
+
     qwen_model_path = Path(qwen_model_path)
-    
+
     # Check if already downloaded
     if qwen_model_path.exists():
         # Even if already downloaded, ensure it's loaded
@@ -2619,37 +2619,39 @@ async def download_qwen_model():
                 loaded_llms["qwen3-0.6b"] = load_model("qwen3-0.6b")
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         return ModelDownloadResponse(
             message="Qwen model is already downloaded",
             success=True,
             downloaded=True,
         )
-    
+
     # Try to download the model
     try:
         try:
             from huggingface_hub import snapshot_download
         except ImportError:
             raise HTTPException(
-                status_code=500, 
-                detail="huggingface_hub is not installed. Please install it with: pip install huggingface-hub"
+                status_code=500,
+                detail="huggingface_hub is not installed. Please install it with: pip install huggingface-hub",
             )
-        
+
         qwen_model_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         snapshot_download(
             repo_id="Qwen/Qwen3-0.6B",
             local_dir=str(qwen_model_path),
             local_dir_use_symlinks=False,
         )
-        
+
         # Load the model into memory after downloading
         try:
             loaded_llms["qwen3-0.6b"] = load_model("qwen3-0.6b")
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Downloaded but failed to load: {str(e)}")
-        
+            raise HTTPException(
+                status_code=500, detail=f"Downloaded but failed to load: {str(e)}"
+            )
+
         return ModelDownloadResponse(
             message="Qwen model downloaded successfully",
             success=True,
@@ -2657,8 +2659,7 @@ async def download_qwen_model():
         )
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to download Qwen model: {str(e)}"
+            status_code=500, detail=f"Failed to download Qwen model: {str(e)}"
         )
 
 
@@ -2969,7 +2970,7 @@ async def get_model_status():
     """Check if the LLM and embedding models are available."""
     # Dynamically check if the active model is available
     model_is_available = True
-    
+
     # If it's a local model, check if it exists on disk
     if not is_online_model(active_model_id):
         model_path = LOCAL_MODEL_REGISTRY.get(active_model_id)
@@ -2977,8 +2978,8 @@ async def get_model_status():
             model_is_available = Path(model_path).exists()
         else:
             model_is_available = False
-    
+
     return ModelStatusResponse(
         llm_available=model_is_available,
-        embedding_model_available=embedding_model_available
+        embedding_model_available=embedding_model_available,
     )
