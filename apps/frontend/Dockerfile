@@ -8,14 +8,18 @@ COPY package.json pnpm-lock.yaml ./
 # Install pnpm
 RUN npm install -g pnpm
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile --dangerously-allow-all-builds
+# Install dependencies (skip build scripts to avoid issues in container)
+RUN pnpm install --frozen-lockfile --dangerously-allow-all-builds --no-scripts
 
 # Copy application code
 COPY . .
 
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Expose port for Next.js dev server
 EXPOSE 3000
 
-# Run Next.js dev server
-CMD ["pnpm", "dev"]
+# Run entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]
