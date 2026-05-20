@@ -276,6 +276,7 @@ class ModelInfo(BaseModel):
     path: str
     source: str
     loaded: bool
+    downloaded: bool
 
 
 class ModelSettingsResponse(BaseModel):
@@ -2401,6 +2402,12 @@ async def get_model_settings():
                 if isinstance(model_value, dict)
                 else str(model_value)
             )
+            # Check if local model is downloaded
+            is_downloaded = True
+            if source == "local":
+                model_path = Path(model_value) if isinstance(model_value, str) else Path(str(model_value))
+                is_downloaded = model_path.exists()
+            
             available_models.append(
                 ModelInfo(
                     id=model_id,
@@ -2408,6 +2415,7 @@ async def get_model_settings():
                     path=path_or_name,
                     source=source,
                     loaded=model_id in loaded_llms,
+                    downloaded=is_downloaded,
                 )
             )
         except Exception as e:
@@ -2583,6 +2591,75 @@ async def switch_model(request: SwitchModelRequest):
 
     active_model_id = request.model_id
     return {"message": f"Switched to model {request.model_id}"}
+
+
+class ModelDownloadResponse(BaseModel):
+    message: str
+    success: bool
+    downloaded: bool
+
+
+@app.post("/settings/model/download-qwen", response_model=ModelDownloadResponse)
+async def download_qwen_model():
+    """Download the Qwen 3.0.6B model if not already present."""
+    global loaded_llms
+    
+    qwen_model_path = LOCAL_MODEL_REGISTRY.get("qwen3-0.6b")
+    
+    if not qwen_model_path:
+        raise HTTPException(status_code=400, detail="Qwen model not configured")
+    
+    qwen_model_path = Path(qwen_model_path)
+    
+    # Check if already downloaded
+    if qwen_model_path.exists():
+        # Even if already downloaded, ensure it's loaded
+        if "qwen3-0.6b" not in loaded_llms:
+            try:
+                loaded_llms["qwen3-0.6b"] = load_model("qwen3-0.6b")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        return ModelDownloadResponse(
+            message="Qwen model is already downloaded",
+            success=True,
+            downloaded=True,
+        )
+    
+    # Try to download the model
+    try:
+        try:
+            from huggingface_hub import snapshot_download
+        except ImportError:
+            raise HTTPException(
+                status_code=500, 
+                detail="huggingface_hub is not installed. Please install it with: pip install huggingface-hub"
+            )
+        
+        qwen_model_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        snapshot_download(
+            repo_id="Qwen/Qwen3-0.6B",
+            local_dir=str(qwen_model_path),
+            local_dir_use_symlinks=False,
+        )
+        
+        # Load the model into memory after downloading
+        try:
+            loaded_llms["qwen3-0.6b"] = load_model("qwen3-0.6b")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Downloaded but failed to load: {str(e)}")
+        
+        return ModelDownloadResponse(
+            message="Qwen model downloaded successfully",
+            success=True,
+            downloaded=True,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to download Qwen model: {str(e)}"
+        )
 
 
 BACKUP_BASE_DIR = Path.home() / "Documents"
@@ -2841,17 +2918,6 @@ def get_reranker() -> CrossEncoderReranker:
 
 @app.post("/generate")
 async def generate_response_endpoint(request: GenerateRequest):
-    # Check if LLM is available
-    if not llm_available:
-
-        async def error_stream():
-            payload = json.dumps(
-                {"error": "The large language model isn't downloaded."}
-            )
-            yield f"data: {payload}\n\n"
-
-        return StreamingResponse(error_stream(), media_type="text/event-stream")
-
     try:
         llm_instance = get_llm()
     except RuntimeError as err:
@@ -2901,6 +2967,18 @@ async def generate_response_endpoint(request: GenerateRequest):
 @app.get("/model-status", response_model=ModelStatusResponse)
 async def get_model_status():
     """Check if the LLM and embedding models are available."""
+    # Dynamically check if the active model is available
+    model_is_available = True
+    
+    # If it's a local model, check if it exists on disk
+    if not is_online_model(active_model_id):
+        model_path = LOCAL_MODEL_REGISTRY.get(active_model_id)
+        if model_path:
+            model_is_available = Path(model_path).exists()
+        else:
+            model_is_available = False
+    
     return ModelStatusResponse(
-        llm_available=llm_available, embedding_model_available=embedding_model_available
+        llm_available=model_is_available,
+        embedding_model_available=embedding_model_available
     )

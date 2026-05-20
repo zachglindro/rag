@@ -576,6 +576,18 @@ export default function Page() {
     }
 
     void fetchModelStatus()
+
+    // Refetch model status when page becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchModelStatus()
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
   }, [])
 
   useEffect(() => {

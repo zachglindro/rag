@@ -42,6 +42,7 @@ interface ModelInfo {
   path: string
   source: "local" | "online"
   loaded: boolean
+  downloaded: boolean
 }
 
 interface ModelSettingsResponse {
@@ -108,6 +109,8 @@ export default function Settings() {
   const [exportFormat, setExportFormat] = useState<"csv" | "xlsx">("csv")
   const [isExporting, setIsExporting] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [isDownloadingQwen, setIsDownloadingQwen] = useState(false)
+  const [qwenDownloaded, setQwenDownloaded] = useState(false)
 
   const fetchModelSettings = async () => {
     try {
@@ -116,6 +119,12 @@ export default function Settings() {
       const data: ModelSettingsResponse = await response.json()
       setActiveModel(data.active_model)
       setAvailableModels(data.available_models)
+
+      // Update Qwen download status
+      const qwenModel = data.available_models.find((m) => m.id === "qwen3-0.6b")
+      if (qwenModel) {
+        setQwenDownloaded(qwenModel.downloaded)
+      }
     } catch {
       toast.error("Failed to load model settings")
     }
@@ -297,6 +306,33 @@ export default function Settings() {
       toast.error("Failed to export data")
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const handleDownloadQwen = async () => {
+    setIsDownloadingQwen(true)
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/settings/model/download-qwen`,
+        {
+          method: "POST",
+        }
+      )
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.detail || "Failed to download Qwen model")
+      }
+      const data = await response.json()
+      setQwenDownloaded(data.downloaded)
+      toast.success(data.message)
+      // Refresh model settings to update the UI
+      fetchModelSettings()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to download Qwen model"
+      toast.error(message)
+    } finally {
+      setIsDownloadingQwen(false)
     }
   }
 
@@ -886,6 +922,36 @@ export default function Settings() {
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
+
+                    <div className="mt-6 space-y-3 border-t pt-4">
+                      <div>
+                        <h4 className="mb-2 text-sm font-medium">
+                          Download Models
+                        </h4>
+                        <p className="mb-3 text-sm text-muted-foreground">
+                          Download the Qwen 3 (0.6B) model for local processing.
+                        </p>
+                        <Button
+                          onClick={handleDownloadQwen}
+                          disabled={isDownloadingQwen || qwenDownloaded}
+                          variant={qwenDownloaded ? "outline" : "default"}
+                        >
+                          {isDownloadingQwen ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Downloading...
+                            </>
+                          ) : qwenDownloaded ? (
+                            <>
+                              <Check className="mr-2 h-4 w-4" />
+                              Downloaded
+                            </>
+                          ) : (
+                            "Download Qwen 3"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CollapsibleContent>
