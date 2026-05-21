@@ -4,6 +4,7 @@ import { useTheme } from "next-themes"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { useState, useEffect } from "react"
-import { Loader2, Check, Grip, ChevronDown } from "lucide-react"
+import { Loader2, Check, Grip, ChevronDown, X } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import {
   Collapsible,
@@ -111,6 +112,9 @@ export default function Settings() {
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [isDownloadingQwen, setIsDownloadingQwen] = useState(false)
   const [qwenDownloaded, setQwenDownloaded] = useState(false)
+  const [isCancellingQwen, setIsCancellingQwen] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState(0)
+  const [downloadMessage, setDownloadMessage] = useState("")
 
   const fetchModelSettings = async () => {
     try {
@@ -311,6 +315,8 @@ export default function Settings() {
 
   const handleDownloadQwen = async () => {
     setIsDownloadingQwen(true)
+    setDownloadProgress(0)
+    setDownloadMessage("Starting download...")
     try {
       const response = await fetch(
         `${BACKEND_URL}/settings/model/download-qwen`,
@@ -319,20 +325,80 @@ export default function Settings() {
         }
       )
       if (!response.ok) {
-        const error = await response.json()
+        const error = await response.json().catch(() => ({}))
         throw new Error(error.detail || "Failed to download Qwen model")
       }
-      const data = await response.json()
-      setQwenDownloaded(data.downloaded)
-      toast.success(data.message)
-      // Refresh model settings to update the UI
-      fetchModelSettings()
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("Failed to read response stream")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const event = JSON.parse(line)
+            if (event.type === "progress") {
+              setDownloadProgress(event.progress)
+              if (event.message) setDownloadMessage(event.message)
+            } else if (event.type === "done") {
+              setQwenDownloaded(event.downloaded)
+              toast.success(event.message)
+              fetchModelSettings()
+            } else if (event.type === "error") {
+              throw new Error(event.detail)
+            }
+          } catch (e) {
+            if (
+              e instanceof Error &&
+              e.message !== "Unexpected end of JSON input"
+            ) {
+              throw e
+            }
+          }
+        }
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to download Qwen model"
       toast.error(message)
     } finally {
       setIsDownloadingQwen(false)
+      setDownloadProgress(0)
+      setDownloadMessage("")
+    }
+  }
+
+  const handleCancelDownloadQwen = async () => {
+    setIsCancellingQwen(true)
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/settings/model/cancel-download-qwen`,
+        { method: "POST" }
+      )
+      if (!response.ok) {
+        throw new Error("Failed to cancel download")
+      }
+      toast.success("Download cancelled")
+      // Reset states; stream will also error out and clean up
+      setIsDownloadingQwen(false)
+      setDownloadProgress(0)
+      setDownloadMessage("")
+    } catch {
+      toast.error("Failed to cancel download")
+    } finally {
+      setIsCancellingQwen(false)
     }
   }
 
@@ -931,25 +997,58 @@ export default function Settings() {
                         <p className="mb-3 text-sm text-muted-foreground">
                           Download the Qwen 3 (0.6B) model for local processing.
                         </p>
-                        <Button
-                          onClick={handleDownloadQwen}
-                          disabled={isDownloadingQwen || qwenDownloaded}
-                          variant={qwenDownloaded ? "outline" : "default"}
-                        >
-                          {isDownloadingQwen ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Downloading...
-                            </>
-                          ) : qwenDownloaded ? (
-                            <>
-                              <Check className="mr-2 h-4 w-4" />
-                              Downloaded
-                            </>
-                          ) : (
-                            "Download Qwen 3"
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={handleDownloadQwen}
+                              disabled={isDownloadingQwen || qwenDownloaded}
+                              variant={qwenDownloaded ? "outline" : "default"}
+                            >
+                              {isDownloadingQwen ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Downloading...
+                                </>
+                              ) : qwenDownloaded ? (
+                                <>
+                                  <Check className="mr-2 h-4 w-4" />
+                                  Downloaded
+                                </>
+                              ) : (
+                                "Download Qwen 3"
+                              )}
+                            </Button>
+
+                            {isDownloadingQwen && (
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={handleCancelDownloadQwen}
+                                disabled={isCancellingQwen}
+                                title="Cancel download"
+                              >
+                                {isCancellingQwen ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <X className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
+
+                          {isDownloadingQwen && (
+                            <div className="w-full max-w-sm space-y-2">
+                              <Progress
+                                value={downloadProgress}
+                                className="h-2"
+                              />
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>{downloadMessage}</span>
+                                <span>{downloadProgress}%</span>
+                              </div>
+                            </div>
                           )}
-                        </Button>
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -2599,10 +2599,38 @@ class ModelDownloadResponse(BaseModel):
     downloaded: bool
 
 
-@app.post("/settings/model/download-qwen", response_model=ModelDownloadResponse)
+qwen_download_process = None
+
+@app.post("/settings/model/cancel-download-qwen")
+async def cancel_qwen_download_endpoint():
+    global qwen_download_process
+    if qwen_download_process:
+        try:
+            qwen_download_process.terminate()
+        except Exception:
+            pass
+        qwen_download_process = None
+        
+        # Give Windows a moment to release file handles
+        import time
+        time.sleep(0.5)
+        
+        # Clean up the folder
+        qwen_model_path = LOCAL_MODEL_REGISTRY.get("qwen3-0.6b")
+        if qwen_model_path:
+            path = Path(qwen_model_path)
+            if path.exists():
+                import shutil
+                shutil.rmtree(path, ignore_errors=True)
+                
+        return {"message": "Download cancelled"}
+    return {"message": "No download in progress"}
+
+@app.post("/settings/model/download-qwen")
 async def download_qwen_model():
     """Download the Qwen 3.0.6B model if not already present."""
     global loaded_llms
+    global qwen_download_process
 
     qwen_model_path = LOCAL_MODEL_REGISTRY.get("qwen3-0.6b")
 
@@ -2611,56 +2639,101 @@ async def download_qwen_model():
 
     qwen_model_path = Path(qwen_model_path)
 
-    # Check if already downloaded
-    if qwen_model_path.exists():
-        # Even if already downloaded, ensure it's loaded
-        if "qwen3-0.6b" not in loaded_llms:
-            try:
-                loaded_llms["qwen3-0.6b"] = load_model("qwen3-0.6b")
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+    async def event_generator():
+        global qwen_download_process
+        
+        # Check if already downloaded
+        if qwen_model_path.exists() and qwen_download_process is None:
+            # Even if already downloaded, ensure it's loaded
+            if "qwen3-0.6b" not in loaded_llms:
+                try:
+                    loaded_llms["qwen3-0.6b"] = load_model("qwen3-0.6b")
+                except Exception as e:
+                    yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
+                    return
 
-        return ModelDownloadResponse(
-            message="Qwen model is already downloaded",
-            success=True,
-            downloaded=True,
-        )
+            yield json.dumps({
+                "type": "done",
+                "message": "Qwen model is already downloaded",
+                "downloaded": True
+            }) + "\n"
+            return
 
-    # Try to download the model
-    try:
-        try:
-            from huggingface_hub import snapshot_download
-        except ImportError:
-            raise HTTPException(
-                status_code=500,
-                detail="huggingface_hub is not installed. Please install it with: pip install huggingface-hub",
-            )
+        yield json.dumps({"type": "progress", "progress": 0, "message": "Initializing download..."}) + "\n"
 
+        import subprocess
+        import sys
+        
+        script = f"""
+import sys
+try:
+    from huggingface_hub import snapshot_download
+    snapshot_download(
+        repo_id='Qwen/Qwen3-0.6B',
+        local_dir=r'{str(qwen_model_path)}',
+        local_dir_use_symlinks=False,
+    )
+except Exception as e:
+    print(e)
+    sys.exit(1)
+"""
         qwen_model_path.parent.mkdir(parents=True, exist_ok=True)
-
-        snapshot_download(
-            repo_id="Qwen/Qwen3-0.6B",
-            local_dir=str(qwen_model_path),
-            local_dir_use_symlinks=False,
-        )
-
+        
+        try:
+            qwen_download_process = subprocess.Popen([sys.executable, "-c", script])
+        except Exception as e:
+            yield json.dumps({"type": "error", "detail": f"Failed to start download process: {str(e)}"}) + "\n"
+            return
+        
+        # Estimate total size of Qwen3-0.6B is around 1.35 GB
+        ESTIMATED_SIZE = 1_450_000_000 
+        
+        while qwen_download_process and qwen_download_process.poll() is None:
+            await asyncio.sleep(0.5)
+            current_size = 0
+            if qwen_model_path.exists():
+                for f in qwen_model_path.rglob('*'):
+                    if f.is_file():
+                        current_size += f.stat().st_size
+            
+            # Cap progress at 99% until done
+            progress_percent = min(99, int((current_size / ESTIMATED_SIZE) * 100))
+            mb_downloaded = current_size / (1024 * 1024)
+            mb_total = ESTIMATED_SIZE / (1024 * 1024)
+            
+            yield json.dumps({
+                "type": "progress", 
+                "progress": progress_percent, 
+                "message": f"Downloading... ({mb_downloaded:.1f} MB / ~{mb_total:.1f} MB)"
+            }) + "\n"
+            
+        if not qwen_download_process:
+            # Process was cancelled
+            yield json.dumps({"type": "error", "detail": "Download cancelled"}) + "\n"
+            return
+            
+        returncode = qwen_download_process.returncode
+        qwen_download_process = None
+        
+        if returncode != 0:
+            yield json.dumps({"type": "error", "detail": "Download process failed"}) + "\n"
+            return
+            
         # Load the model into memory after downloading
         try:
             loaded_llms["qwen3-0.6b"] = load_model("qwen3-0.6b")
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Downloaded but failed to load: {str(e)}"
-            )
+            yield json.dumps({"type": "error", "detail": f"Downloaded but failed to load: {str(e)}"}) + "\n"
+            return
+            
+        yield json.dumps({
+            "type": "done",
+            "message": "Qwen model downloaded successfully",
+            "downloaded": True
+        }) + "\n"
 
-        return ModelDownloadResponse(
-            message="Qwen model downloaded successfully",
-            success=True,
-            downloaded=True,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to download Qwen model: {str(e)}"
-        )
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
 BACKUP_BASE_DIR = Path.home() / "Documents"
