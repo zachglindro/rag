@@ -55,7 +55,13 @@ function HistoryPageContent() {
         setIsLoading(true)
         const skip = (currentPage - 1) * PAGE_SIZE
         const response = await fetch(
-          `${HISTORY_URL}?skip=${skip}&limit=${PAGE_SIZE}`
+          `${HISTORY_URL}?skip=${skip}&limit=${PAGE_SIZE}`,
+          {
+            headers: {
+              // Ask explicitly for JSON so the Next.js rewrite proxies to backend
+              Accept: "application/json",
+            },
+          }
         )
         if (!response.ok) {
           throw new Error("Failed to fetch history")

@@ -15,6 +15,7 @@ RUN pnpm install --frozen-lockfile --dangerously-allow-all-builds --no-scripts
 COPY . .
 
 # Build the Next.js app for production
+ENV NEXT_PUBLIC_BACKEND_URL=/api
 RUN pnpm build
 
 # Copy entrypoint script
