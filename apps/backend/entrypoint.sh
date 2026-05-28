@@ -54,5 +54,5 @@ else
     fi
 fi
 
-# Start FastAPI server
-fastapi dev --host 0.0.0.0
+# Start FastAPI server (production)
+exec fastapi run --host 0.0.0.0 --port 8000

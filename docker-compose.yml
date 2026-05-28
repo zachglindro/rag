@@ -8,9 +8,9 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - MODELS_PATH=/models
     volumes:
       - ./models:/models
-      - ./apps/backend:/app
     networks:
       - rag-network
 
@@ -21,21 +21,13 @@ services:
     container_name: rag-frontend
     ports:
       - "3000:3000"
-    volumes:
-      # Mount individual directories instead of entire /app to preserve node_modules
-      - ./apps/frontend/app:/app/app
-      - ./apps/frontend/components:/app/components
-      - ./apps/frontend/contexts:/app/contexts
-      - ./apps/frontend/hooks:/app/hooks
-      - ./apps/frontend/lib:/app/lib
-      - ./apps/frontend/public:/app/public
-      - /app/node_modules
     networks:
       - rag-network
     depends_on:
       - backend
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NODE_ENV=production
 
 networks:
   rag-network:
