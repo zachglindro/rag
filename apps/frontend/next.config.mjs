@@ -28,6 +28,10 @@ const backendRoutes = [
 ]
 
 const nextConfig = {
+	experimental: {
+		proxyClientMaxBodySize: "40mb",
+	},
+
 	async rewrites() {
 		if (process.env.NEXT_PUBLIC_BACKEND_URL !== "/api") {
 			return []
