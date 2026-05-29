@@ -170,6 +170,9 @@ export function useModelSettings() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to download Qwen model"
+      if (message === "Download cancelled") {
+        return
+      }
       toast.error(message)
     } finally {
       setIsDownloadingQwen(false)
