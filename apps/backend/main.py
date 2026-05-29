@@ -2123,9 +2123,33 @@ async def reset_database():
             )
             await asyncio.sleep(0)
 
-            # Drop existing tables (but keep history table)
+            # Drop existing tables one at a time so the client gets more frequent updates.
             cursor.execute("DROP TABLE IF EXISTS records")
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 48,
+                        "message": "Cleared records table...",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
             cursor.execute("DROP TABLE IF EXISTS column_metadata")
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 56,
+                        "message": "Cleared column metadata...",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
             cursor.execute("DROP TABLE IF EXISTS records_fts")
 
             yield (
@@ -2133,7 +2157,7 @@ async def reset_database():
                     {
                         "type": "progress",
                         "progress": 65,
-                        "message": "Recreating database schema...",
+                        "message": "Cleared search index...",
                     }
                 )
                 + "\n"
@@ -2146,6 +2170,8 @@ async def reset_database():
             create_tables(cursor)
             create_fts_table(cursor)
 
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name = 'records'")
+
             conn.commit()
 
             yield (
@@ -2153,7 +2179,7 @@ async def reset_database():
                     {
                         "type": "progress",
                         "progress": 85,
-                        "message": "Resetting vector index...",
+                        "message": "Recreated database schema...",
                     }
                 )
                 + "\n"
