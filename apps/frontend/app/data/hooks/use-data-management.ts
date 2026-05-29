@@ -16,6 +16,29 @@ import {
   parseEditedCellValue,
 } from "../utils"
 
+function getStoredSearchType() {
+  if (typeof window === "undefined") return null
+
+  const stored = localStorage.getItem("searchType")
+  return stored === "semantic" || stored === "keyword" ? stored : null
+}
+
+function getStoredPageSize() {
+  if (typeof window === "undefined") return 25
+
+  const stored = localStorage.getItem("pageSize")
+  const parsed = stored ? parseInt(stored, 10) : NaN
+  return Number.isNaN(parsed) ? 25 : parsed
+}
+
+function getStoredPinnedColumnsCount() {
+  if (typeof window === "undefined") return 3
+
+  const stored = localStorage.getItem("pinnedColumnsCount")
+  const parsed = stored ? parseInt(stored, 10) : NaN
+  return Number.isNaN(parsed) ? 3 : parsed
+}
+
 export function useDataManagement() {
   const searchParams = useSearchParams()
   const highlightIdString = searchParams.get("highlight")
@@ -31,7 +54,7 @@ export function useDataManagement() {
   const [skip, setSkip] = useState(0)
   const [appliedSearchQuery, setAppliedSearchQuery] = useState(initialQuery)
   const [searchType, setSearchType] = useState<"semantic" | "keyword">(
-    initialType || "semantic"
+    () => initialType || getStoredSearchType() || "semantic"
   )
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -46,14 +69,14 @@ export function useDataManagement() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
   const [dirtyCellCount, setDirtyCellCount] = useState(0)
-  const [exportFormat, setExportFormat] = useState<"csv" | "xlsx">("csv")
+  const [exportFormat, setExportFormat] = useState<"csv" | "xlsx">("xlsx")
   const [isExporting, setIsExporting] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [sortColumn, setSortColumn] = useState<string>("id")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
   const hasLoadedInitiallyRef = useRef(false)
 
-  const [pageSize, setPageSize] = useState(25)
+  const [pageSize, setPageSize] = useState(() => getStoredPageSize())
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set())
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
@@ -62,7 +85,9 @@ export function useDataManagement() {
   const [filters, setFilters] = useState<FilterCondition[]>([])
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
-  const [pinnedColumnsCount, setPinnedColumnsCount] = useState(3)
+  const [pinnedColumnsCount, setPinnedColumnsCount] = useState(() =>
+    getStoredPinnedColumnsCount()
+  )
 
   const [columnPendingDelete, setColumnPendingDelete] = useState<{
     key: string
@@ -125,17 +150,6 @@ export function useDataManagement() {
       })
     }
   }, [filteredRows, isAllFilteredSelected])
-
-  useEffect(() => {
-    if (!initialType) {
-      const stored = localStorage.getItem("searchType") as
-        | "semantic"
-        | "keyword"
-      if (stored) {
-        setSearchType(stored)
-      }
-    }
-  }, [initialType])
 
   const fetchData = useCallback(async () => {
     const isInitialLoad = !hasLoadedInitiallyRef.current
@@ -321,26 +335,15 @@ export function useDataManagement() {
   }, [])
 
   useEffect(() => {
+    // React 19's set-state-in-effect lint rule flags this initial load even though
+    // it is the hook's entry point for asynchronous data fetching.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData()
   }, [fetchData])
 
   useEffect(() => {
-    const stored = localStorage.getItem("pageSize")
-    if (stored) {
-      setPageSize(parseInt(stored, 10))
-    }
-  }, [])
-
-  useEffect(() => {
     localStorage.setItem("pageSize", pageSize.toString())
   }, [pageSize])
-
-  useEffect(() => {
-    const stored = localStorage.getItem("pinnedColumnsCount")
-    if (stored) {
-      setPinnedColumnsCount(parseInt(stored, 10))
-    }
-  }, [])
 
   useEffect(() => {
     localStorage.setItem("pinnedColumnsCount", pinnedColumnsCount.toString())

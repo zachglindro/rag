@@ -16,7 +16,7 @@ export function useDatabaseMaintenance() {
   const [resetMessage, setResetMessage] = useState("")
   const [isResettingHistory, setIsResettingHistory] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv")
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("xlsx")
 
   const handleReset = useCallback(async () => {
     setIsResettingDatabase(true)

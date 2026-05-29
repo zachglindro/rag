@@ -51,8 +51,8 @@ export const ExportDialog = memo(function ExportDialog({
               <SelectValue placeholder="Select export format" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="csv">CSV</SelectItem>
               <SelectItem value="xlsx">XLSX</SelectItem>
+              <SelectItem value="csv">CSV</SelectItem>
             </SelectContent>
           </Select>
           <Button onClick={onExport} disabled={isExporting}>
