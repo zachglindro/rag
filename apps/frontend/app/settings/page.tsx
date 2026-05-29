@@ -65,38 +65,32 @@ export default function Settings() {
   const { theme, setTheme } = useTheme()
   const { sidebarOrder: sidebarItems, setSidebarOrder: setSidebarItems } =
     useSidebarSettings()
-  const [mounted, setMounted] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
   const [isResetHistoryDialogOpen, setIsResetHistoryDialogOpen] =
     useState(false)
   const [isResettingHistory, setIsResettingHistory] = useState(false)
+  const [isResettingDatabase, setIsResettingDatabase] = useState(false)
   const [selectedModelToSwitch, setSelectedModelToSwitch] = useState<string>("")
   const [activeModel, setActiveModel] = useState<string>("")
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [isSwitching, setIsSwitching] = useState(false)
   const [switchSuccess, setSwitchSuccess] = useState(false)
-  const [enableDebugging, setEnableDebugging] = useState(false)
-  const [searchType, setSearchType] = useState<"semantic" | "keyword">(
-    "semantic"
-  )
+  const [enableDebugging, setEnableDebugging] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    return localStorage.getItem("enableDebugging") === "true"
+  })
+  const [searchType, setSearchType] = useState<"semantic" | "keyword">(() => {
+    if (typeof window === "undefined") return "semantic"
+    const storedSearchType = localStorage.getItem("searchType")
+    return storedSearchType === "keyword" ? "keyword" : "semantic"
+  })
 
   const [isThemeOpen, setIsThemeOpen] = useState(true)
   const [isBackupsOpen, setIsBackupsOpen] = useState(true)
   const [isSearchOpen, setIsSearchOpen] = useState(true)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isDatabaseOpen, setIsDatabaseOpen] = useState(true)
-
-  useEffect(() => {
-    setMounted(true)
-    const storedDebugging = localStorage.getItem("enableDebugging") === "true"
-    const storedSearchType = localStorage.getItem("searchType") as
-      | "semantic"
-      | "keyword"
-
-    if (storedDebugging) setEnableDebugging(true)
-    if (storedSearchType) setSearchType(storedSearchType)
-  }, [])
 
   const toggleSidebarItem = (title: string) => {
     setSidebarItems(
@@ -116,28 +110,11 @@ export default function Settings() {
   const [downloadProgress, setDownloadProgress] = useState(0)
   const [downloadMessage, setDownloadMessage] = useState("")
 
-  const fetchModelSettings = async () => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/settings/model`)
-      if (!response.ok) throw new Error("Failed to fetch model settings")
-      const data: ModelSettingsResponse = await response.json()
-      setActiveModel(data.active_model)
-      setAvailableModels(data.available_models)
-
-      // Update Qwen download status
-      const qwenModel = data.available_models.find((m) => m.id === "qwen3-0.6b")
-      if (qwenModel) {
-        setQwenDownloaded(qwenModel.downloaded)
-      }
-    } catch {
-      toast.error("Failed to load model settings")
-    }
+  const fetchModelSettings = async (): Promise<ModelSettingsResponse> => {
+    const response = await fetch(`${BACKEND_URL}/settings/model`)
+    if (!response.ok) throw new Error("Failed to fetch model settings")
+    return response.json()
   }
-
-  useEffect(() => {
-    fetchModelSettings()
-    fetchBackupSettings()
-  }, [])
 
   const handleModelSelection = (modelId: string) => {
     const model = availableModels.find((m) => m.id === modelId)
@@ -186,17 +163,47 @@ export default function Settings() {
   const [isSavingBackup, setIsSavingBackup] = useState(false)
   const [isBackingUpNow, setIsBackingUpNow] = useState(false)
 
-  const fetchBackupSettings = async () => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/settings/backup`)
-      if (!response.ok) throw new Error("Failed to fetch backup settings")
-      const data: BackupSettings = await response.json()
-      setBackupSettings(data)
-      setOriginalBackupSettings(data)
-    } catch {
-      toast.error("Failed to load backup settings")
-    }
+  const fetchBackupSettings = async (): Promise<BackupSettings> => {
+    const response = await fetch(`${BACKEND_URL}/settings/backup`)
+    if (!response.ok) throw new Error("Failed to fetch backup settings")
+    return response.json()
   }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadSettings = async () => {
+      try {
+        const [modelData, backupData] = await Promise.all([
+          fetchModelSettings(),
+          fetchBackupSettings(),
+        ])
+
+        if (cancelled) return
+
+        setActiveModel(modelData.active_model)
+        setAvailableModels(modelData.available_models)
+
+        const qwenModel = modelData.available_models.find(
+          (m) => m.id === "qwen3-0.6b"
+        )
+        setQwenDownloaded(qwenModel?.downloaded ?? false)
+
+        setBackupSettings(backupData)
+        setOriginalBackupSettings(backupData)
+      } catch {
+        if (!cancelled) {
+          toast.error("Failed to load settings")
+        }
+      }
+    }
+
+    void loadSettings()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSaveBackupSettings = async () => {
     if (!backupSettings) return
@@ -230,7 +237,9 @@ export default function Settings() {
       })
       if (!response.ok) throw new Error("Backup failed")
       toast.success("Backup created successfully")
-      fetchBackupSettings() // Refresh last backup time
+      const latestBackupSettings = await fetchBackupSettings()
+      setBackupSettings(latestBackupSettings)
+      setOriginalBackupSettings(latestBackupSettings)
     } catch {
       toast.error("Failed to create backup")
     } finally {
@@ -239,6 +248,7 @@ export default function Settings() {
   }
 
   const handleReset = async () => {
+    setIsResettingDatabase(true)
     try {
       const response = await fetch(`${BACKEND_URL}/reset-database`, {
         method: "POST",
@@ -250,6 +260,8 @@ export default function Settings() {
       setIsDialogOpen(false)
     } catch {
       toast.error("Failed to reset database")
+    } finally {
+      setIsResettingDatabase(false)
     }
   }
 
@@ -430,23 +442,19 @@ export default function Settings() {
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-4 animate-in fade-in-0 slide-in-from-top-2">
                 <div className="pl-1">
-                  {mounted ? (
-                    <Select
-                      value={theme}
-                      onValueChange={(value) => setTheme(value)}
-                    >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select theme" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="light">Light</SelectItem>
-                        <SelectItem value="dark">Dark</SelectItem>
-                        <SelectItem value="system">System</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="h-10 w-[180px] animate-pulse rounded bg-muted" />
-                  )}
+                  <Select
+                    value={theme ?? "system"}
+                    onValueChange={(value) => setTheme(value)}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Select theme" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CollapsibleContent>
             </Collapsible>
@@ -710,37 +718,31 @@ export default function Settings() {
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-4 animate-in fade-in-0 slide-in-from-top-2">
                 <div className="space-y-2 pl-1">
-                  {mounted ? (
-                    <Reorder.Group
-                      axis="y"
-                      values={sidebarItems}
-                      onReorder={setSidebarItems}
-                      className="w-full max-w-sm space-y-2"
-                    >
-                      {sidebarItems.map((item) => (
-                        <Reorder.Item
-                          key={item.title}
-                          value={item}
-                          className="flex cursor-grab items-center gap-2 rounded-md border bg-background p-2 active:cursor-grabbing"
+                  <Reorder.Group
+                    axis="y"
+                    values={sidebarItems}
+                    onReorder={setSidebarItems}
+                    className="w-full max-w-sm space-y-2"
+                  >
+                    {sidebarItems.map((item) => (
+                      <Reorder.Item
+                        key={item.title}
+                        value={item}
+                        className="flex cursor-grab items-center gap-2 rounded-md border bg-background p-2 active:cursor-grabbing"
+                      >
+                        <Switch
+                          checked={item.enabled}
+                          onCheckedChange={() => toggleSidebarItem(item.title)}
+                        />
+                        <span
+                          className={`text-sm ${!item.enabled ? "text-muted-foreground" : ""}`}
                         >
-                          <Switch
-                            checked={item.enabled}
-                            onCheckedChange={() =>
-                              toggleSidebarItem(item.title)
-                            }
-                          />
-                          <span
-                            className={`text-sm ${!item.enabled ? "text-muted-foreground" : ""}`}
-                          >
-                            {item.title}
-                          </span>
-                          <Grip className="ml-auto h-4 w-4 text-muted-foreground" />
-                        </Reorder.Item>
-                      ))}
-                    </Reorder.Group>
-                  ) : (
-                    <div className="h-20 animate-pulse rounded bg-muted"></div>
-                  )}
+                          {item.title}
+                        </span>
+                        <Grip className="ml-auto h-4 w-4 text-muted-foreground" />
+                      </Reorder.Item>
+                    ))}
+                  </Reorder.Group>
                 </div>
               </CollapsibleContent>
             </Collapsible>
@@ -776,14 +778,27 @@ export default function Settings() {
                   </div>
 
                   <div>
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <Dialog
+                      open={isDialogOpen}
+                      onOpenChange={(open) => {
+                        if (isResettingDatabase && !open) return
+                        setIsDialogOpen(open)
+                      }}
+                    >
                       <DialogTrigger asChild>
                         <Button variant="destructive">Reset Database</Button>
                       </DialogTrigger>
                       <p className="mt-2 text-sm text-muted-foreground">
                         Permanently delete all data in the database.
                       </p>
-                      <DialogContent>
+                      <DialogContent
+                        onInteractOutside={(e) => {
+                          if (isResettingDatabase) e.preventDefault()
+                        }}
+                        onEscapeKeyDown={(e) => {
+                          if (isResettingDatabase) e.preventDefault()
+                        }}
+                      >
                         <DialogHeader>
                           <DialogTitle>Reset Database</DialogTitle>
                           <DialogDescription>
@@ -795,11 +810,23 @@ export default function Settings() {
                           <Button
                             variant="outline"
                             onClick={() => setIsDialogOpen(false)}
+                            disabled={isResettingDatabase}
                           >
                             Cancel
                           </Button>
-                          <Button variant="destructive" onClick={handleReset}>
-                            Reset
+                          <Button
+                            variant="destructive"
+                            onClick={handleReset}
+                            disabled={isResettingDatabase}
+                          >
+                            {isResettingDatabase ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Resetting...
+                              </>
+                            ) : (
+                              "Reset"
+                            )}
                           </Button>
                         </DialogFooter>
                       </DialogContent>
