@@ -13,8 +13,9 @@ export function ColumnResizeHandle({
   columnLabel,
   className,
 }: ColumnResizeHandleProps) {
-  const handleRef = useRef<HTMLDivElement>(null)
   const [isResizing, setIsResizing] = useState(false)
+  const startXRef = useRef(0)
+  const startWidthRef = useRef<number>(0)
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -25,16 +26,26 @@ export function ColumnResizeHandle({
       target.setPointerCapture(e.pointerId)
 
       setIsResizing(true)
-      const startX = e.clientX
+      startXRef.current = e.clientX
+      // parent should be the TH element
+      const parent = target.parentElement as HTMLElement | null
+      startWidthRef.current = parent?.offsetWidth ?? 0
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
-        const delta = moveEvent.clientX - startX
-        onResize(delta)
+        const delta = moveEvent.clientX - startXRef.current
+        const parent = target.parentElement as HTMLElement | null
+        if (!parent) return
+
+        const minWidth = 50
+        const newWidth = Math.max(minWidth, startWidthRef.current + delta)
+        parent.style.width = `${newWidth}px`
       }
 
       const handlePointerUp = (upEvent: PointerEvent) => {
         target.releasePointerCapture(upEvent.pointerId)
         setIsResizing(false)
+        const finalDelta = upEvent.clientX - startXRef.current
+        onResize(Math.max(finalDelta, 50 - startWidthRef.current))
         document.removeEventListener("pointermove", handlePointerMove)
         document.removeEventListener("pointerup", handlePointerUp)
       }
@@ -47,7 +58,6 @@ export function ColumnResizeHandle({
 
   return (
     <div
-      ref={handleRef}
       onPointerDown={handlePointerDown}
       onClick={(e) => {
         e.preventDefault()

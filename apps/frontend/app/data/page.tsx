@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import Link from "next/link"
-import { Suspense, useEffect, useRef } from "react"
+import { Suspense, useMemo } from "react"
 import { Loader2, ChevronUp, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useDataManagement } from "./hooks/use-data-management"
@@ -40,45 +40,36 @@ import { toEditableCellValue } from "./utils"
 
 function DataPageContent() {
   const { state, actions } = useDataManagement()
-  const tableRef = useRef<HTMLTableElement>(null)
   const { columnWidths, updateColumnWidth, getColumnWidth } = useColumnWidths(
     state.allColumns
   )
 
-  // Measure and update column widths for pinned columns
-  useEffect(() => {
-    if (!tableRef.current) return
+  const pinnedColumnStyles = useMemo(() => {
+    const styles: Record<string, string> = {}
+    let cumulativeWidth = 0
 
-    const updatePinnedColumnWidths = () => {
-      const headerRow = tableRef.current?.querySelector("thead tr")
-      if (!headerRow) return
-
-      const cells = Array.from(headerRow.querySelectorAll("th"))
-      let cumulativeWidth = 0
-
-      cells.forEach((cell, index) => {
-        const width = cell.offsetWidth
-        tableRef.current?.style.setProperty(
-          `--col-${index}-width`,
-          `${cumulativeWidth}px`
-        )
-        cumulativeWidth += width
-      })
+    if (state.isSelectionMode) {
+      styles["--col-0-width"] = "0px"
+      cumulativeWidth = 40
     }
 
-    // Measure on mount and when the table changes
-    updatePinnedColumnWidths()
+    state.allColumns.forEach((column, index) => {
+      if (index >= state.pinnedColumnsCount) {
+        return
+      }
 
-    // Use ResizeObserver to handle dynamic resizing
-    const resizeObserver = new ResizeObserver(updatePinnedColumnWidths)
-    if (tableRef.current) {
-      resizeObserver.observe(tableRef.current)
-    }
+      const pinIndex = state.isSelectionMode ? index + 1 : index
+      styles[`--col-${pinIndex}-width`] = `${cumulativeWidth}px`
+      cumulativeWidth += getColumnWidth(column.key)
+    })
 
-    return () => {
-      resizeObserver.disconnect()
-    }
-  }, [state.allColumns, state.isSelectionMode, state.pinnedColumnsCount])
+    return styles
+  }, [
+    getColumnWidth,
+    state.allColumns,
+    state.isSelectionMode,
+    state.pinnedColumnsCount,
+  ])
 
   // Compute isEditMode for backward compatibility
   const isEditMode = state.editingRowId !== null || state.globalEditMode
@@ -231,9 +222,12 @@ function DataPageContent() {
 
                 <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
                   <Table
-                    ref={tableRef}
                     className="pin-table"
-                    style={{ tableLayout: "fixed", width: "100%" }}
+                    style={{
+                      tableLayout: "fixed",
+                      width: "100%",
+                      ...pinnedColumnStyles,
+                    }}
                   >
                     <TableHeader>
                       <TableRow>
