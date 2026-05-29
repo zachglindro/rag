@@ -72,7 +72,7 @@ export default function AddPage() {
     setCurrentStep(step)
   }
 
-  const handleIngestionComplete = async () => {
+  const handleIngestionComplete = useCallback(async () => {
     setIsIngestionComplete(true)
     try {
       await rebuildCompareIndex()
@@ -82,7 +82,7 @@ export default function AddPage() {
       )
       console.error(error)
     }
-  }
+  }, [])
 
   const steps = useMemo(() => {
     const baseSteps = [{ id: 1, title: "Upload" }]

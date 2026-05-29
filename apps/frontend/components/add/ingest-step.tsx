@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Check, Loader2, X } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { BACKEND_URL } from "@/app/data/types"
 
 const startedIngestionKeys = new Set<string>()
@@ -27,8 +27,9 @@ export function IngestStep({
   const [progress, setProgress] = useState(0)
   const [message, setMessage] = useState("Initializing...")
   const [estimatedTime, setEstimatedTime] = useState<string | null>(null)
-  const [startTime] = useState<number>(Date.now())
+  const [startTime] = useState<number>(() => Date.now())
   const [error, setError] = useState<string | null>(null)
+  const hasCompletedNoDataRef = useRef(false)
 
   const yieldToBrowser = () =>
     new Promise<void>((resolve) => {
@@ -38,8 +39,10 @@ export function IngestStep({
   useEffect(() => {
     // If no data provided, skip ingestion and complete immediately
     if (!rows || !mappings) {
-      setIsLoading(false)
-      onComplete()
+      if (!hasCompletedNoDataRef.current) {
+        hasCompletedNoDataRef.current = true
+        queueMicrotask(onComplete)
+      }
       return
     }
 
@@ -133,13 +136,14 @@ export function IngestStep({
           }
         }
       } catch (err) {
-        startedIngestionKeys.delete(ingestionKey)
         setIsLoading(false)
         setError(err instanceof Error ? err.message : "Unknown error occurred")
       }
     }
 
-    ingestData()
+    void ingestData().finally(() => {
+      startedIngestionKeys.delete(ingestionKey)
+    })
   }, [onComplete, rows, mappings, idColumn, startTime])
 
   if (error) {
