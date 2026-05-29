@@ -32,6 +32,15 @@ DB_PATH = Path(__file__).parent / "db" / "db.sqlite3"
 # Minimum rerank score threshold for filtering search results
 MINIMUM_RERANK_SCORE = 0
 
+EXPORTED_SYSTEM_COLUMNS = {
+    "id",
+    "natural_language_description",
+    "created_at",
+    "updated_at",
+    "created_by",
+    "updated_by",
+}
+
 # Local model registry: maps model IDs to local paths
 MODELS_PATH = Path(os.getenv("MODELS_PATH", "/models"))
 LOCAL_MODEL_REGISTRY = {
@@ -417,7 +426,11 @@ def build_searchable_text(
 def build_export_rows(
     records: list[tuple[Any, ...]], metadata_rows: list[tuple[Any, ...]]
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    ordered_column_names = [str(row[0]) for row in metadata_rows if row and row[0]]
+    ordered_column_names = [
+        str(row[0])
+        for row in metadata_rows
+        if row and row[0] and str(row[0]) not in EXPORTED_SYSTEM_COLUMNS
+    ]
     discovered_columns: set[str] = set(ordered_column_names)
     normalized_records: list[tuple[int, dict[str, Any], Any, Any, Any, Any, Any]] = []
 
@@ -437,6 +450,9 @@ def build_export_rows(
         )
 
         for key in record_data.keys():
+            if key in EXPORTED_SYSTEM_COLUMNS:
+                continue
+
             if key not in discovered_columns:
                 ordered_column_names.append(key)
                 discovered_columns.add(key)
@@ -451,14 +467,7 @@ def build_export_rows(
         created_by,
         updated_by,
     ) in normalized_records:
-        row: dict[str, Any] = {
-            "id": record_id,
-            "natural_language_description": natural_description,
-            "created_at": created_at,
-            "updated_at": updated_at,
-            "created_by": created_by,
-            "updated_by": updated_by,
-        }
+        row: dict[str, Any] = {}
 
         for column_name in ordered_column_names:
             value = record_data.get(column_name, None)
@@ -469,15 +478,7 @@ def build_export_rows(
 
         export_rows.append(row)
 
-    ordered_export_columns = [
-        "id",
-        *ordered_column_names,
-        "natural_language_description",
-        "created_at",
-        "updated_at",
-        "created_by",
-        "updated_by",
-    ]
+    ordered_export_columns = ordered_column_names
     return export_rows, ordered_export_columns
 
 
