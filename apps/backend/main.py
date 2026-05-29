@@ -1209,7 +1209,7 @@ async def ingest_records(request: IngestRequest):
                     json.dumps(
                         {
                             "type": "progress",
-                            "progress": 15,
+                            "progress": 20,
                             "message": "Generating embeddings...",
                         }
                     )
@@ -1256,7 +1256,7 @@ async def ingest_records(request: IngestRequest):
                     json.dumps(
                         {
                             "type": "progress",
-                            "progress": 40,
+                            "progress": 35,
                             "message": "Skipping embeddings (model not available)...",
                         }
                     )
@@ -1338,9 +1338,9 @@ async def ingest_records(request: IngestRequest):
                     inserted_ids.append(int(record_id))
                     inserted_count += 1
 
-                # Progress from 40 to 75
+                # Progress from 40 to 45
                 if (i + 1) % 10 == 0 or (i + 1) == total_rows:
-                    p = 40 + int((i + 1) / total_rows * 35)
+                    p = 40 + int((i + 1) / total_rows * 5)
                     yield (
                         json.dumps(
                             {
@@ -1361,7 +1361,7 @@ async def ingest_records(request: IngestRequest):
                     json.dumps(
                         {
                             "type": "progress",
-                            "progress": 75,
+                            "progress": 45,
                             "message": "Updating search index...",
                         }
                     )
@@ -1387,9 +1387,9 @@ async def ingest_records(request: IngestRequest):
                             (record_id, searchable_text),
                         )
 
-                    # Progress from 75 to 90
+                    # Progress from 45 to 50
                     if (i + 1) % 10 == 0 or (i + 1) == total_affected:
-                        p = 75 + int((i + 1) / total_affected * 15)
+                        p = 45 + int((i + 1) / total_affected * 5)
                         yield (
                             json.dumps(
                                 {
@@ -1411,7 +1411,7 @@ async def ingest_records(request: IngestRequest):
                     json.dumps(
                         {
                             "type": "progress",
-                            "progress": 90,
+                            "progress": 50,
                             "message": "Syncing vector database...",
                         }
                     )
@@ -1436,11 +1436,11 @@ async def ingest_records(request: IngestRequest):
                         metadatas=batch_metadatas,
                     )
 
-                    # Progress from 90 to 98
-                    p = 90 + int(
+                    # Progress from 50 to 100
+                    p = 50 + int(
                         (min(i + vector_batch_size, total_affected))
                         / total_affected
-                        * 8
+                        * 50
                     )
                     yield (
                         json.dumps(
@@ -1458,7 +1458,7 @@ async def ingest_records(request: IngestRequest):
                     json.dumps(
                         {
                             "type": "progress",
-                            "progress": 98,
+                            "progress": 100,
                             "message": "Finishing ingestion...",
                         }
                     )
