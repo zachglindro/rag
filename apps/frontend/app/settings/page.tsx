@@ -71,6 +71,8 @@ export default function Settings() {
     useState(false)
   const [isResettingHistory, setIsResettingHistory] = useState(false)
   const [isResettingDatabase, setIsResettingDatabase] = useState(false)
+  const [resetProgress, setResetProgress] = useState(0)
+  const [resetMessage, setResetMessage] = useState("")
   const [selectedModelToSwitch, setSelectedModelToSwitch] = useState<string>("")
   const [activeModel, setActiveModel] = useState<string>("")
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
@@ -249,19 +251,67 @@ export default function Settings() {
 
   const handleReset = async () => {
     setIsResettingDatabase(true)
+    setResetProgress(0)
+    setResetMessage("Starting database reset...")
     try {
       const response = await fetch(`${BACKEND_URL}/reset-database`, {
         method: "POST",
       })
       if (!response.ok) {
-        throw new Error("Reset failed")
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || "Reset failed")
       }
-      toast.success("Database reset successfully")
-      setIsDialogOpen(false)
-    } catch {
-      toast.error("Failed to reset database")
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("Failed to read reset progress stream")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+
+          try {
+            const event = JSON.parse(line)
+            if (event.type === "progress") {
+              setResetProgress(event.progress)
+              if (event.message) setResetMessage(event.message)
+            } else if (event.type === "done") {
+              setResetProgress(100)
+              if (event.message) setResetMessage(event.message)
+              toast.success(event.message)
+              setIsDialogOpen(false)
+            } else if (event.type === "error") {
+              throw new Error(event.detail)
+            }
+          } catch (e) {
+            if (
+              e instanceof Error &&
+              e.message !== "Unexpected end of JSON input"
+            ) {
+              throw e
+            }
+          }
+        }
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to reset database"
+      toast.error(message)
     } finally {
       setIsResettingDatabase(false)
+      setResetProgress(0)
+      setResetMessage("")
     }
   }
 
@@ -829,6 +879,15 @@ export default function Settings() {
                             )}
                           </Button>
                         </DialogFooter>
+                        {isResettingDatabase && (
+                          <div className="space-y-2 pt-2">
+                            <Progress value={resetProgress} className="h-2" />
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>{resetMessage}</span>
+                              <span>{resetProgress}%</span>
+                            </div>
+                          </div>
+                        )}
                       </DialogContent>
                     </Dialog>
                   </div>

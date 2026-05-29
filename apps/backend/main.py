@@ -2074,39 +2074,128 @@ async def search_records(
 async def reset_database():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    try:
-        # Log history BEFORE resetting
-        log_history(
-            cursor,
-            action_type="DATABASE_RESET",
-            details={"action": "full_database_reset"},
-        )
-        conn.commit()
 
-        # Drop existing tables (but keep history table)
-        cursor.execute("DROP TABLE IF EXISTS records")
-        cursor.execute("DROP TABLE IF EXISTS column_metadata")
-        cursor.execute("DROP TABLE IF EXISTS records_fts")
+    async def event_generator():
+        try:
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 5,
+                        "message": "Starting database reset...",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
 
-        # Recreate tables
-        from db.init_db import create_tables
+            # Log history before resetting so the action is preserved.
+            log_history(
+                cursor,
+                action_type="DATABASE_RESET",
+                details={"action": "full_database_reset"},
+            )
+            conn.commit()
 
-        create_tables(cursor)
-        create_fts_table(cursor)
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 20,
+                        "message": "Recorded reset in history...",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
 
-        conn.commit()
+            conn.execute("BEGIN")
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 40,
+                        "message": "Clearing database tables...",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
 
-        # Reset ChromaDB collection
-        global vectordb
-        if vectordb is not None:
-            vectordb.reset_collection()
+            # Drop existing tables (but keep history table)
+            cursor.execute("DROP TABLE IF EXISTS records")
+            cursor.execute("DROP TABLE IF EXISTS column_metadata")
+            cursor.execute("DROP TABLE IF EXISTS records_fts")
 
-        return {"message": "Database and ChromaDB reset successfully"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        conn.close()
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 65,
+                        "message": "Recreating database schema...",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
+            # Recreate tables
+            from db.init_db import create_tables
+
+            create_tables(cursor)
+            create_fts_table(cursor)
+
+            conn.commit()
+
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 85,
+                        "message": "Resetting vector index...",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
+            # Reset ChromaDB collection
+            global vectordb
+            if vectordb is not None:
+                vectordb.reset_collection()
+
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "progress": 100,
+                        "message": "Finalizing reset...",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
+            yield (
+                json.dumps(
+                    {
+                        "type": "done",
+                        "message": "Database reset successfully",
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
+        finally:
+            conn.close()
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
 @app.post("/compare/setup", response_model=CompareSetupResponse)
