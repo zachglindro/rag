@@ -1134,6 +1134,7 @@ async def ingest_records(request: IngestRequest):
                 )
                 + "\n"
             )
+            await asyncio.sleep(0)
 
             # Build mapping dict for quick lookup
             mapping_dict = {
@@ -1183,6 +1184,7 @@ async def ingest_records(request: IngestRequest):
                 )
                 + "\n"
             )
+            await asyncio.sleep(0)
 
             # Try to get embedder and vector DB, but don't fail if unavailable
             embedder_available = False
@@ -1212,6 +1214,7 @@ async def ingest_records(request: IngestRequest):
                     )
                     + "\n"
                 )
+                await asyncio.sleep(0)
 
                 # Batch embeddings in chunks to show progress
                 batch_size = 32
@@ -1236,6 +1239,7 @@ async def ingest_records(request: IngestRequest):
                         )
                         + "\n"
                     )
+                    await asyncio.sleep(0)
 
                 if len(embeddings) != len(transformed_rows):
                     yield (
@@ -1257,6 +1261,7 @@ async def ingest_records(request: IngestRequest):
                     )
                     + "\n"
                 )
+                await asyncio.sleep(0)
 
             conn.execute("BEGIN")
 
@@ -1394,10 +1399,13 @@ async def ingest_records(request: IngestRequest):
                             )
                             + "\n"
                         )
+                        await asyncio.sleep(0)
+                await asyncio.sleep(0)
 
             # Update vector DB only if available and embeddings exist
             if vectordb_available and embedder_available and embeddings:
                 assert vector_db is not None
+
                 yield (
                     json.dumps(
                         {
@@ -1408,6 +1416,7 @@ async def ingest_records(request: IngestRequest):
                     )
                     + "\n"
                 )
+                await asyncio.sleep(0)
 
                 str_ids = [str(rid) for rid in all_affected_ids]
                 metadatas: list[Any] = [{"record_id": rid} for rid in all_affected_ids]
@@ -1442,6 +1451,19 @@ async def ingest_records(request: IngestRequest):
                         )
                         + "\n"
                     )
+                    await asyncio.sleep(0)
+
+                yield (
+                    json.dumps(
+                        {
+                            "type": "progress",
+                            "progress": 98,
+                            "message": "Finishing ingestion...",
+                        }
+                    )
+                    + "\n"
+                )
+                await asyncio.sleep(0)
             elif not embedder_available or not vectordb_available:
                 # Skip vector DB sync if not available
                 yield (
@@ -1454,6 +1476,7 @@ async def ingest_records(request: IngestRequest):
                     )
                     + "\n"
                 )
+                await asyncio.sleep(0)
 
             # Log history
             log_history(
@@ -1474,12 +1497,14 @@ async def ingest_records(request: IngestRequest):
                 json.dumps({"type": "progress", "progress": 100, "message": "Done!"})
                 + "\n"
             )
+            await asyncio.sleep(0)
             yield (
                 json.dumps(
                     {"type": "done", "inserted_count": inserted_count + updated_count}
                 )
                 + "\n"
             )
+            await asyncio.sleep(0)
 
         except Exception as e:
             conn.rollback()

@@ -30,6 +30,11 @@ export function IngestStep({
   const [startTime] = useState<number>(Date.now())
   const [error, setError] = useState<string | null>(null)
 
+  const yieldToBrowser = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve())
+    })
+
   useEffect(() => {
     // If no data provided, skip ingestion and complete immediately
     if (!rows || !mappings) {
@@ -89,6 +94,7 @@ export function IngestStep({
 
         while (true) {
           const { done, value } = await reader.read()
+
           if (done) break
 
           buffer += decoder.decode(value, { stream: true })
@@ -99,6 +105,7 @@ export function IngestStep({
             if (!line.trim()) continue
             try {
               const event = JSON.parse(line)
+
               if (event.type === "progress") {
                 setProgress(event.progress)
                 if (event.message) setMessage(event.message)
@@ -110,15 +117,18 @@ export function IngestStep({
                   const remaining = totalEstimated - elapsed
                   setEstimatedTime(formatDuration(remaining))
                 }
+
+                await yieldToBrowser()
               } else if (event.type === "done") {
                 // Success
+                await yieldToBrowser()
                 setIsLoading(false)
                 onComplete()
               } else if (event.type === "error") {
                 throw new Error(event.detail)
               }
             } catch (e) {
-              console.error("Error parsing stream line:", e)
+              console.error("Error parsing stream line:", line, e)
             }
           }
         }
