@@ -23,7 +23,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
             { title: "Home", enabled: true },
             { title: "Add", enabled: true },
             { title: "Data", enabled: true },
-            { title: "Compare", enabled: true },
+            { title: "Compare", enabled: false },
             { title: "History", enabled: true },
           ]
     }
