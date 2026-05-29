@@ -26,8 +26,6 @@ export function IngestStep({
   const [isLoading, setIsLoading] = useState(true)
   const [progress, setProgress] = useState(0)
   const [message, setMessage] = useState("Initializing...")
-  const [estimatedTime, setEstimatedTime] = useState<string | null>(null)
-  const [startTime] = useState<number>(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const hasCompletedNoDataRef = useRef(false)
 
@@ -52,16 +50,6 @@ export function IngestStep({
     }
 
     startedIngestionKeys.add(ingestionKey)
-
-    const formatDuration = (ms: number) => {
-      if (ms <= 0) return null
-      const seconds = Math.ceil(ms / 1000)
-      if (seconds < 5) return "Estimating..."
-      if (seconds < 60) return `${seconds}s remaining`
-      const minutes = Math.floor(seconds / 60)
-      const remSeconds = seconds % 60
-      return `${minutes}m ${remSeconds}s remaining`
-    }
 
     const ingestData = async () => {
       try {
@@ -113,14 +101,6 @@ export function IngestStep({
                 setProgress(event.progress)
                 if (event.message) setMessage(event.message)
 
-                // Update estimated time
-                const elapsed = Date.now() - startTime
-                if (event.progress > 0) {
-                  const totalEstimated = elapsed / (event.progress / 100)
-                  const remaining = totalEstimated - elapsed
-                  setEstimatedTime(formatDuration(remaining))
-                }
-
                 await yieldToBrowser()
               } else if (event.type === "done") {
                 // Success
@@ -144,7 +124,7 @@ export function IngestStep({
     void ingestData().finally(() => {
       startedIngestionKeys.delete(ingestionKey)
     })
-  }, [onComplete, rows, mappings, idColumn, startTime])
+  }, [onComplete, rows, mappings, idColumn])
 
   if (error) {
     return (
@@ -177,9 +157,6 @@ export function IngestStep({
           <Progress value={progress} className="h-2" />
           <div className="flex justify-between gap-4 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
             <span className="flex-1 truncate">{message}</span>
-            <span className="flex-shrink-0 whitespace-nowrap">
-              {estimatedTime}
-            </span>
           </div>
         </div>
 
