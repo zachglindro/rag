@@ -16,6 +16,30 @@ export function ColumnResizeHandle({
   const [isResizing, setIsResizing] = useState(false)
   const startXRef = useRef(0)
   const startWidthRef = useRef<number>(0)
+  const minWidthRef = useRef<number>(50)
+
+  const getColumnMinWidth = useCallback(
+    (header: HTMLElement, handle: HTMLDivElement) => {
+      const styles = window.getComputedStyle(header)
+      const canvas = document.createElement("canvas")
+      const context = canvas.getContext("2d")
+
+      if (!context) {
+        return 50
+      }
+
+      context.font = styles.font
+
+      const horizontalPadding =
+        parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight)
+      const handleWidth = handle.offsetWidth
+      const textWidth = context.measureText(columnLabel).width
+
+      // Extra breathing room keeps text from touching the resize handle.
+      return Math.ceil(textWidth + horizontalPadding + handleWidth + 4)
+    },
+    [columnLabel]
+  )
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -30,13 +54,14 @@ export function ColumnResizeHandle({
       // parent should be the TH element
       const parent = target.parentElement as HTMLElement | null
       startWidthRef.current = parent?.offsetWidth ?? 0
+      minWidthRef.current = parent ? getColumnMinWidth(parent, target) : 50
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
         const delta = moveEvent.clientX - startXRef.current
         const parent = target.parentElement as HTMLElement | null
         if (!parent) return
 
-        const minWidth = 50
+        const minWidth = minWidthRef.current
         const newWidth = Math.max(minWidth, startWidthRef.current + delta)
         parent.style.width = `${newWidth}px`
       }
@@ -45,7 +70,9 @@ export function ColumnResizeHandle({
         target.releasePointerCapture(upEvent.pointerId)
         setIsResizing(false)
         const finalDelta = upEvent.clientX - startXRef.current
-        onResize(Math.max(finalDelta, 50 - startWidthRef.current))
+        onResize(
+          Math.max(finalDelta, minWidthRef.current - startWidthRef.current)
+        )
         document.removeEventListener("pointermove", handlePointerMove)
         document.removeEventListener("pointerup", handlePointerUp)
       }
@@ -53,7 +80,7 @@ export function ColumnResizeHandle({
       document.addEventListener("pointermove", handlePointerMove)
       document.addEventListener("pointerup", handlePointerUp)
     },
-    [onResize]
+    [getColumnMinWidth, onResize]
   )
 
   return (
