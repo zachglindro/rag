@@ -415,6 +415,49 @@ def natural_sort_key(value: Any) -> tuple:
     return tuple(parts) if parts else ((0, ""),)
 
 
+def build_records_order_clause(
+    sort_by: str, column_types: dict[str, str]
+) -> tuple[str, list[Any]]:
+    top_level_columns = {
+        "id",
+        "natural_language_description",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "updated_by",
+    }
+
+    if sort_by == "id":
+        return "id", []
+
+    if sort_by in top_level_columns:
+        return f"COALESCE({sort_by}, '')", []
+
+    if sort_by not in column_types:
+        return "id", []
+
+    data_type = column_types[sort_by]
+    json_path = sort_by
+
+    if data_type == "number":
+        return "CAST(json_extract(data, '$.' || ?) AS REAL)", [json_path]
+
+    if data_type == "boolean":
+        return (
+            "CASE LOWER(COALESCE(CAST(json_extract(data, '$.' || ?) AS TEXT), '')) "
+            "WHEN 'true' THEN 1 "
+            "WHEN 'yes' THEN 1 "
+            "WHEN '1' THEN 1 "
+            "WHEN 'false' THEN 0 "
+            "WHEN 'no' THEN 0 "
+            "WHEN '0' THEN 0 "
+            "ELSE NULL END",
+            [json_path],
+        )
+
+    return "LOWER(COALESCE(json_extract(data, '$.' || ?), ''))", [json_path]
+
+
 def build_searchable_text(
     record_data: dict[str, Any], natural_description: str | None
 ) -> str:
@@ -1532,17 +1575,26 @@ async def get_records(
     cursor = conn.cursor()
 
     try:
-        # Fetch all records (without pagination - we'll sort and paginate in Python)
+        cursor.execute("SELECT column_name, data_type FROM column_metadata")
+        column_types = {row[0]: row[1] for row in cursor.fetchall()}
+
+        order_expression, order_params = build_records_order_clause(
+            sort_by, column_types
+        )
+        reverse = sort_order == "desc"
+
         cursor.execute(
-            """
+            f"""
             SELECT id, data, natural_language_description, created_at, updated_at, created_by, updated_by
             FROM records
-            """
+            ORDER BY {order_expression} {'DESC' if reverse else 'ASC'}, id {'DESC' if reverse else 'ASC'}
+            LIMIT ? OFFSET ?
+            """,
+            (*order_params, limit, skip),
         )
         rows = cursor.fetchall()
 
-        # Convert to RecordRow objects
-        all_records = [
+        paginated_records = [
             RecordRow(
                 id=row[0],
                 data=parse_record_data(row[1]),
@@ -1554,31 +1606,6 @@ async def get_records(
             )
             for row in rows
         ]
-
-        # Apply natural sorting
-        reverse = sort_order == "desc"
-        top_level_columns = {
-            "id",
-            "natural_language_description",
-            "created_at",
-            "updated_at",
-            "created_by",
-            "updated_by",
-        }
-
-        def sort_key_func(record):
-            if sort_by in top_level_columns:
-                value = getattr(record, sort_by)
-            else:
-                # Data column
-                value = record.data.get(sort_by)
-
-            return natural_sort_key(value)
-
-        all_records.sort(key=sort_key_func, reverse=reverse)
-
-        # Apply pagination
-        paginated_records = all_records[skip : skip + limit]
 
         return RecordListResponse(records=paginated_records, skip=skip, limit=limit)
     finally:
