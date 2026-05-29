@@ -27,7 +27,7 @@ from rag.vectordb import ChromaVectorDB
 
 load_dotenv()
 
-DB_PATH = Path(__file__).parent / "db.sqlite3"
+DB_PATH = Path(__file__).parent / "db" / "db.sqlite3"
 
 # Minimum rerank score threshold for filtering search results
 MINIMUM_RERANK_SCORE = 0

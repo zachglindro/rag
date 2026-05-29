@@ -62,6 +62,8 @@ def create_fts_table(cursor: sqlite3.Cursor) -> None:
 
 
 def initialize_database(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
     if not db_path.exists():
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
