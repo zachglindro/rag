@@ -24,6 +24,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import {
   Dialog,
@@ -134,6 +135,7 @@ function UserNameSettings() {
 
 export function AppSidebar() {
   const { sidebarOrder } = useSidebarSettings()
+  const { isMobile, setOpenMobile } = useSidebar()
   const enabledTitles = sidebarOrder
     .filter((s) => s.enabled)
     .map((s) => s.title)
@@ -148,29 +150,40 @@ export function AppSidebar() {
   ]
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <SidebarHeaderContent />
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarMenu>
-            {sidebarItems.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild tooltip={item.title}>
-                  <Link href={item.href} className="flex items-center gap-2">
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter>
-        <UserNameSettings />
-      </SidebarFooter>
-    </Sidebar>
+    <>
+      <SidebarTrigger className="fixed top-4 left-4 z-50 rounded-full border border-border/60 bg-background shadow-md md:hidden" />
+      <Sidebar collapsible="icon">
+        <SidebarHeader>
+          <SidebarHeaderContent />
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarMenu>
+              {sidebarItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild tooltip={item.title}>
+                    <Link
+                      href={item.href}
+                      className="flex items-center gap-2"
+                      onClick={() => {
+                        if (isMobile) {
+                          setOpenMobile(false)
+                        }
+                      }}
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter>
+          <UserNameSettings />
+        </SidebarFooter>
+      </Sidebar>
+    </>
   )
 }
