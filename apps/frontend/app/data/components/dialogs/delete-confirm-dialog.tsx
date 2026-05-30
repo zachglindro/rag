@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 
 interface DeleteConfirmDialogProps {
   isOpen: boolean
@@ -46,6 +47,7 @@ export const DeleteConfirmDialog = memo(function DeleteConfirmDialog({
             onClick={onConfirm}
             disabled={isMutating}
           >
+            {isMutating && <Spinner className="size-4" />}
             Delete
           </Button>
         </DialogFooter>
