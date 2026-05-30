@@ -67,11 +67,13 @@ function SidebarHeaderContent() {
 
 function UserNameSettings() {
   const [isOpen, setIsOpen] = React.useState(false)
-  const [name, setName] = React.useState("")
+  const [name, setName] = React.useState(() => {
+    if (typeof window === "undefined") {
+      return ""
+    }
 
-  React.useEffect(() => {
-    setName(localStorage.getItem("userName") || "")
-  }, [])
+    return localStorage.getItem("userName") || ""
+  })
 
   const handleSave = () => {
     if (name.trim()) {
@@ -123,24 +125,18 @@ function UserNameSettings() {
 
 export function AppSidebar() {
   const { sidebarOrder } = useSidebarSettings()
-  const [sidebarItems, setSidebarItems] = React.useState(navItems)
+  const enabledTitles = sidebarOrder
+    .filter((s) => s.enabled)
+    .map((s) => s.title)
 
-  React.useEffect(() => {
-    const enabledTitles = sidebarOrder
-      .filter((s) => s.enabled)
-      .map((s) => s.title)
-
-    const newOrder = [
-      ...sidebarOrder
-        .map((s) => navItems.find((n) => n.title === s.title))
-        .filter(
-          (n): n is (typeof navItems)[0] =>
-            !!n && enabledTitles.includes(n.title)
-        ),
-      navItems.find((n) => n.title === "Settings")!,
-    ]
-    setSidebarItems(newOrder)
-  }, [sidebarOrder])
+  const sidebarItems = [
+    ...sidebarOrder
+      .map((s) => navItems.find((n) => n.title === s.title))
+      .filter(
+        (n): n is (typeof navItems)[0] => !!n && enabledTitles.includes(n.title)
+      ),
+    navItems.find((n) => n.title === "Settings")!,
+  ]
 
   return (
     <Sidebar collapsible="icon">
