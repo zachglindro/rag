@@ -52,14 +52,23 @@ function SidebarHeaderContent() {
   return (
     <div className="flex items-center gap-2 px-2 py-2 group-data-[state=collapsed]:justify-center">
       <Image
+        src="/ics-logo.png"
+        alt="Institute of Computer Science"
+        className="h-5 w-5 shrink-0 group-data-[state=collapsed]:hidden"
+        priority
+      />
+      <Image
+        src="/cafs-logo.png"
+        alt="College of Agriculture and Food Science"
+        className="h-5 w-auto shrink-0 group-data-[state=collapsed]:hidden"
+        priority
+      />
+      <Image
         src={icon}
         alt="Institute of Plant Breeding"
         className="h-5 w-5 shrink-0 group-data-[state=collapsed]:hidden"
         priority
       />
-      <span className="truncate text-sm font-semibold group-data-[state=collapsed]:hidden">
-        Cereals Inventory
-      </span>
       <SidebarTrigger className="ml-auto shrink-0 group-data-[state=collapsed]:ml-0" />
     </div>
   )
