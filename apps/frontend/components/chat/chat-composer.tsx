@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useRef, useEffect, useCallback, useState } from "react"
 import { Send, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -75,6 +76,11 @@ export function ChatComposer({
       {llmAvailable === false && (
         <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-center text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
           The large language model isn&apos;t downloaded.
+          <div className="mt-3">
+            <Button asChild size="sm" variant="outline" className="bg-background/80">
+              <Link href="/data">Go to Data</Link>
+            </Button>
+          </div>
         </div>
       )}
       <div className="flex items-end gap-2 rounded-[30px] border bg-background p-2.5 shadow-sm">
