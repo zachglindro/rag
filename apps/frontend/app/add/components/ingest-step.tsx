@@ -184,8 +184,7 @@ export function IngestStep({
         </p>
       </div>
 
-      {/* Back to home button */}
-      <Button onClick={() => router.push("/")}>Back to Home</Button>
+      <Button onClick={() => router.push("/data")}>Go to Data</Button>
     </div>
   )
 }
