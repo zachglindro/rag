@@ -5,6 +5,7 @@ const backendRoutes = [
 	"/upload",
 	"/suggest-mappings",
 	"/records/check-existence",
+	"/columns",
 	"/ingest",
 	"/records/:path*",
 	"/column-metadata",
