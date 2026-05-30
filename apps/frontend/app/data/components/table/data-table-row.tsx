@@ -19,7 +19,7 @@ import {
   RecordRow,
   VisibleColumn,
   stringifyValue,
-} from "../../../app/data/types"
+} from "../../types"
 import { EditableCell } from "./editable-cell"
 
 interface DataTableRowProps {
