@@ -20,6 +20,7 @@ const backendRoutes = [
 	"/settings/model",
 	"/settings/model/cancel-download-qwen",
 	"/settings/model/download-qwen",
+	"/settings/site-title",
 	"/settings/backup",
 	"/settings/backup/now",
 	"/records/bulk-delete",

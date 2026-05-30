@@ -21,3 +21,7 @@ export interface BackupSettings {
   base_path: string
   last_backup_time: number | null
 }
+
+export interface SiteTitleSettings {
+  site_title: string
+}

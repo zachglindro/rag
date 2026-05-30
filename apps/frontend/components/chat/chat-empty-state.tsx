@@ -4,6 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { Database } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useSiteTitle } from "@/contexts/site-title-context"
 import { ChatComposer } from "./chat-composer"
 
 interface ChatEmptyStateProps {
@@ -27,6 +28,8 @@ export function ChatEmptyState({
   onInputChange,
   error,
 }: ChatEmptyStateProps) {
+  const { siteTitle } = useSiteTitle()
+
   if (hasRecords === null) {
     return (
       <div className="flex flex-1 items-center justify-center px-4 sm:px-8">
@@ -82,7 +85,7 @@ export function ChatEmptyState({
           />
         </div>
         <h1 className="text-center text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
-          Cereal Crops Search
+          {siteTitle}
         </h1>
         <ChatComposer
           value={inputValue}

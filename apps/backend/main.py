@@ -28,6 +28,7 @@ from rag.vectordb import ChromaVectorDB
 load_dotenv()
 
 DB_PATH = Path(__file__).parent / "db" / "db.sqlite3"
+DEFAULT_SITE_TITLE = "Cereal Crops Search"
 
 # Minimum rerank score threshold for filtering search results
 MINIMUM_RERANK_SCORE = 0
@@ -317,6 +318,10 @@ class BackupSettings(BaseModel):
     format: str  # csv, xlsx
     base_path: str | None = None
     last_backup_time: float | None = None
+
+
+class SiteTitleSettings(BaseModel):
+    site_title: str
 
 
 class CompareRebuildResponse(BaseModel):
@@ -2931,6 +2936,23 @@ def set_setting(key: str, value: Any):
         conn.commit()
     finally:
         conn.close()
+
+
+@app.get("/settings/site-title", response_model=SiteTitleSettings)
+async def get_site_title_settings():
+    site_title = get_setting("site_title", DEFAULT_SITE_TITLE)
+    if not isinstance(site_title, str):
+        site_title = DEFAULT_SITE_TITLE
+
+    site_title = site_title.strip() or DEFAULT_SITE_TITLE
+    return SiteTitleSettings(site_title=site_title)
+
+
+@app.post("/settings/site-title", response_model=SiteTitleSettings)
+async def update_site_title_settings(settings: SiteTitleSettings):
+    site_title = settings.site_title.strip() or DEFAULT_SITE_TITLE
+    set_setting("site_title", site_title)
+    return SiteTitleSettings(site_title=site_title)
 
 
 @app.get("/settings/backup", response_model=BackupSettings)

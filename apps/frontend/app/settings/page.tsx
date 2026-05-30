@@ -3,6 +3,7 @@
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { ThemeSettings } from "./components/theme-settings"
+import { SiteTitleSettings } from "./components/site-title-settings"
 import { BackupSettingsPanel } from "./components/backup-settings"
 import { SearchSettings } from "./components/search-settings"
 import { SidebarSettings } from "./components/sidebar-settings"
@@ -21,6 +22,9 @@ export default function Settings() {
             </div>
 
             <ThemeSettings />
+            <div className="h-px bg-border" />
+
+            <SiteTitleSettings />
             <div className="h-px bg-border" />
 
             <BackupSettingsPanel />

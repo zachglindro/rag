@@ -5,9 +5,15 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { SidebarProvider as CustomSidebarProvider } from "@/contexts/sidebar-context"
+import { SiteTitleProvider } from "@/contexts/site-title-context"
 import { Toaster } from "@/components/ui/sonner"
 import { UserNamePrompt } from "@/components/user-name-prompt"
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title"
 import { cn } from "@/lib/utils"
+
+export const metadata = {
+  title: DEFAULT_SITE_TITLE,
+}
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -35,9 +41,11 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <TooltipProvider>
-            <CustomSidebarProvider>
-              <SidebarProvider>{children}</SidebarProvider>
-            </CustomSidebarProvider>
+            <SiteTitleProvider>
+              <CustomSidebarProvider>
+                <SidebarProvider>{children}</SidebarProvider>
+              </CustomSidebarProvider>
+            </SiteTitleProvider>
           </TooltipProvider>
         </ThemeProvider>
         <Toaster />
