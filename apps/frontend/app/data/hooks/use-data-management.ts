@@ -685,9 +685,20 @@ export function useDataManagement() {
       setColumnPendingDelete(null)
       await fetchData() // Refresh data and metadata
     } catch (error) {
-      toast.error(
-        `Failed to delete column: ${error instanceof Error ? error.message : "Unknown error"}`
-      )
+      const message = error instanceof Error ? error.message : "Unknown error"
+      const normalized = message.toLowerCase()
+
+      if (
+        normalized.includes("socket hang up") ||
+        normalized.includes("econnreset") ||
+        normalized.includes("timed out")
+      ) {
+        toast.error(
+          "Column deletion is taking longer than the proxy timeout. Please wait and refresh; the backend may still complete successfully."
+        )
+      } else {
+        toast.error(`Failed to delete column: ${message}`)
+      }
     } finally {
       setIsMutating(false)
     }

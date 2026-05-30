@@ -152,13 +152,53 @@ class ChromaVectorDB:
         documents: list[str],
         embeddings: list[list[float]] | list[list[int]],
         metadatas: list[Metadata] | None = None,
+        batch_size: int = 32,
     ):
-        self.collection.upsert(
-            ids=ids,
-            documents=documents,
-            embeddings=cast(Any, embeddings),
-            metadatas=cast(Any, metadatas),
-        )
+        if not ids:
+            return
+
+        safe_batch_size = max(1, batch_size)
+
+        def _upsert_with_split(
+            batch_ids: list[str],
+            batch_documents: list[str],
+            batch_embeddings: list[list[float]] | list[list[int]],
+            batch_metadatas: list[Metadata] | None,
+        ) -> None:
+            try:
+                self.collection.upsert(
+                    ids=batch_ids,
+                    documents=batch_documents,
+                    embeddings=cast(Any, batch_embeddings),
+                    metadatas=cast(Any, batch_metadatas),
+                )
+            except Exception:
+                if len(batch_ids) <= 1:
+                    raise
+
+                # Some Chroma backends fail on larger writes; split and retry.
+                midpoint = len(batch_ids) // 2
+                _upsert_with_split(
+                    batch_ids[:midpoint],
+                    batch_documents[:midpoint],
+                    batch_embeddings[:midpoint],
+                    batch_metadatas[:midpoint] if batch_metadatas is not None else None,
+                )
+                _upsert_with_split(
+                    batch_ids[midpoint:],
+                    batch_documents[midpoint:],
+                    batch_embeddings[midpoint:],
+                    batch_metadatas[midpoint:] if batch_metadatas is not None else None,
+                )
+
+        for start in range(0, len(ids), safe_batch_size):
+            end = min(start + safe_batch_size, len(ids))
+            _upsert_with_split(
+                ids[start:end],
+                documents[start:end],
+                embeddings[start:end],
+                metadatas[start:end] if metadatas is not None else None,
+            )
 
     def query_embeddings(
         self,
