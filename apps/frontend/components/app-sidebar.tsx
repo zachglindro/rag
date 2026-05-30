@@ -4,9 +4,9 @@ import * as React from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
-  Home,
   BarChart2,
   Database,
+  MessageSquare,
   PlusCircle,
   Settings,
   User,
@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label"
 import icon from "@/app/icon.png"
 
 const navItems = [
-  { title: "Home", icon: Home, href: "/" },
+  { title: "Chat", icon: MessageSquare, href: "/" },
   { title: "Add", icon: PlusCircle, href: "/add" },
   { title: "Data", icon: Database, href: "/data" },
   { title: "Compare", icon: BarChart2, href: "/compare" },

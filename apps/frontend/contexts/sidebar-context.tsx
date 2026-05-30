@@ -17,15 +17,22 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   >(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("sidebarOrder")
-      return saved
-        ? JSON.parse(saved)
-        : [
-            { title: "Home", enabled: true },
-            { title: "Add", enabled: true },
-            { title: "Data", enabled: true },
-            { title: "Compare", enabled: false },
-            { title: "History", enabled: true },
-          ]
+      const defaultOrder = [
+        { title: "Chat", enabled: true },
+        { title: "Add", enabled: true },
+        { title: "Data", enabled: true },
+        { title: "Compare", enabled: false },
+        { title: "History", enabled: true },
+      ]
+
+      if (!saved) {
+        return defaultOrder
+      }
+
+      return JSON.parse(saved).map(
+        (item: { title: string; enabled: boolean }) =>
+          item.title === "Home" ? { ...item, title: "Chat" } : item
+      )
     }
     return []
   })
