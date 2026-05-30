@@ -1,8 +1,16 @@
 "use client"
 
-import { useState, useRef, DragEvent, ChangeEvent } from "react"
+import { useRef, useState, DragEvent, ChangeEvent } from "react"
 import { Database, Upload, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { BACKEND_URL } from "@/app/data/types"
@@ -12,6 +20,19 @@ interface UploadStepProps {
   onNext: () => void
   selectedFile: File | null
   onColumnsSet: (columns: string[], rows: Record<string, unknown>[]) => void
+  sheetNames: string[]
+  selectedSheet: string
+  hasLoadedFile: boolean
+  onSheetNamesChange: (sheetNames: string[]) => void
+  onSelectedSheetChange: (sheetName: string) => void
+  onHasLoadedFileChange: (hasLoadedFile: boolean) => void
+}
+
+interface UploadResponse {
+  columns: string[]
+  rows: Record<string, unknown>[]
+  sheet_names?: string[]
+  selected_sheet?: string | null
 }
 
 export function UploadStep({
@@ -19,10 +40,17 @@ export function UploadStep({
   onNext,
   selectedFile,
   onColumnsSet,
+  sheetNames,
+  selectedSheet,
+  hasLoadedFile,
+  onSheetNamesChange,
+  onSelectedSheetChange,
+  onHasLoadedFileChange,
 }: UploadStepProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const requestIdRef = useRef(0)
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -60,23 +88,59 @@ export function UploadStep({
 
     if (hasValidExtension) {
       onFileSelect(file)
+      onHasLoadedFileChange(false)
+      onSheetNamesChange([])
+      onSelectedSheetChange("")
+      void loadFile(file)
     } else {
       toast.error("Please upload a .csv or .xlsx file")
     }
   }
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = async (file: File, sheetName?: string) => {
     const formData = new FormData()
     formData.append("file", file)
-    const response = await fetch(`${BACKEND_URL}/upload`, {
+    const url = sheetName
+      ? `${BACKEND_URL}/upload?sheet_name=${encodeURIComponent(sheetName)}`
+      : `${BACKEND_URL}/upload`
+
+    const response = await fetch(url, {
       method: "POST",
       body: formData,
     })
     if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(
+        errorData.detail || `Upload failed: ${response.statusText}`
+      )
     }
-    const data = await response.json()
-    return { columns: data.columns, rows: data.rows }
+    return (await response.json()) as UploadResponse
+  }
+
+  const loadFile = async (file: File, sheetName?: string) => {
+    const requestId = ++requestIdRef.current
+    setIsUploading(true)
+
+    try {
+      const data = await uploadFile(file, sheetName)
+      if (requestId !== requestIdRef.current) {
+        return
+      }
+
+      onColumnsSet(data.columns, data.rows)
+      onSheetNamesChange(data.sheet_names ?? [])
+      onSelectedSheetChange(data.selected_sheet ?? "")
+      onHasLoadedFileChange(true)
+    } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return
+      }
+      toast.error("Upload failed: " + (error as Error).message)
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsUploading(false)
+      }
+    }
   }
 
   const handleBrowseClick = () => {
@@ -84,16 +148,22 @@ export function UploadStep({
   }
 
   const handleContinue = async () => {
-    if (!selectedFile) return
-    setIsUploading(true)
-    try {
-      const { columns, rows } = await uploadFile(selectedFile)
-      onColumnsSet(columns, rows)
-      onNext()
-    } catch (error) {
-      toast.error("Upload failed: " + (error as Error).message)
-    } finally {
-      setIsUploading(false)
+    if (!selectedFile || isUploading) return
+    if (sheetNames.length > 1 && !selectedSheet) {
+      toast.error("Please select a sheet before continuing")
+      return
+    }
+    if (!hasLoadedFile) {
+      await loadFile(selectedFile, selectedSheet || undefined)
+      return
+    }
+    onNext()
+  }
+
+  const handleSheetChange = async (value: string) => {
+    onSelectedSheetChange(value)
+    if (selectedFile) {
+      await loadFile(selectedFile, value)
     }
   }
 
@@ -144,6 +214,41 @@ export function UploadStep({
         <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm">
           <Database className="h-4 w-4 text-muted-foreground" />
           <span className="max-w-[200px] truncate">{selectedFile.name}</span>
+        </div>
+      )}
+
+      {selectedFile && selectedFile.name.toLowerCase().endsWith(".xlsx") && (
+        <div className="w-full max-w-md space-y-2">
+          <Label htmlFor="sheet-selector">Sheet</Label>
+          <Select
+            value={selectedSheet}
+            onValueChange={handleSheetChange}
+            disabled={isUploading || sheetNames.length <= 1}
+          >
+            <SelectTrigger id="sheet-selector" className="w-full">
+              <SelectValue
+                placeholder={
+                  sheetNames.length > 1
+                    ? "Select a sheet"
+                    : isUploading
+                      ? "Loading sheet..."
+                      : "Using the only sheet"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {sheetNames.map((sheetName) => (
+                <SelectItem key={sheetName} value={sheetName}>
+                  {sheetName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {sheetNames.length > 1 && (
+            <p className="text-xs text-muted-foreground">
+              Choose which worksheet to ingest from this workbook.
+            </p>
+          )}
         </div>
       )}
 

@@ -1043,7 +1043,10 @@ async def rename_column(request: RenameColumnRequest):
 
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    sheet_name: str | None = Query(default=None),
+):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -1058,11 +1061,25 @@ async def upload_file(file: UploadFile = File(...)):
         content = await file.read()
         columns = []
         rows = []
+        sheet_names: list[str] = []
 
         if ext == "csv":
             df = pd.read_csv(io.BytesIO(content))
         elif ext == "xlsx":
-            df = pd.read_excel(io.BytesIO(content))
+            excel_file = pd.ExcelFile(io.BytesIO(content))
+            sheet_names = excel_file.sheet_names
+            target_sheet = sheet_name or (sheet_names[0] if sheet_names else None)
+            if not target_sheet:
+                raise HTTPException(
+                    status_code=400,
+                    detail="The spreadsheet does not contain any readable sheets.",
+                )
+            if target_sheet not in sheet_names:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'Sheet "{target_sheet}" was not found in the workbook.',
+                )
+            df = excel_file.parse(sheet_name=target_sheet)
         else:
             raise HTTPException(
                 status_code=400,
@@ -1077,7 +1094,13 @@ async def upload_file(file: UploadFile = File(...)):
             for row in df.fillna("").to_dict("records")
         ]
 
-        return {"columns": columns, "rows": rows, "row_count": len(rows)}
+        return {
+            "columns": columns,
+            "rows": rows,
+            "row_count": len(rows),
+            "sheet_names": sheet_names,
+            "selected_sheet": sheet_name if sheet_name else (sheet_names[0] if sheet_names else None),
+        }
     except pd.errors.EmptyDataError:
         raise HTTPException(
             status_code=400, detail="File appears to be empty or has no valid data."

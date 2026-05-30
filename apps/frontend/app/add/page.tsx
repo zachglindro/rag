@@ -35,6 +35,9 @@ export default function AddPage() {
   const [idColumn, setIdColumn] = useState<string | null>(null)
   const [isIngestionComplete, setIsIngestionComplete] = useState(false)
   const [hasData, setHasData] = useState(false)
+  const [sheetNames, setSheetNames] = useState<string[]>([])
+  const [selectedSheet, setSelectedSheet] = useState<string>("")
+  const [hasLoadedFile, setHasLoadedFile] = useState(false)
 
   useEffect(() => {
     const checkDatabase = async () => {
@@ -52,12 +55,18 @@ export default function AddPage() {
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file)
+    setSheetNames([])
+    setSelectedSheet("")
+    setHasLoadedFile(false)
   }
 
   const handleColumnsSet = useCallback(
     (cols: unknown[], rows: Record<string, unknown>[]) => {
       const normalizedColumns = cols.map((col) => String(col ?? ""))
       setParsedData(rows)
+      setIdColumn(null)
+      setIsIngestionComplete(false)
+      setHasLoadedFile(true)
       setMappings(
         normalizedColumns.map((col) => ({
           origColumn: col,
@@ -123,6 +132,12 @@ export default function AddPage() {
             onNext={() => goToStep(2)}
             selectedFile={selectedFile}
             onColumnsSet={handleColumnsSet}
+            sheetNames={sheetNames}
+            selectedSheet={selectedSheet}
+            hasLoadedFile={hasLoadedFile}
+            onSheetNamesChange={setSheetNames}
+            onSelectedSheetChange={setSelectedSheet}
+            onHasLoadedFileChange={setHasLoadedFile}
           />
         )
       case 2:
