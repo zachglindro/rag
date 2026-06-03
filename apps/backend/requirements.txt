@@ -10,5 +10,5 @@ pydantic
 python-dotenv
 sentence-transformers
 torch
-transformers==4.56.2
+transformers==5.0.0rc3
 uvicorn
